@@ -1,0 +1,15 @@
+{
+  "version": "1.1.0",
+  "activity_id": "atividade-01-spike",
+  "question_text": "Quao dificil esta essa atividade?",
+  "interval_marks_minutes": [5, 15, 30],
+  "scale_min": 1,
+  "scale_max": 5,
+  "timeout_seconds": 90,
+  "max_students_per_machine": 3,
+  "log_max_size_mb": 5,
+  "debug_mode": false,
+  "supabase_url_env_var": "PULSELAB_URL",
+  "supabase_key_env_var": "PULSELAB_KEY",
+  "config_remote_url": "https://raw.githubusercontent.com/SEU_ORG/pulselab/main/config/config.json"
+}
