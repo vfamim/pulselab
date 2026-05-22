@@ -1,10 +1,10 @@
 #Requires -Version 5.1
 # =============================================================================
 # setup-startup.ps1
-# Version    : 1.1.0
-# Description: Pulselab one-time setup script. Configures environment variables
-#              for Supabase credentials and creates a Windows startup shortcut
-#              to run the daemon invisibly on every login.
+# Version    : 1.2.0
+# Description: Pulselab one-time setup script. Configures user environment variables
+#              for Supabase credentials, verifies WPF assemblies, and creates a
+#              Windows Desktop shortcut to run the daemon manually under-demand.
 #
 # Usage      : .\setup-startup.ps1 -SupabaseUrl "https://..." -SupabaseKey "..."
 # Permissions: Runs as a standard user. No UAC/Admin required.
@@ -32,10 +32,19 @@ function Write-SetupLog {
 }
 
 # =============================================================================
-# STEP 1: Resolve agent path
+# STEP 1: Resolve agent path and verify WPF dependencies
 # =============================================================================
 
-Write-SetupLog "INFO" "Pulselab setup starting. version=1.1.0"
+Write-SetupLog "INFO" "Pulselab setup starting. version=1.2.0"
+
+try {
+    Write-SetupLog "INFO" "Verifying WPF / XAML assemblies..."
+    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
+    Write-SetupLog "INFO" "WPF dependencies verified successfully."
+} catch {
+    Write-SetupLog "ERROR" "WPF / PresentationFramework is not available on this machine. Error: $_"
+    exit 1
+}
 
 if ([string]::IsNullOrWhiteSpace($AgentPath)) {
     $AgentPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..\agent\pulselab-agent.ps1"
@@ -72,26 +81,34 @@ if ($verifyUrl -ne $SupabaseUrl -or $verifyKey -ne $SupabaseKey) {
 Write-SetupLog "INFO" "Environment variables verified successfully."
 
 # =============================================================================
-# STEP 3: Create Windows startup shortcut (.lnk)
+# STEP 3: Create Windows Desktop shortcut (.lnk) for On-Demand manual launch
 # Uses COM WSScript.Shell - available on all Windows versions, no UAC.
 # =============================================================================
 
+$desktopDir  = [System.Environment]::GetFolderPath("Desktop")
+$shortcutPath = Join-Path $desktopDir "Iniciar Pulselab - Oficina de Robótica.lnk"
+
+# Clean up any legacy automatic startup shortcut if present
 $startupDir  = [System.Environment]::GetFolderPath("Startup")
-$shortcutPath = Join-Path $startupDir "Pulselab.lnk"
+$legacyShortcut = Join-Path $startupDir "Pulselab.lnk"
+if (Test-Path $legacyShortcut) {
+    Write-SetupLog "INFO" "Removing legacy automatic startup shortcut..."
+    Remove-Item $legacyShortcut -Force -ErrorAction SilentlyContinue
+}
 
 $wshell   = New-Object -ComObject WScript.Shell
 $shortcut = $wshell.CreateShortcut($shortcutPath)
 
 $shortcut.TargetPath       = "powershell.exe"
-$shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -NonInteractive -File `"$AgentPath`""
+$shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
 $shortcut.WorkingDirectory = Split-Path -Parent $AgentPath
-$shortcut.WindowStyle      = 7    # 7 = Minimized (hidden; -WindowStyle Hidden handles actual invisibility)
-$shortcut.Description      = "Pulselab Engagement Daemon"
+$shortcut.WindowStyle      = 7    # 7 = Minimized / Hidden
+$shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
 $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
 
 $shortcut.Save()
 
-Write-SetupLog "INFO" "Startup shortcut created. path=$shortcutPath"
+Write-SetupLog "INFO" "Desktop shortcut created. path=$shortcutPath"
 
 # Verify shortcut was created
 if (-not (Test-Path $shortcutPath)) {
@@ -106,11 +123,11 @@ Write-SetupLog "INFO" "Shortcut creation verified."
 # =============================================================================
 
 Write-SetupLog "INFO" "---------------------------------------------"
-Write-SetupLog "INFO" "Setup complete. Pulselab is ready."
+Write-SetupLog "INFO" "Setup complete. Pulselab is ready for on-demand use."
 Write-SetupLog "INFO" "  Daemon       : $AgentPath"
-Write-SetupLog "INFO" "  Startup link : $shortcutPath"
+Write-SetupLog "INFO" "  Desktop link : $shortcutPath"
 Write-SetupLog "INFO" "  Supabase URL : $($SupabaseUrl.Substring(0, [Math]::Min(30, $SupabaseUrl.Length)))..."
 Write-SetupLog "INFO" "---------------------------------------------"
-Write-SetupLog "INFO" "The daemon will start automatically on next Windows login."
-Write-SetupLog "INFO" "To start immediately without rebooting, run:"
-Write-SetupLog "INFO" "  powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
+Write-SetupLog "INFO" "To start the session, the instructor should double-click the desktop shortcut:"
+Write-SetupLog "INFO" "  'Iniciar Pulselab - Oficina de Robótica'"
+Write-SetupLog "INFO" "---------------------------------------------"

@@ -1,15 +1,16 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "activity_id": "atividade-01-spike",
-  "question_text": "Quao dificil esta essa atividade?",
-  "interval_marks_minutes": [5, 15, 30],
+  "regional_hub": "Polo-Nordeste-01",
+  "question_text": "O quanto você está precisando quebrar a cabeça com o desafio agora?",
+  "interval_marks_minutes": [20, 40],
   "scale_min": 1,
-  "scale_max": 5,
+  "scale_max": 4,
   "timeout_seconds": 90,
-  "max_students_per_machine": 3,
+  "max_students_per_machine": 2,
   "log_max_size_mb": 5,
   "debug_mode": false,
   "supabase_url_env_var": "PULSELAB_URL",
   "supabase_key_env_var": "PULSELAB_KEY",
-  "config_remote_url": "https://raw.githubusercontent.com/SEU_ORG/pulselab/main/config/config.json"
+  "config_remote_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/config/config.json"
 }
