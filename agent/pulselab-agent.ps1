@@ -12,6 +12,12 @@
 # Author     : Pulselab Project
 # =============================================================================
 
+[CmdletBinding()]
+param(
+    [switch]$DebugMode,
+    [switch]$ProductionTest
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -61,7 +67,7 @@ public class Win32 {
 $script:VERSION           = "1.2.0"
 $script:SCRIPT_DIR        = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:LOG_FILE          = Join-Path $script:SCRIPT_DIR "pulselab.log"
-$script:LOCAL_CONFIG      = Join-Path $script:SCRIPT_DIR "config\config.json"
+$script:LOCAL_CONFIG      = Join-Path (Split-Path -Parent $script:SCRIPT_DIR) "config\config.json"
 $script:OFFLINE_CACHE_DIR = "C:\Users\Public\Pulselab\cache"
 $script:OFFLINE_CACHE_FILE = Join-Path $script:OFFLINE_CACHE_DIR "queue.json"
 
@@ -76,6 +82,7 @@ $script:StudentPC         = ""
 $script:StudentDesk       = ""
 $script:TriggerEnding     = $false
 $script:NotifyIcon        = $null
+$script:ProductionTest    = $ProductionTest
 
 # =============================================================================
 # LOGGING FUNCTION
@@ -119,6 +126,10 @@ function Initialize-Session {
     }
 
     Write-PulseLog -Level "INFO" -Message "Session manual launch initialized. version=$script:VERSION session_id=$script:SessionId computer_id=$script:ComputerId"
+
+    if ($script:ProductionTest) {
+        Write-PulseLog -Level "INFO" -Message "Command line -ProductionTest switch active. Syncing with remote production config but forcing fast intervals (treating minutes as seconds) to test Supabase integration."
+    }
 }
 
 function Get-RemoteConfig {
@@ -134,6 +145,20 @@ function Get-RemoteConfig {
     if ($null -eq $localConfig) {
         Write-PulseLog -Level "ERROR" -Message "No local config found at $script:LOCAL_CONFIG. Terminating."
         throw "Configuration file missing."
+    }
+
+    if ($DebugMode) {
+        $localConfig.debug_mode = $true
+        $localConfig.interval_marks_minutes = @(1, 2)
+        Write-PulseLog -Level "INFO" -Message "Command line -DebugMode switch active. Forcing fast interval marks [1, 2] and bypassing remote config sync."
+        $script:Config = $localConfig
+        return
+    }
+
+    if ($localConfig.debug_mode -eq $true) {
+        Write-PulseLog -Level "INFO" -Message "Local debug mode is active. Bypassing remote GitOps config sync."
+        $script:Config = $localConfig
+        return
     }
 
     $remoteUrl = $localConfig.config_remote_url
@@ -827,7 +852,7 @@ function Start-DaemonLoop {
         $gapMinutes = $currentMark - $lastMark
 
         # Determine interval target
-        $targetSeconds = if ($script:Config.debug_mode) { $gapMinutes } else { $gapMinutes * 60 }
+        $targetSeconds = if ($script:Config.debug_mode -or $script:ProductionTest) { $gapMinutes } else { $gapMinutes * 60 }
         Write-PulseLog -Level "INFO" -Message "Timer counting down until next evaluation mark. Mark=$currentMark GapSeconds=$targetSeconds"
 
         # Responsive sleep loop to keep System Tray Icon active

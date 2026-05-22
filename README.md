@@ -100,11 +100,28 @@ Caso ocorram oscilações na rede Wi-Fi escolar:
 
 ---
 
-## Modo de Simulação Rápida (Desenvolvedor / Teste)
+## Modos de Simulação Rápida e Testes (Desenvolvedor / Homologação)
 
-Para testar todo o fluxo do daemon em poucos minutos sem esperar 20/40 minutos reais:
+Existem duas formas principais de testar todo o fluxo do daemon em poucos minutos sem esperar os 20 ou 40 minutos de aula reais:
 
-1. Abra `config/config.json` e altere as opções:
-   - `"debug_mode"`: `true`
-   - `"interval_marks_minutes"`: `[1, 2]`
-2. Execute o agente manualmente. Com esta flag ativa, **1 minuto configurado no array passará a durar exatamente 1 minuto no cronômetro real** (em vez dos tempos longos de aula). O pop-up aparecerá consecutivamente aos 60 e aos 120 segundos de teste.
+### 1. Modo de Teste em Produção Rápido (`-ProductionTest`) - **Recomendado para verificar o Supabase**
+Use este parâmetro quando quiser validar a comunicação de ponta a ponta com o banco de dados do Supabase usando a configuração oficial de produção, porém de forma acelerada:
+* Ele sincroniza normalmente com o arquivo de configuração remota GitOps (ou cache local).
+* Mantém os marcadores de intervalo reais em `[20, 40]` (evitando a violação da restrição do banco de dados `CHECK (interval_mark IN (20, 40, 99))`).
+* **Trata os minutos da configuração como segundos no cronômetro**: os pop-ups de amostragem abrirão aos 20 segundos e aos 40 segundos de teste.
+
+Execute pelo terminal:
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File ".\agent\pulselab-agent.ps1" -ProductionTest
+```
+
+### 2. Modo de Debug Local (`-DebugMode` ou `"debug_mode": true`)
+Utilizado para simulações locais rápidas sem dependência de internet ou de sincronização da configuração remota do GitOps:
+* Força temporariamente os marcadores de intervalo para `[1, 2]` minutos.
+* Ignora a sincronização do arquivo remoto.
+* **Atenção**: Como os marcadores enviados passam a ser `1` e `2`, as inserções no banco de dados de produção do Supabase falharão caso a tabela possua a restrição ativa. É ideal para desenvolvimento offline das interfaces WPF ou lógica do sistema operacional.
+
+Execute pelo terminal:
+```powershell
+powershell.exe -ExecutionPolicy Bypass -File ".\agent\pulselab-agent.ps1" -DebugMode
+```
