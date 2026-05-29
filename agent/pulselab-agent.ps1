@@ -458,12 +458,19 @@ function Invoke-FlushCache {
 # =============================================================================
 
 function Show-WpfLogin {
+    $robotPath = Join-Path $script:SCRIPT_DIR "robot.png"
     $xaml = @"
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            Title="Pulselab - Iniciar Oficina" Width="430" Height="460"
+            Title="Pulselab - Iniciar Oficina" Width="430" Height="530"
             WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True">
-        <Border CornerRadius="20" Background="#1D152B" BorderBrush="#4A90E2" BorderThickness="3">
+        <Border CornerRadius="20" BorderBrush="#4A90E2" BorderThickness="3">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#2C124D" Offset="0.0"/>
+                    <GradientStop Color="#110A24" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
             <Grid Margin="20">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -471,8 +478,9 @@ function Show-WpfLogin {
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
-                <!-- Title Header -->
-                <StackPanel Grid.Row="0" Margin="0,10,0,15" HorizontalAlignment="Center">
+                <!-- Title Header with Robot -->
+                <StackPanel Grid.Row="0" Margin="0,5,0,15" HorizontalAlignment="Center">
+                    <Image Source="$robotPath" Width="85" Height="85" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                     <TextBlock Text="🚀 PULSELAB" FontSize="26" FontWeight="ExtraBold" Foreground="#4A90E2" HorizontalAlignment="Center"/>
                     <TextBlock Text="Oficina de Robótica LEGO SPIKE" FontSize="14" Foreground="#A0A0C0" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
@@ -480,10 +488,10 @@ function Show-WpfLogin {
                 <!-- Text inputs -->
                 <StackPanel Grid.Row="1" VerticalAlignment="Center">
                     <TextBlock Text="Quem está no COMPUTADOR? 💻" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
-                    <TextBox Name="TxtPC" FontSize="16" Height="40" Background="#2E2648" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,20"/>
+                    <TextBox Name="TxtPC" FontSize="16" Height="40" Background="#1C0F35" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,20"/>
                     
                     <TextBlock Text="Quem está na MESA/PISTA? 🏗️" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
-                    <TextBox Name="TxtDesk" FontSize="16" Height="40" Background="#2E2648" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
+                    <TextBox Name="TxtDesk" FontSize="16" Height="40" Background="#1C0F35" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
                 </StackPanel>
                 
                 <!-- Launch button -->
@@ -524,28 +532,47 @@ function Show-WpfSampling {
         [string]$StudentDeskName
     )
 
+    $robotPath = Join-Path $script:SCRIPT_DIR "robot.png"
     $xaml = @"
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            Title="Expedição Pulselab" Width="680" Height="480"
+            Title="Expedição Pulselab" Width="700" Height="520"
             WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True">
-        <Border CornerRadius="24" Background="#120D24" BorderBrush="#FF5E62" BorderThickness="3">
+        <Border CornerRadius="24" BorderBrush="#4A90E2" BorderThickness="3">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#2C124D" Offset="0.0"/>
+                    <GradientStop Color="#110A24" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
             <Grid Margin="20">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
+                    <Grid.RowDefinition Height="Auto"/>
+                    <Grid.RowDefinition Height="*"/>
+                    <Grid.RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
-                <!-- Upper Title -->
-                <TextBlock Grid.Row="0" Text="🧠 EXPEDIÇÃO DE APRENDIZADO" FontSize="24" FontWeight="ExtraBold" Foreground="#FF5E62" HorizontalAlignment="Center" Margin="0,5,0,10"/>
-                
-                <!-- Main Question -->
-                <TextBlock Grid.Row="1" Text="$Question" FontSize="16" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,5,0,20"/>
+                <!-- Header (Robot Speech Bubble) -->
+                <Grid Grid.Row="0" Margin="0,5,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Robot Image -->
+                    <Image Grid.Column="0" Source="$robotPath" Width="85" Height="85" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    
+                    <!-- Speech Bubble -->
+                    <Border Grid.Column="1" CornerRadius="16" Background="#1C0F35" BorderBrush="#4A90E2" BorderThickness="2" Padding="15,12">
+                        <StackPanel>
+                            <TextBlock Text="🧠 EXPEDIÇÃO DE APRENDIZADO" FontSize="13" FontWeight="Bold" Foreground="#4A90E2" Margin="0,0,0,5"/>
+                            <TextBlock Text="$Question" FontSize="15" FontWeight="Bold" Foreground="White" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
                 
                 <!-- Kid Columns -->
-                <Grid Grid.Row="2" Margin="0,0,0,15">
+                <Grid Grid.Row="1" Margin="0,0,0,15">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="20"/>
@@ -553,7 +580,7 @@ function Show-WpfSampling {
                     </Grid.ColumnDefinitions>
                     
                     <!-- Computer kid panel -->
-                    <Border Grid.Column="0" CornerRadius="16" Background="#221A3D" Padding="15" BorderBrush="#4A90E2" BorderThickness="2">
+                    <Border Grid.Column="0" CornerRadius="16" Background="#1C0F35" Padding="15" BorderBrush="#4A90E2" BorderThickness="2">
                         <StackPanel>
                             <TextBlock Name="LblPCName" FontSize="18" FontWeight="Bold" Foreground="#4A90E2" HorizontalAlignment="Center" Margin="0,0,0,15"/>
                             <RadioButton Name="RadPC1" GroupName="PCGroup" Content="🚀 Muito fácil! (Estou voando)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
@@ -567,7 +594,7 @@ function Show-WpfSampling {
                     <Grid Grid.Column="1"/>
                     
                     <!-- Desk kid panel -->
-                    <Border Grid.Column="2" CornerRadius="16" Background="#221A3D" Padding="15" BorderBrush="#00D2C4" BorderThickness="2">
+                    <Border Grid.Column="2" CornerRadius="16" Background="#1C0F35" Padding="15" BorderBrush="#00D2C4" BorderThickness="2">
                         <StackPanel>
                             <TextBlock Name="LblDeskName" FontSize="18" FontWeight="Bold" Foreground="#00D2C4" HorizontalAlignment="Center" Margin="0,0,0,15"/>
                             <RadioButton Name="RadDesk1" GroupName="DeskGroup" Content="🚀 Muito fácil! (Estou voando)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
@@ -579,7 +606,7 @@ function Show-WpfSampling {
                 </Grid>
                 
                 <!-- Save Button -->
-                <Button Name="BtnSave" Grid.Row="3" Content="Salvar Expedição 💾" FontSize="16" FontWeight="Bold" Height="48" Background="#FF5E62" Foreground="White" Cursor="Hand" IsEnabled="False"/>
+                <Button Name="BtnSave" Grid.Row="2" Content="Salvar Expedição 💾" FontSize="16" FontWeight="Bold" Height="48" Background="#4A90E2" Foreground="White" Cursor="Hand" IsEnabled="False"/>
             </Grid>
         </Border>
     </Window>
@@ -660,12 +687,19 @@ function Show-WpfEnding {
         [string]$StudentDeskName
     )
 
+    $robotPath = Join-Path $script:SCRIPT_DIR "robot.png"
     $xaml = @"
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            Title="Finalizar Oficina Pulselab" Width="720" Height="500"
+            Title="Finalizar Oficina Pulselab" Width="720" Height="530"
             WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True">
-        <Border CornerRadius="24" Background="#170F24" BorderBrush="#8E2DE2" BorderThickness="3">
+        <Border CornerRadius="24" BorderBrush="#4A90E2" BorderThickness="3">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#2C124D" Offset="0.0"/>
+                    <GradientStop Color="#110A24" Offset="1.0"/>
+                </LinearGradientBrush>
+            </Border.Background>
             <Grid Margin="20">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -673,8 +707,24 @@ function Show-WpfEnding {
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
-                <!-- Header -->
-                <TextBlock Grid.Row="0" Text="🏁 CONCLUIR OFICINA DE ROBÓTICA" FontSize="24" FontWeight="ExtraBold" Foreground="#8E2DE2" HorizontalAlignment="Center" Margin="0,5,0,15"/>
+                <!-- Header (Robot Speech Bubble) -->
+                <Grid Grid.Row="0" Margin="0,5,0,15">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    
+                    <!-- Robot Image -->
+                    <Image Grid.Column="0" Source="$robotPath" Width="85" Height="85" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                    
+                    <!-- Speech Bubble -->
+                    <Border Grid.Column="1" CornerRadius="16" Background="#1C0F35" BorderBrush="#4A90E2" BorderThickness="2" Padding="15,12">
+                        <StackPanel>
+                            <TextBlock Text="🏁 CONCLUIR OFICINA DE ROBÓTICA" FontSize="13" FontWeight="Bold" Foreground="#4A90E2" Margin="0,0,0,5"/>
+                            <TextBlock Text="Parabéns pela oficina! Como foi a experiência de vocês hoje?" FontSize="15" FontWeight="Bold" Foreground="White" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
                 
                 <!-- Student Panels -->
                 <Grid Grid.Row="1" Margin="0,0,0,10">
@@ -685,16 +735,16 @@ function Show-WpfEnding {
                     </Grid.ColumnDefinitions>
                     
                     <!-- PC kid ending panel -->
-                    <Border Grid.Column="0" CornerRadius="16" Background="#281A3A" Padding="15" BorderBrush="#4A90E2" BorderThickness="2">
+                    <Border Grid.Column="0" CornerRadius="16" Background="#1C0F35" Padding="15" BorderBrush="#4A90E2" BorderThickness="2">
                         <StackPanel>
                             <TextBlock Name="LblPCName" FontSize="18" FontWeight="Bold" Foreground="#4A90E2" HorizontalAlignment="Center" Margin="0,0,0,15"/>
                             
                             <!-- Question 1 -->
                             <TextBlock Text="O que você mais sentiu na oficina?" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,5,0,5"/>
-                            <ComboBox Name="CboPCAfet" FontSize="14" Height="30" Background="#3D295C" Foreground="White" VerticalContentAlignment="Center" Margin="0,0,0,15">
-                                <ComboBoxItem Content="😃 Orgulho"/>
-                                <ComboBoxItem Content="😐 Concentração"/>
-                                <ComboBoxItem Content="🙁 Frustração"/>
+                            <ComboBox Name="CboPCAfet" FontSize="14" Height="30" Background="#1D152B" Foreground="White" VerticalContentAlignment="Center" Margin="0,0,0,15">
+                                <ComboBoxItem Content="😃 Orgulho" Foreground="Black"/>
+                                <ComboBoxItem Content="😐 Concentração" Foreground="Black"/>
+                                <ComboBoxItem Content="🙁 Frustração" Foreground="Black"/>
                             </ComboBox>
                             
                             <!-- Question 2 -->
@@ -708,16 +758,16 @@ function Show-WpfEnding {
                     <Grid Grid.Column="1"/>
                     
                     <!-- Desk kid ending panel -->
-                    <Border Grid.Column="2" CornerRadius="16" Background="#281A3A" Padding="15" BorderBrush="#00D2C4" BorderThickness="2">
+                    <Border Grid.Column="2" CornerRadius="16" Background="#1C0F35" Padding="15" BorderBrush="#00D2C4" BorderThickness="2">
                         <StackPanel>
                             <TextBlock Name="LblDeskName" FontSize="18" FontWeight="Bold" Foreground="#00D2C4" HorizontalAlignment="Center" Margin="0,0,0,15"/>
                             
                             <!-- Question 1 -->
                             <TextBlock Text="O que você mais sentiu na oficina?" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,5,0,5"/>
-                            <ComboBox Name="CboDeskAfet" FontSize="14" Height="30" Background="#3D295C" Foreground="White" VerticalContentAlignment="Center" Margin="0,0,0,15">
-                                <ComboBoxItem Content="😃 Orgulho"/>
-                                <ComboBoxItem Content="😐 Concentração"/>
-                                <ComboBoxItem Content="🙁 Frustração"/>
+                            <ComboBox Name="CboDeskAfet" FontSize="14" Height="30" Background="#1D152B" Foreground="White" VerticalContentAlignment="Center" Margin="0,0,0,15">
+                                <ComboBoxItem Content="😃 Orgulho" Foreground="Black"/>
+                                <ComboBoxItem Content="😐 Concentração" Foreground="Black"/>
+                                <ComboBoxItem Content="🙁 Frustração" Foreground="Black"/>
                             </ComboBox>
                             
                             <!-- Question 2 -->
@@ -729,7 +779,7 @@ function Show-WpfEnding {
                 </Grid>
                 
                 <!-- Complete Button -->
-                <Button Name="BtnFinish" Grid.Row="2" Content="Finalizar Oficina de Robótica 🏁" FontSize="16" FontWeight="Bold" Height="48" Background="#8E2DE2" Foreground="White" Cursor="Hand" IsEnabled="False"/>
+                <Button Name="BtnFinish" Grid.Row="2" Content="Finalizar Oficina de Robótica 🏁" FontSize="16" FontWeight="Bold" Height="48" Background="#4A90E2" Foreground="White" Cursor="Hand" IsEnabled="False"/>
             </Grid>
         </Border>
     </Window>
