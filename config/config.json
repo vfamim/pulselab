@@ -1,4 +1,4 @@
-﻿{
+{
   "version": "1.2.0",
   "activity_id": "atividade-01-spike",
   "regional_hub": "Polo-Nordeste-01",
@@ -12,6 +12,8 @@
   "debug_mode": false,
   "supabase_url_env_var": "PULSELAB_URL",
   "supabase_key_env_var": "PULSELAB_KEY",
+  "supabase_url": "",
+  "supabase_key": "",
   "config_remote_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/config/config.json"
 }
 

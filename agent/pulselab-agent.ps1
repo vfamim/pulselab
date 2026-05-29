@@ -179,6 +179,15 @@ function Get-RemoteConfig {
 }
 
 function Get-EnvCredentials {
+    # Check if credentials are directly baked into config.json first
+    if ($script:Config.supabase_url -and $script:Config.supabase_key -and -not [string]::IsNullOrWhiteSpace($script:Config.supabase_url) -and -not [string]::IsNullOrWhiteSpace($script:Config.supabase_key)) {
+        $script:SupabaseUrl = $script:Config.supabase_url
+        $script:SupabaseKey = $script:Config.supabase_key
+        Write-PulseLog -Level "INFO" -Message "Credentials loaded successfully from config.json."
+        return
+    }
+
+    # Backup: Fallback to environment variables
     $urlVarName = $script:Config.supabase_url_env_var
     $keyVarName = $script:Config.supabase_key_env_var
 
@@ -186,8 +195,8 @@ function Get-EnvCredentials {
     $script:SupabaseKey = [System.Environment]::GetEnvironmentVariable($keyVarName, "User")
 
     if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl) -or [string]::IsNullOrWhiteSpace($script:SupabaseKey)) {
-        Write-PulseLog -Level "ERROR" -Message "Supabase credentials missing. url_var=$urlVarName key_var=$keyVarName"
-        throw "Missing Supabase credentials. Run setup-startup.ps1 first."
+        Write-PulseLog -Level "ERROR" -Message "Supabase credentials missing from config.json and Windows environment."
+        throw "Missing Supabase credentials. Run the startup config first."
     }
 
     Write-PulseLog -Level "INFO" -Message "Credentials loaded from Windows environment. url_var=$urlVarName"
