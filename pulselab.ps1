@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # =============================================================================
 # pulselab.ps1
 # Version    : 1.2.0
@@ -53,7 +53,7 @@ $configObj  = $configJson | ConvertFrom-Json
 # =============================================================================
 function Show-WpfSetup {
     $robotPath = $script:ROBOT_PATH
-    $xaml = @"
+    $xaml = @'
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             Title="Pulselab - Configuração" Width="430" Height="550"
@@ -74,7 +74,7 @@ function Show-WpfSetup {
                 
                 <!-- Header with Robot -->
                 <StackPanel Grid.Row="0" Margin="0,5,0,15" HorizontalAlignment="Center">
-                    <Image Source="$robotPath" Width="85" Height="85" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <Image Name="ImgRobot" Width="85" Height="85" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                     <TextBlock Text="⚙️ CONFIGURAÇÃO" FontSize="24" FontWeight="ExtraBold" Foreground="#4A90E2" HorizontalAlignment="Center"/>
                     <TextBlock Text="Servidor de Dados do Supabase" FontSize="14" Foreground="#A0A0C0" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
@@ -93,10 +93,14 @@ function Show-WpfSetup {
             </Grid>
         </Border>
     </Window>
-"@
+'@
 
     $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
+
+    if (Test-Path $robotPath) {
+        $window.FindName("ImgRobot").Source = New-Object System.Windows.Media.Imaging.BitmapImage([Uri]$robotPath)
+    }
 
     $txtUrl = $window.FindName("TxtUrl")
     $txtKey = $window.FindName("TxtKey")

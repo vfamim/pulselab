@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # =============================================================================
 # setup-startup.ps1
 # Version    : 1.2.0

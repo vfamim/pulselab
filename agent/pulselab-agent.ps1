@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
 # Version    : 1.2.0
@@ -165,10 +165,14 @@ function Get-RemoteConfig {
 
     try {
         $response = Invoke-WebRequest -Uri $remoteUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-        $remoteConfig = $response.Content | ConvertFrom-Json
+        # Decode raw bytes as UTF-8 explicitly: PS 5.1 falls back to ISO-8859-1
+        # when the server omits the charset header, corrupting accented text
+        $rawBytes = $response.RawContentStream.ToArray()
+        $content = [System.Text.Encoding]::UTF8.GetString($rawBytes)
+        $remoteConfig = $content | ConvertFrom-Json
 
         # Cache locally
-        $response.Content | Set-Content -Path $script:LOCAL_CONFIG -Encoding UTF8 -Force
+        $content | Set-Content -Path $script:LOCAL_CONFIG -Encoding UTF8 -Force
 
         $script:Config = $remoteConfig
         Write-PulseLog -Level "INFO" -Message "Remote config synced. version=$($remoteConfig.version) hub=$($remoteConfig.regional_hub)"
@@ -468,7 +472,7 @@ function Invoke-FlushCache {
 
 function Show-WpfLogin {
     $robotPath = Join-Path $script:SCRIPT_DIR "robot.png"
-    $xaml = @"
+    $xaml = @'
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             Title="Pulselab - Iniciar Oficina" Width="430" Height="530"
@@ -489,7 +493,7 @@ function Show-WpfLogin {
                 
                 <!-- Title Header with Robot -->
                 <StackPanel Grid.Row="0" Margin="0,5,0,15" HorizontalAlignment="Center">
-                    <Image Source="$robotPath" Width="85" Height="85" HorizontalAlignment="Center" Margin="0,0,0,10"/>
+                    <Image Name="ImgRobot" Width="85" Height="85" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                     <TextBlock Text="🚀 PULSELAB" FontSize="26" FontWeight="ExtraBold" Foreground="#4A90E2" HorizontalAlignment="Center"/>
                     <TextBlock Text="Oficina de Robótica LEGO SPIKE" FontSize="14" Foreground="#A0A0C0" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
@@ -508,10 +512,14 @@ function Show-WpfLogin {
             </Grid>
         </Border>
     </Window>
-"@
+'@
 
     $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
+
+    if (Test-Path $robotPath) {
+        $window.FindName("ImgRobot").Source = New-Object System.Windows.Media.Imaging.BitmapImage([Uri]$robotPath)
+    }
 
     $txtPC = $window.FindName("TxtPC")
     $txtDesk = $window.FindName("TxtDesk")
@@ -542,7 +550,9 @@ function Show-WpfSampling {
     )
 
     $robotPath = Join-Path $script:SCRIPT_DIR "robot.png"
-    $xaml = @"
+    # Static (single-quoted) here-string: no variable interpolation inside XAML.
+    # Dynamic content is assigned at runtime via FindName to avoid markup injection.
+    $xaml = @'
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             Title="Expedição Pulselab" Width="700" Height="520"
@@ -556,9 +566,9 @@ function Show-WpfSampling {
             </Border.Background>
             <Grid Margin="20">
                 <Grid.RowDefinitions>
-                    <Grid.RowDefinition Height="Auto"/>
-                    <Grid.RowDefinition Height="*"/>
-                    <Grid.RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
                 <!-- Header (Robot Speech Bubble) -->
@@ -569,13 +579,13 @@ function Show-WpfSampling {
                     </Grid.ColumnDefinitions>
                     
                     <!-- Robot Image -->
-                    <Image Grid.Column="0" Source="$robotPath" Width="85" Height="85" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                    
+                    <Image Name="ImgRobot" Grid.Column="0" Width="85" Height="85" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
                     <!-- Speech Bubble -->
                     <Border Grid.Column="1" CornerRadius="16" Background="#1C0F35" BorderBrush="#4A90E2" BorderThickness="2" Padding="15,12">
                         <StackPanel>
                             <TextBlock Text="🧠 EXPEDIÇÃO DE APRENDIZADO" FontSize="13" FontWeight="Bold" Foreground="#4A90E2" Margin="0,0,0,5"/>
-                            <TextBlock Text="$Question" FontSize="15" FontWeight="Bold" Foreground="White" TextWrapping="Wrap"/>
+                            <TextBlock Name="LblQuestion" FontSize="15" FontWeight="Bold" Foreground="White" TextWrapping="Wrap"/>
                         </StackPanel>
                     </Border>
                 </Grid>
@@ -619,10 +629,17 @@ function Show-WpfSampling {
             </Grid>
         </Border>
     </Window>
-"@
+'@
 
     $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
+
+    # Runtime assignment of dynamic content (values are treated as plain CLR
+    # strings here, so quotes/ampersands/angle brackets are safe)
+    $window.FindName("LblQuestion").Text = $Question
+    if (Test-Path $robotPath) {
+        $window.FindName("ImgRobot").Source = New-Object System.Windows.Media.Imaging.BitmapImage([Uri]$robotPath)
+    }
 
     $lblPCName = $window.FindName("LblPCName")
     $lblDeskName = $window.FindName("LblDeskName")
@@ -697,7 +714,7 @@ function Show-WpfEnding {
     )
 
     $robotPath = Join-Path $script:SCRIPT_DIR "robot.png"
-    $xaml = @"
+    $xaml = @'
     <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
             Title="Finalizar Oficina Pulselab" Width="720" Height="530"
@@ -724,8 +741,8 @@ function Show-WpfEnding {
                     </Grid.ColumnDefinitions>
                     
                     <!-- Robot Image -->
-                    <Image Grid.Column="0" Source="$robotPath" Width="85" Height="85" VerticalAlignment="Center" Margin="0,0,15,0"/>
-                    
+                    <Image Name="ImgRobot" Grid.Column="0" Width="85" Height="85" VerticalAlignment="Center" Margin="0,0,15,0"/>
+
                     <!-- Speech Bubble -->
                     <Border Grid.Column="1" CornerRadius="16" Background="#1C0F35" BorderBrush="#4A90E2" BorderThickness="2" Padding="15,12">
                         <StackPanel>
@@ -792,10 +809,14 @@ function Show-WpfEnding {
             </Grid>
         </Border>
     </Window>
-"@
+'@
 
     $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
     $window = [Windows.Markup.XamlReader]::Load($reader)
+
+    if (Test-Path $robotPath) {
+        $window.FindName("ImgRobot").Source = New-Object System.Windows.Media.Imaging.BitmapImage([Uri]$robotPath)
+    }
 
     $lblPCName = $window.FindName("LblPCName")
     $lblDeskName = $window.FindName("LblDeskName")
