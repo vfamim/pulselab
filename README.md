@@ -65,16 +65,41 @@ pulselab/
 
 ## Deploy e Configuração por Máquina (Única vez)
 
-Execute o comando a seguir **uma única vez** no computador do aluno, abrindo o PowerShell com permissões de usuário padrão (sem Administrador):
+Como os computadores da faculdade podem ter restrições (bloqueio de pendrive, falta de Git), você tem **duas formas** extremamente simples de distribuir e instalar o Pulselab nas máquinas dos alunos:
+
+### Método A: Instalação Remota via PowerShell (Recomendado)
+Este método **não requer Git** e **não requer pendrive**. Ele usa comandos nativos do Windows para baixar o repositório como ZIP diretamente do GitHub, extrair na pasta pública (`C:\Users\Public\pulselab-main`) e deixar tudo configurado.
+
+1. Abra o **PowerShell** no computador do aluno (como usuário comum, sem privilégios de administrador/UAC).
+2. Defina as credenciais do seu Supabase e execute o comando abaixo (substituindo pelas suas chaves reais):
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File ".\installer\setup-startup.ps1" `
-    -SupabaseUrl "https://SEU_PROJECT_REF.supabase.co" `
-    -SupabaseKey "SUA_ANON_KEY"
+$u="https://SEU_PROJECT_REF.supabase.co"; $k="SUA_ANON_KEY"; iex (irm "https://raw.githubusercontent.com/vfamim/pulselab/main/installer/install.ps1")
 ```
 
-### O que o instalador faz?
-1. Salva as credenciais do Supabase de forma segura nas variáveis de ambiente do usuário do Windows (`PULSELAB_URL` e `PULSELAB_KEY`).
+*Pronto!* O script fará o download, configurará o `config.json` portátil local e criará o atalho **"Iniciar Pulselab - Oficina de Robótica"** na Área de Trabalho do aluno.
+
+---
+
+### Método B: Pasta Compactada Pré-Configurada (Alternativa Offline/Nuvem)
+Ideal para laboratórios onde o download direto via terminal pode ser bloqueado ou para quando você quer configurar tudo apenas uma vez no seu próprio computador:
+
+1. No seu computador de desenvolvimento, configure o arquivo [config.json](file:///c:/Users/VFAMI/Dev/pulselab/config/config.json) com a URL e a Anon Key do seu Supabase:
+   ```json
+   "supabase_url": "https://SEU_PROJECT_REF.supabase.co",
+   "supabase_key": "SUA_ANON_KEY",
+   ```
+2. Compacte toda a pasta `pulselab` em um arquivo `.zip` (ex: `pulselab.zip`).
+3. Suba o arquivo ZIP para o seu **Google Drive, Dropbox ou OneDrive** e gere um link de compartilhamento.
+4. No computador da faculdade:
+   - Abra o navegador e baixe o ZIP pelo link gerado.
+   - Extraia a pasta em qualquer diretório (ex: na Área de Trabalho ou Documentos).
+   - Dê dois cliques em [Iniciar-Pulselab.bat](file:///c:/Users/VFAMI/Dev/pulselab/Iniciar-Pulselab.bat) uma vez para criar o atalho oficial na Área de Trabalho e iniciar o daemon.
+
+---
+
+### O que o processo de instalação faz?
+1. Salva as credenciais do Supabase diretamente no `config/config.json` portátil e, opcionalmente, nas variáveis de ambiente do usuário (`PULSELAB_URL` e `PULSELAB_KEY`).
 2. Verifica se a máquina possui suporte nativo às dependências WPF/XAML.
 3. Remove atalhos legados de inicialização automática.
 4. Cria um atalho na Área de Trabalho com o nome **"Iniciar Pulselab - Oficina de Robótica"** para lançamento manual do instrutor.

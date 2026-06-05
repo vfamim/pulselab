@@ -22,3 +22,8 @@ desktop.ini
 # Editor
 .vscode/
 *.code-workspace
+
+# User personal docs & agent artifacts
+docs/
+.agents/
+skills-lock.json
