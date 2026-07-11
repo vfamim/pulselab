@@ -1,114 +1,139 @@
 -- =============================================================================
--- Pulselab - Supabase Schema
--- Version: 1.2.0
--- Description: Multi-modal Learning Analytics (MMLA) table for robotics education.
---              Records children cognitive load, post-test attitudes, active application,
---              idle time, and screen capture URLs during LEGO Spike sessions.
+-- PulseLab - Supabase Schema
+-- Version: 1.3.0
+-- Description: Eventos individuais e pseudonimizados de oficinas pontuais de
+--              robótica educacional. O script é não destrutivo: a tabela
+--              legada `responses` não é removida.
 -- =============================================================================
 
--- Enable UUID generation (required for gen_random_uuid)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- =============================================================================
--- TABLE: responses
--- =============================================================================
-
-DROP TABLE IF EXISTS public.responses CASCADE;
-
-CREATE TABLE public.responses (
+-- Uma linha representa a resposta de um participante em um evento da oficina.
+-- O contexto é repetido intencionalmente para manter o envio offline atômico e
+-- evitar dependências entre inserts anônimos.
+CREATE TABLE IF NOT EXISTS public.research_events (
     id                         uuid         DEFAULT gen_random_uuid() PRIMARY KEY,
-    session_id                 uuid         NOT NULL,                          -- GUID generated at daemon boot
-    regional_hub               text         NOT NULL,                          -- Vindo do config.json, ex: 'Polo-Nordeste-01'
-    computer_id                text         NOT NULL,                          -- $env:COMPUTERNAME (Windows hostname)
-    interval_mark              integer      NOT NULL CHECK (interval_mark IN (20, 40, 99)), -- 20/40 min mark or 99 (Ending)
-    
-    -- Student PC Telemetry (Computer Student)
-    student_pc_name            text         NOT NULL,                          -- Name of child at PC
-    student_pc_load            integer      NOT NULL CHECK (student_pc_load BETWEEN 1 AND 4), -- Cognitive effort
-    student_pc_post_afet       text         CHECK (student_pc_post_afet IN ('Orgulho', 'Concentração', 'Frustração')), -- Only on mark 99
-    student_pc_post_att        boolean,                                        -- Only on mark 99: Wants to return?
+    event_id                   uuid         NOT NULL UNIQUE,
+    session_id                 uuid         NOT NULL,
+    dyad_id                    uuid         NOT NULL,
+    participant_id             text         NOT NULL,
+    participant_role           text         NOT NULL
+        CHECK (participant_role IN ('computer', 'assembly')),
+    event_type                 text         NOT NULL
+        CHECK (event_type IN ('pre', 'checkpoint', 'post')),
+    response_status            text         NOT NULL DEFAULT 'completed'
+        CHECK (response_status IN ('completed', 'timeout', 'declined')),
+    interval_mark              integer      CHECK (interval_mark IS NULL OR interval_mark >= 0),
 
-    -- Student Desk Telemetry (Assembly Table Student)
-    student_desk_name          text         NOT NULL,                          -- Name of child at physical desk
-    student_desk_load          integer      NOT NULL CHECK (student_desk_load BETWEEN 1 AND 4), -- Cognitive effort
-    student_desk_post_afet     text         CHECK (student_desk_post_afet IN ('Orgulho', 'Concentração', 'Frustração')), -- Only on mark 99
-    student_desk_post_att      boolean,                                        -- Only on mark 99: Wants to return?
+    -- Contexto da implementação
+    regional_hub               text         NOT NULL,
+    school_code                text         NOT NULL,
+    workshop_code              text         NOT NULL,
+    class_code                 text         NOT NULL,
+    grade_band                 text,
+    activity_id                text         NOT NULL,
+    computer_id                text         NOT NULL,
+    config_version             text         NOT NULL,
+    client_version             text         NOT NULL,
 
-    -- OS & Workspace Telemetry
-    telemetry_window_title     text,                                           -- Title of focused window
-    telemetry_foreground_app   text,                                           -- Focused process name, e.g., 'SPIKE'
-    telemetry_idle_seconds     integer,                                        -- Inactivity duration in seconds
-    telemetry_file_size_kb     numeric      DEFAULT 0.0,                       -- Last modified .llsp/.spk file size in KB
-    screenshot_url             text,                                           -- URL of screenshot uploaded to Storage
-    
-    created_at                 timestamptz  NOT NULL DEFAULT timezone('utc'::text, now())
+    -- Pré-oficina
+    prior_robotics             smallint     CHECK (prior_robotics BETWEEN 1 AND 4),
+    self_efficacy_pre          smallint     CHECK (self_efficacy_pre BETWEEN 1 AND 4),
+    knowledge_score            numeric,
+    knowledge_answers          jsonb,
+
+    -- Checkpoints intrassessão
+    mental_effort              smallint     CHECK (mental_effort BETWEEN 1 AND 4),
+    progress_state             text         CHECK (progress_state IN (
+        'progressing_independently',
+        'progressing_with_doubt',
+        'trying_without_progress',
+        'needs_help_now'
+    )),
+    collaboration              smallint     CHECK (collaboration BETWEEN 1 AND 4),
+    help_requested             boolean,
+
+    -- Encerramento
+    post_understanding         smallint     CHECK (post_understanding BETWEEN 1 AND 4),
+    post_affects               text[],
+    post_return_intent         smallint     CHECK (post_return_intent BETWEEN 1 AND 4),
+    mission_performance        smallint     CHECK (mission_performance BETWEEN 0 AND 3),
+    instructor_interventions   smallint     CHECK (instructor_interventions >= 0),
+    primary_issue              text         CHECK (primary_issue IN (
+        'none', 'assembly', 'logic', 'sensor', 'technical', 'collaboration', 'other'
+    )),
+
+    -- Contexto técnico do momento. São evidências auxiliares, não medidas de
+    -- aprendizagem por si mesmas.
+    telemetry_window_title     text,
+    telemetry_foreground_app   text,
+    telemetry_idle_seconds     integer      CHECK (telemetry_idle_seconds >= 0),
+    telemetry_file_size_kb     numeric      DEFAULT 0.0,
+    screenshot_path            text,
+
+    response_latency_ms        integer      CHECK (response_latency_ms >= 0),
+    occurred_at                timestamptz  NOT NULL,
+    received_at                timestamptz  NOT NULL DEFAULT timezone('utc'::text, now()),
+
+    CHECK (
+        post_affects IS NULL OR
+        post_affects <@ ARRAY['curious','confident','excited','frustrated','tired','indifferent']::text[]
+    ),
+    CHECK (post_affects IS NULL OR cardinality(post_affects) BETWEEN 1 AND 2),
+    CHECK (
+        (event_type = 'checkpoint' AND interval_mark IS NOT NULL) OR
+        (event_type <> 'checkpoint' AND interval_mark IS NULL)
+    )
 );
 
--- =============================================================================
--- INDEXES
--- =============================================================================
+CREATE INDEX IF NOT EXISTS idx_research_events_session
+    ON public.research_events (session_id);
 
--- Query responses for a specific workshop session
-CREATE INDEX IF NOT EXISTS idx_responses_session_id
-    ON public.responses (session_id);
+CREATE INDEX IF NOT EXISTS idx_research_events_workshop
+    ON public.research_events (workshop_code, occurred_at);
 
--- Query responses by machine or date range
-CREATE INDEX IF NOT EXISTS idx_responses_computer_id
-    ON public.responses (computer_id);
+CREATE INDEX IF NOT EXISTS idx_research_events_participant
+    ON public.research_events (participant_id, occurred_at);
 
-CREATE INDEX IF NOT EXISTS idx_responses_created_at
-    ON public.responses (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_research_events_received
+    ON public.research_events (received_at DESC);
 
--- =============================================================================
--- ROW LEVEL SECURITY (RLS) - responses table
--- =============================================================================
+ALTER TABLE public.research_events ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.responses ENABLE ROW LEVEL SECURITY;
-
--- Anon key: INSERT only
--- Rationale: Client daemons use anon key. Students must not be able to
---            read or modify each other's responses (LGPD compliance).
-CREATE POLICY "anon_insert_only"
-    ON public.responses
+DROP POLICY IF EXISTS "anon_insert_research_events" ON public.research_events;
+CREATE POLICY "anon_insert_research_events"
+    ON public.research_events
     FOR INSERT
     TO anon
     WITH CHECK (true);
 
 -- =============================================================================
--- SUPABASE STORAGE BUCKET: screenshots
+-- STORAGE PRIVADO
 -- =============================================================================
 
--- Create the public bucket if not exists
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('screenshots', 'screenshots', true)
-ON CONFLICT (id) DO NOTHING;
+VALUES ('screenshots', 'screenshots', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
 
--- RLS policies for storage objects
-ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
-
--- Allow anonymous users to upload compressed screenshots into the 'screenshots' bucket
+DROP POLICY IF EXISTS "Allow anonymous uploads to screenshots" ON storage.objects;
 CREATE POLICY "Allow anonymous uploads to screenshots"
     ON storage.objects
     FOR INSERT
     TO anon
     WITH CHECK (bucket_id = 'screenshots');
 
--- Allow anyone to read uploaded screenshots publicly
-CREATE POLICY "Allow public read access to screenshots"
-    ON storage.objects
-    FOR SELECT
-    TO public
-    USING (bucket_id = 'screenshots');
+-- Remove a política pública criada pela versão 1.2, caso exista. Leituras devem
+-- ocorrer somente em backend autorizado, usando service_role ou URL assinada.
+DROP POLICY IF EXISTS "Allow public read access to screenshots" ON storage.objects;
 
--- =============================================================================
--- COMMENTS (documentation as code)
--- =============================================================================
+COMMENT ON TABLE public.research_events IS
+    'Eventos individuais e pseudonimizados coletados durante oficinas pontuais do PulseLab.';
 
-COMMENT ON TABLE public.responses IS
-    'Pulselab multimodal learning analytics responses. Each row represents a dual student rating at a specific interval mark (20, 40 or 99).';
+COMMENT ON COLUMN public.research_events.occurred_at IS
+    'Horário do evento no cliente; preserva o momento real mesmo quando o envio ocorre offline.';
 
-COMMENT ON COLUMN public.responses.session_id IS
-    'GUID generated once per daemon manual run. Identifies all data points of the current workshop session.';
+COMMENT ON COLUMN public.research_events.received_at IS
+    'Horário em que o Supabase recebeu o evento.';
 
-COMMENT ON COLUMN public.responses.interval_mark IS
-    'The time mark of the evaluation (20 minutes, 40 minutes, or 99 for Ending/Post-test).';
+COMMENT ON COLUMN public.research_events.screenshot_path IS
+    'Caminho do objeto em bucket privado. Nunca é uma URL pública.';

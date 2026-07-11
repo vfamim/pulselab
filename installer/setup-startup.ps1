@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # =============================================================================
 # setup-startup.ps1
-# Version    : 1.2.0
+# Version    : 1.3.0
 # Description: Pulselab one-time setup script. Configures user environment variables
 #              for Supabase credentials, verifies WPF assemblies, and creates a
 #              Windows Desktop shortcut to run the daemon manually under-demand.
@@ -35,7 +35,7 @@ function Write-SetupLog {
 # STEP 1: Resolve agent path and verify WPF dependencies
 # =============================================================================
 
-Write-SetupLog "INFO" "Pulselab setup starting. version=1.2.0"
+Write-SetupLog "INFO" "Pulselab setup starting. version=1.3.0"
 
 try {
     Write-SetupLog "INFO" "Verifying WPF / XAML assemblies..."

@@ -1,0 +1,1245 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Diagnóstico metodológico e proposta de protocolo acadêmico para o PulseLab e as oficinas de Robótica Educacional da FADEX.">
+  <title>PulseLab — Relatório de Metodologia de Pesquisa</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212f;
+      --muted: #5d6878;
+      --paper: #fbfaf7;
+      --surface: #ffffff;
+      --surface-soft: #f3f0e9;
+      --line: #ddd8ce;
+      --violet: #5b3cc4;
+      --violet-deep: #332073;
+      --violet-soft: #eee9ff;
+      --cyan: #087f8c;
+      --cyan-soft: #e2f5f4;
+      --green: #287a52;
+      --green-soft: #e7f5ec;
+      --amber: #9a5b08;
+      --amber-soft: #fff2d6;
+      --red: #a33b3b;
+      --red-soft: #fdeaea;
+      --shadow: 0 18px 50px rgba(39, 30, 73, 0.10);
+      --radius: 20px;
+      --content: 1180px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 26px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(91, 60, 196, 0.10), transparent 30rem),
+        radial-gradient(circle at 100% 18%, rgba(8, 127, 140, 0.08), transparent 28rem),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--violet-deep); text-underline-offset: 3px; }
+    a:hover { color: var(--cyan); }
+
+    button { font: inherit; }
+
+    .reading-progress {
+      position: fixed;
+      z-index: 100;
+      inset: 0 auto auto 0;
+      width: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--violet), var(--cyan));
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      color: #fff;
+      background:
+        linear-gradient(125deg, rgba(27, 17, 64, 0.98), rgba(73, 46, 161, 0.94) 60%, rgba(7, 113, 126, 0.92));
+      border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .hero::before { width: 28rem; height: 28rem; right: -8rem; top: -15rem; }
+    .hero::after { width: 18rem; height: 18rem; right: 11rem; bottom: -13rem; }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+      padding: 72px 0 58px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 18px;
+      padding: 7px 12px;
+      color: #dfd8ff;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 750;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: #67e8d5;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(103, 232, 213, 0.12);
+    }
+
+    h1, h2, h3, h4 {
+      margin-top: 0;
+      font-family: "Aptos Display", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.16;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin-bottom: 18px;
+      font-size: clamp(2.45rem, 6vw, 5.2rem);
+      letter-spacing: -0.055em;
+    }
+
+    .hero-lead {
+      max-width: 810px;
+      margin: 0;
+      color: #e8e5f4;
+      font-size: clamp(1.08rem, 2vw, 1.34rem);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      margin-top: 30px;
+      color: #d1cbe8;
+      font-size: 0.88rem;
+    }
+
+    .hero-meta strong { color: #fff; }
+
+    .action-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 30px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 10px 16px;
+      color: #fff;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 11px;
+      cursor: pointer;
+      font-weight: 720;
+      text-decoration: none;
+    }
+
+    .button:hover { color: #fff; background: rgba(255,255,255,0.20); }
+    .button.primary { color: var(--violet-deep); background: #fff; }
+    .button.primary:hover { color: var(--violet); background: #f5f2ff; }
+
+    .page-shell {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr);
+      gap: 46px;
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+      padding: 50px 0 90px;
+    }
+
+    .toc {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      padding: 20px;
+      background: rgba(255,255,255,0.78);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 10px 28px rgba(39, 30, 73, 0.06);
+      backdrop-filter: blur(14px);
+    }
+
+    .toc-title {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .toc a {
+      display: block;
+      margin: 2px 0;
+      padding: 7px 9px;
+      color: var(--muted);
+      border-radius: 8px;
+      font-size: 0.86rem;
+      line-height: 1.28;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a.active {
+      color: var(--violet-deep);
+      background: var(--violet-soft);
+    }
+
+    main { min-width: 0; }
+
+    section {
+      margin-bottom: 72px;
+      scroll-margin-top: 22px;
+    }
+
+    .section-kicker {
+      margin: 0 0 8px;
+      color: var(--violet);
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      color: var(--violet-deep);
+      font-size: clamp(1.7rem, 3vw, 2.45rem);
+      letter-spacing: -0.035em;
+    }
+
+    h3 {
+      margin-bottom: 12px;
+      color: var(--ink);
+      font-size: 1.22rem;
+    }
+
+    h4 { margin-bottom: 7px; font-size: 1rem; }
+    p { margin: 0 0 16px; }
+    ul, ol { margin: 0 0 16px; padding-left: 1.3rem; }
+    li + li { margin-top: 6px; }
+
+    .lead {
+      color: #3e4857;
+      font-size: 1.12rem;
+    }
+
+    .verdict {
+      position: relative;
+      padding: 30px;
+      color: #fff;
+      background: linear-gradient(135deg, var(--violet-deep), #4c35a3);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .verdict::before {
+      content: "Diagnóstico central";
+      display: block;
+      margin-bottom: 10px;
+      color: #cfc5ff;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+    }
+
+    .verdict p { margin: 0; font-size: clamp(1.15rem, 2.2vw, 1.48rem); line-height: 1.45; }
+
+    .grid-2,
+    .grid-3,
+    .metric-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .metric-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); margin: 24px 0; }
+
+    .card {
+      padding: 22px;
+      background: rgba(255,255,255,0.86);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 10px 25px rgba(39, 30, 73, 0.05);
+    }
+
+    .card p:last-child,
+    .card ul:last-child { margin-bottom: 0; }
+
+    .card-number {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      margin-bottom: 14px;
+      color: #fff;
+      background: var(--violet);
+      border-radius: 10px;
+      font-weight: 850;
+    }
+
+    .metric {
+      padding: 18px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--violet-deep);
+      font-size: 1.05rem;
+    }
+
+    .metric span { color: var(--muted); font-size: 0.86rem; }
+
+    .callout {
+      margin: 22px 0;
+      padding: 20px 22px;
+      background: var(--cyan-soft);
+      border: 1px solid #b8dfdd;
+      border-left: 5px solid var(--cyan);
+      border-radius: 12px;
+    }
+
+    .callout.warning { background: var(--amber-soft); border-color: #ecd6a6; border-left-color: var(--amber); }
+    .callout.danger { background: var(--red-soft); border-color: #efc6c6; border-left-color: var(--red); }
+    .callout.success { background: var(--green-soft); border-color: #bfe1cc; border-left-color: var(--green); }
+    .callout strong { display: block; margin-bottom: 5px; }
+    .callout p:last-child { margin-bottom: 0; }
+
+    .statement {
+      margin: 24px 0;
+      padding: 24px 26px;
+      color: var(--violet-deep);
+      background: var(--violet-soft);
+      border: 1px solid #d6ccfa;
+      border-radius: 16px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.08rem, 2vw, 1.28rem);
+      line-height: 1.5;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin: 24px 0;
+    }
+
+    .flow-step {
+      position: relative;
+      padding: 18px 14px;
+      text-align: center;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+    }
+
+    .flow-step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      z-index: 2;
+      top: 50%;
+      right: -17px;
+      width: 24px;
+      color: var(--violet);
+      background: var(--paper);
+      font-weight: 850;
+      transform: translateY(-50%);
+    }
+
+    .flow-step small { display: block; margin-bottom: 6px; color: var(--violet); font-weight: 800; }
+    .flow-step strong { font-size: 0.9rem; }
+
+    .table-wrap {
+      margin: 22px 0;
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      box-shadow: 0 8px 22px rgba(39, 30, 73, 0.04);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--violet-deep);
+      background: var(--surface-soft);
+      font-size: 0.78rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .pill {
+      display: inline-block;
+      margin: 2px 3px 2px 0;
+      padding: 4px 9px;
+      color: var(--violet-deep);
+      background: var(--violet-soft);
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 750;
+    }
+
+    .question-card {
+      margin: 18px 0;
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 8px 24px rgba(39, 30, 73, 0.05);
+    }
+
+    .question-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px 18px;
+      color: var(--violet-deep);
+      background: var(--violet-soft);
+      border-bottom: 1px solid #d9d0f8;
+      font-weight: 800;
+    }
+
+    .question-body { padding: 20px; }
+    .question-text { margin-bottom: 14px; font-size: 1.08rem; font-weight: 720; }
+
+    .options {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .option {
+      padding: 10px;
+      color: #4d5665;
+      background: var(--surface-soft);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      font-size: 0.82rem;
+      text-align: center;
+    }
+
+    .hierarchy {
+      margin: 22px 0;
+      padding: 24px;
+      overflow-x: auto;
+      color: #dde3ef;
+      background: #172130;
+      border-radius: 15px;
+      font: 0.92rem/1.65 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      white-space: pre;
+    }
+
+    .timeline { position: relative; margin: 28px 0 0 12px; padding-left: 28px; }
+    .timeline::before {
+      content: "";
+      position: absolute;
+      inset: 5px auto 5px 3px;
+      width: 2px;
+      background: linear-gradient(var(--violet), var(--cyan));
+    }
+
+    .timeline-item { position: relative; margin-bottom: 28px; }
+    .timeline-item::before {
+      content: "";
+      position: absolute;
+      top: 5px;
+      left: -32px;
+      width: 12px;
+      height: 12px;
+      background: var(--surface);
+      border: 3px solid var(--violet);
+      border-radius: 50%;
+    }
+
+    .timeline-item:last-child { margin-bottom: 0; }
+    .timeline-label { color: var(--violet); font-size: 0.76rem; font-weight: 850; letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 20px 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      position: relative;
+      margin: 0;
+      padding: 12px 14px 12px 41px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .checklist li::before {
+      content: "✓";
+      position: absolute;
+      top: 11px;
+      left: 14px;
+      color: var(--green);
+      font-weight: 900;
+    }
+
+    .source-list {
+      padding: 20px 24px 20px 42px;
+      background: var(--surface-soft);
+      border-radius: 14px;
+      font-size: 0.9rem;
+    }
+
+    .source-list li + li { margin-top: 10px; }
+
+    .footer {
+      padding: 30px 20px 48px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      text-align: center;
+      font-size: 0.85rem;
+    }
+
+    .footer strong { color: var(--violet-deep); }
+
+    @media (max-width: 980px) {
+      .page-shell { grid-template-columns: 1fr; }
+      .toc { position: static; max-height: none; }
+      .toc nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .flow { grid-template-columns: 1fr; }
+      .flow-step:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -19px; transform: translateX(50%); }
+      .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 700px) {
+      .hero-inner { padding: 52px 0 44px; }
+      .page-shell { width: min(calc(100% - 26px), var(--content)); padding-top: 26px; }
+      .grid-2, .grid-3, .checklist { grid-template-columns: 1fr; }
+      .options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .toc nav { grid-template-columns: 1fr; }
+      section { margin-bottom: 54px; }
+      th, td { padding: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+    }
+
+    @media print {
+      :root { --paper: #fff; --surface: #fff; }
+      body { background: #fff; font-size: 10.5pt; }
+      .reading-progress, .action-bar, .toc { display: none !important; }
+      .hero { color: #111; background: #fff; border-bottom: 2px solid #332073; }
+      .hero::before, .hero::after { display: none; }
+      .hero-inner { width: 100%; padding: 24px 0 28px; }
+      .hero h1 { color: #332073; font-size: 30pt; }
+      .hero-lead, .hero-meta { color: #444; }
+      .eyebrow { color: #332073; background: #eee9ff; border-color: #d6ccfa; }
+      .page-shell { display: block; width: 100%; padding: 28px 0; }
+      main { width: 100%; }
+      section { margin-bottom: 34px; break-before: auto; }
+      h2 { break-after: avoid; }
+      .card, .callout, .question-card, .table-wrap, .verdict { break-inside: avoid; box-shadow: none; }
+      .verdict { color: #111; background: #eee9ff; border: 1px solid #cfc5ef; }
+      .verdict::before { color: #5b3cc4; }
+      .flow { grid-template-columns: repeat(5, 1fr); }
+      .footer { padding-bottom: 0; }
+      a { color: inherit; text-decoration: none; }
+      a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 8pt; color: #555; overflow-wrap: anywhere; }
+    }
+  </style>
+</head>
+<body>
+  <div class="reading-progress" id="readingProgress" aria-hidden="true"></div>
+
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">PulseLab · Robótica Educacional</p>
+      <h1>Da coleta de dados ao método de pesquisa</h1>
+      <p class="hero-lead">
+        Diagnóstico do aplicativo, avaliação do questionário e proposta de um protocolo acadêmico para oficinas pontuais com LEGO SPIKE em escolas públicas.
+      </p>
+      <div class="hero-meta">
+        <span><strong>Projeto:</strong> Robótica Educacional / FADEX</span>
+        <span><strong>Documento:</strong> versão inicial para discussão</span>
+        <span><strong>Atualizado:</strong> julho de 2026</span>
+      </div>
+      <div class="action-bar">
+        <a class="button primary" href="#resumo">Começar a leitura</a>
+        <button class="button" type="button" onclick="window.print()">Imprimir ou salvar em PDF</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-shell">
+    <aside class="toc" aria-label="Sumário do relatório">
+      <p class="toc-title">Neste relatório</p>
+      <nav id="tocNav">
+        <a href="#resumo">1. Resumo executivo</a>
+        <a href="#aplicacao">2. Como o app funciona</a>
+        <a href="#desenho">3. Turmas distintas</a>
+        <a href="#alcance">4. Alcance científico</a>
+        <a href="#questionario-atual">5. Questionário atual</a>
+        <a href="#instrumento">6. Instrumento proposto</a>
+        <a href="#metodo">7. Método acadêmico</a>
+        <a href="#analise">8. Plano de análise</a>
+        <a href="#validacao">9. Validação</a>
+        <a href="#etica">10. Ética e LGPD</a>
+        <a href="#tecnico">11. Prioridades técnicas</a>
+        <a href="#roadmap">12. Próximos passos</a>
+        <a href="#fontes">13. Fontes</a>
+      </nav>
+    </aside>
+
+    <main>
+      <section id="resumo">
+        <p class="section-kicker">01 · Resumo executivo</p>
+        <h2>O PulseLab já é uma boa base de coleta. O próximo passo é delimitar o que ele realmente mede.</h2>
+        <div class="verdict">
+          <p>
+            Hoje, o sistema sustenta um <strong>estudo piloto sobre o processo vivido dentro de cada oficina</strong>. Ele ainda não sustenta conclusões causais sobre aprendizagem, impacto de longo prazo, validação da carga cognitiva ou eliminação do efeito Hawthorne.
+          </p>
+        </div>
+
+        <div class="metric-grid">
+          <div class="metric"><strong>Oficina pontual</strong><span>Cada estudante participa uma única vez.</span></div>
+          <div class="metric"><strong>2 medidas</strong><span>Autorrelatos aos 20 e 40 minutos.</span></div>
+          <div class="metric"><strong>Dupla</strong><span>Um papel no computador e outro na montagem.</span></div>
+          <div class="metric"><strong>Multicêntrico</strong><span>Turmas, escolas e regiões distintas.</span></div>
+        </div>
+
+        <p class="lead">
+          A particularidade de receber turmas diferentes não invalida a pesquisa. Ela apenas muda o desenho: em vez de acompanhar o desenvolvimento dos mesmos estudantes, o projeto passa a observar <strong>cortes transversais repetidos</strong> em diferentes oficinas.
+        </p>
+
+        <div class="callout success">
+          <strong>Enquadramento recomendado</strong>
+          <p>Estudo observacional multicêntrico, de cortes transversais repetidos, com medidas intrassessão, realizado em oficinas pontuais de robótica educacional.</p>
+        </div>
+      </section>
+
+      <section id="aplicacao">
+        <p class="section-kicker">02 · Leitura do repositório</p>
+        <h2>Como a aplicação funciona hoje</h2>
+        <p>
+          O PulseLab é um agente PowerShell para Windows. O instrutor inicia uma sessão manualmente, identifica os dois participantes e deixa o coletor ativo durante a oficina. Os dados são enviados ao Supabase ou armazenados localmente quando não há conexão.
+        </p>
+
+        <div class="flow" aria-label="Fluxo atual do PulseLab">
+          <div class="flow-step"><small>Etapa 1</small><strong>Identificação da dupla</strong></div>
+          <div class="flow-step"><small>Etapa 2</small><strong>Coleta aos 20 min</strong></div>
+          <div class="flow-step"><small>Etapa 3</small><strong>Coleta aos 40 min</strong></div>
+          <div class="flow-step"><small>Etapa 4</small><strong>Avaliação final</strong></div>
+          <div class="flow-step"><small>Etapa 5</small><strong>Supabase ou cache</strong></div>
+        </div>
+
+        <div class="grid-2">
+          <article class="card">
+            <h3>Dados subjetivos</h3>
+            <ul>
+              <li>Resposta de esforço/dificuldade de cada estudante.</li>
+              <li>Sentimento escolhido ao final.</li>
+              <li>Desejo de participar novamente.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Dados contextuais</h3>
+            <ul>
+              <li>Aplicativo e título da janela ativa.</li>
+              <li>Tempo desde a última interação com mouse ou teclado.</li>
+              <li>Tamanho do arquivo do projeto e screenshot da tela.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="callout warning">
+          <strong>O dashboard atual é uma demonstração</strong>
+          <p>
+            Indicadores, correlações, nomes e o feed “ao vivo” estão fixos ou simulados em <a href="../dashboard/index.html">dashboard/index.html</a>. Eles ainda não representam dados reais do Supabase e precisam ser identificados visualmente como demonstração.
+          </p>
+        </div>
+      </section>
+
+      <section id="desenho">
+        <p class="section-kicker">03 · Particularidade do projeto</p>
+        <h2>Turmas diferentes não impedem a pesquisa — mas impedem algumas conclusões</h2>
+
+        <div class="grid-2">
+          <article class="card">
+            <div class="card-number">✓</div>
+            <h3>O que permanece válido</h3>
+            <p>Comparar momentos dentro da mesma oficina, analisar diferenças de papéis e identificar padrões recorrentes em diferentes contextos escolares.</p>
+          </article>
+          <article class="card">
+            <div class="card-number">!</div>
+            <h3>O que muda</h3>
+            <p>Não é possível acompanhar a evolução individual ao longo de semanas, medir retenção ou dizer que um estudante melhorou continuamente no projeto.</p>
+          </article>
+        </div>
+
+        <p class="statement">
+          “Cada oficina é uma fotografia detalhada de um grupo diferente. A pesquisa ganha amplitude entre contextos, mas não acompanha o mesmo estudante ao longo do tempo.”
+        </p>
+
+        <p>
+          Ainda existe repetição dentro da sessão: cada criança responde aos 20 e aos 40 minutos. Portanto, as duas respostas não são independentes. Além disso, estudantes estão agrupados em duplas; duplas estão agrupadas em oficinas; e oficinas pertencem a escolas e polos.
+        </p>
+        <p>
+          A atividade envolve montar e programar, no aplicativo LEGO SPIKE, um robô autônomo. As oficinas normalmente são feitas em duplas, mas situações especiais podem formar grupos de três. Os papéis de programação e montagem devem ser alternados para que as crianças tenham oportunidades equivalentes de participar.
+        </p>
+
+        <div class="hierarchy" role="img" aria-label="Estrutura hierárquica dos dados">Escola / polo
+└── Oficina ou turma
+    └── Dupla
+        ├── Estudante A
+        │   ├── resposta t20
+        │   └── resposta t40
+        └── Estudante B
+            ├── resposta t20
+            └── resposta t40</div>
+      </section>
+
+      <section id="alcance">
+        <p class="section-kicker">04 · Perguntas de pesquisa</p>
+        <h2>O que os dados podem e não podem demonstrar</h2>
+
+        <div class="grid-2">
+          <article class="card">
+            <h3>Podem investigar</h3>
+            <ul>
+              <li>Momentos de maior esforço mental.</li>
+              <li>Ocorrência de bloqueios e pedidos de ajuda.</li>
+              <li>Diferenças entre programação e montagem.</li>
+              <li>Associação entre colaboração e desempenho final.</li>
+              <li>Diferenças por atividade, faixa etária, escola ou polo.</li>
+              <li>Viabilidade da coleta distribuída em redes instáveis.</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Não demonstram sozinhos</h3>
+            <ul>
+              <li>Aprendizagem de longo prazo ou retenção.</li>
+              <li>Que o LEGO SPIKE causou a aprendizagem.</li>
+              <li>Que diferenças regionais foram causadas pelo método.</li>
+              <li>Que um screenshot valida o estado mental da criança.</li>
+              <li>Que a ausência do pesquisador elimina o efeito Hawthorne.</li>
+              <li>Que tamanho de arquivo equivale a progresso pedagógico.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="callout">
+          <strong>Aprendizagem imediata é possível</strong>
+          <p>
+            Um pré e pós-teste curto na mesma oficina permite medir ganho imediato. Sem grupo de comparação, a redação correta é “houve aumento de desempenho durante a oficina”, e não “a oficina causou o aumento”. Retenção exigiria um novo contato posterior com os mesmos estudantes.
+          </p>
+        </div>
+      </section>
+
+      <section id="questionario-atual">
+        <p class="section-kicker">05 · Diagnóstico do instrumento</p>
+        <h2>O questionário atual é um bom protótipo, mas mistura fenômenos diferentes</h2>
+
+        <div class="question-card">
+          <div class="question-head">Pergunta atual</div>
+          <div class="question-body">
+            <p class="question-text">“O quanto você está precisando quebrar a cabeça com o desafio agora?”</p>
+            <div class="options">
+              <div class="option">Muito fácil</div>
+              <div class="option">Tranquilo</div>
+              <div class="option">Difícil</div>
+              <div class="option">Travado / preciso de ajuda</div>
+            </div>
+          </div>
+        </div>
+
+        <p>A linguagem é acessível, mas as respostas podem representar construtos distintos:</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Expressão</th><th>O que pode estar medindo</th><th>Problema de interpretação</th></tr></thead>
+            <tbody>
+              <tr><td>Muito fácil</td><td>Dificuldade percebida</td><td>Não informa esforço, aprendizagem ou participação.</td></tr>
+              <tr><td>Está dando trabalho</td><td>Esforço mental</td><td>Esforço elevado pode ser produtivo, não necessariamente ruim.</td></tr>
+              <tr><td>Travado</td><td>Ausência de progresso</td><td>É um estado de andamento, não um nível da mesma escala.</td></tr>
+              <tr><td>Preciso de ajuda</td><td>Necessidade de intervenção</td><td>Exige uma resposta pedagógica, não apenas armazenamento.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="grid-3">
+          <article class="card">
+            <h3>Influência entre pares</h3>
+            <p>Os estudantes respondem lado a lado. Um pode observar, antecipar ou imitar a resposta do outro.</p>
+          </article>
+          <article class="card">
+            <h3>Afeto misturado</h3>
+            <p>Orgulho e frustração são afetos; concentração é um estado cognitivo. As categorias não são equivalentes.</p>
+          </article>
+          <article class="card">
+            <h3>Desejo de agradar</h3>
+            <p>“Quer voltar?” em formato sim/não favorece resposta positiva e não deve ser chamado diretamente de satisfação.</p>
+          </article>
+        </div>
+
+        <div class="callout danger">
+          <strong>Carga artificial no encerramento</strong>
+          <p>
+            O agente grava carga igual a 1 no marco 99 apenas para satisfazer o schema. Esse valor não foi respondido pelas crianças e não pode aparecer em gráficos de trajetória. A modelagem do banco deve permitir que a carga seja nula no encerramento.
+          </p>
+        </div>
+      </section>
+
+      <section id="instrumento">
+        <p class="section-kicker">06 · Proposta de instrumento</p>
+        <h2>Um protocolo curto, infantil e capaz de separar esforço, progresso e colaboração</h2>
+        <p>
+          O instrumento deve continuar leve para não quebrar o fluxo da oficina. A principal mudança é fazer uma pergunta para cada fenômeno. As respostas dos dois estudantes devem ser individuais e ocultas entre si.
+        </p>
+
+        <h3>Antes da oficina · 3 a 5 minutos</h3>
+        <div class="question-card">
+          <div class="question-head">Contexto e experiência prévia</div>
+          <div class="question-body">
+            <p class="question-text">“Antes de hoje, você já tinha montado ou programado um robô?”</p>
+            <div class="options">
+              <div class="option">Nunca</div><div class="option">Uma vez</div><div class="option">Algumas vezes</div><div class="option">Muitas vezes</div>
+            </div>
+          </div>
+        </div>
+        <div class="question-card">
+          <div class="question-head">Autoeficácia inicial</div>
+          <div class="question-body">
+            <p class="question-text">“Eu acho que consigo fazer um robô cumprir uma missão.”</p>
+            <div class="options">
+              <div class="option">Discordo muito</div><div class="option">Discordo</div><div class="option">Concordo</div><div class="option">Concordo muito</div>
+            </div>
+          </div>
+        </div>
+        <p>
+          Acrescentar de três a cinco itens objetivos relacionados ao conteúdo da oficina: prever um programa, reconhecer um bloco ou corrigir uma sequência simples. Os itens finais devem ser equivalentes, não necessariamente idênticos.
+        </p>
+
+        <h3>Aos 20 e 40 minutos · experiência momentânea</h3>
+        <div class="question-card">
+          <div class="question-head">1 · Esforço mental</div>
+          <div class="question-body">
+            <p class="question-text">“Quanto você precisou pensar para fazer a parte em que estava agora?”</p>
+            <div class="options">
+              <div class="option">Muito pouco</div><div class="option">Pouco</div><div class="option">Bastante</div><div class="option">Muito</div>
+            </div>
+          </div>
+        </div>
+        <div class="question-card">
+          <div class="question-head">2 · Situação da dupla</div>
+          <div class="question-body">
+            <p class="question-text">“Neste momento, como vocês estão?”</p>
+            <div class="options">
+              <div class="option">Avançando sem ajuda</div><div class="option">Avançando com dúvida</div><div class="option">Tentando sem avançar</div><div class="option">Precisamos de ajuda agora</div>
+            </div>
+          </div>
+        </div>
+        <div class="question-card">
+          <div class="question-head">3 · Colaboração · preferencialmente aos 40 min</div>
+          <div class="question-body">
+            <p class="question-text">“Desde a última pergunta, nós dois tivemos oportunidade de dar ideias e participar da tarefa.”</p>
+            <div class="options">
+              <div class="option">Nunca</div><div class="option">Algumas vezes</div><div class="option">Quase sempre</div><div class="option">Sempre</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="callout warning">
+          <strong>Regra pedagógica obrigatória</strong>
+          <p>Se a criança selecionar “precisamos de ajuda agora”, o sistema deve sinalizar o instrutor. Em pesquisa educacional, não é adequado detectar sofrimento ou bloqueio e deliberadamente ignorá-lo para preservar o dado.</p>
+        </div>
+
+        <h3>No encerramento · resultado e experiência</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Dimensão</th><th>Como medir</th><th>Uso</th></tr></thead>
+            <tbody>
+              <tr><td>Conhecimento</td><td>3–5 itens equivalentes ao pré-teste</td><td>Ganho imediato</td></tr>
+              <tr><td>Desempenho</td><td>Rubrica da missão de 0 a 3</td><td>Resultado observável</td></tr>
+              <tr><td>Compreensão percebida</td><td>“Eu conseguiria explicar como fizemos o robô funcionar.”</td><td>Indicador secundário</td></tr>
+              <tr><td>Afeto</td><td>Até duas escolhas: curioso, confiante, animado, frustrado, cansado, indiferente</td><td>Experiência subjetiva</td></tr>
+              <tr><td>Intenção de retorno</td><td>Não / Talvez não / Talvez sim / Sim</td><td>Aceitabilidade, não aprendizagem</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Registro mínimo do instrutor</h3>
+        <ul class="checklist">
+          <li>Etapa da atividade</li>
+          <li>Troca de papéis</li>
+          <li>Pedido e fornecimento de ajuda</li>
+          <li>Problema técnico</li>
+          <li>Missão concluída</li>
+          <li>Nível de autonomia</li>
+          <li>Erro de montagem, lógica ou sensor</li>
+          <li>Duração aproximada da intervenção</li>
+        </ul>
+      </section>
+
+      <section id="metodo">
+        <p class="section-kicker">07 · Transformação em pesquisa</p>
+        <h2>Proposta de método acadêmico</h2>
+
+        <h3>Objetivo geral</h3>
+        <p class="statement">
+          Analisar as relações entre esforço mental percebido, colaboração em dupla, necessidade de ajuda e desempenho imediato de estudantes durante oficinas pontuais de robótica educacional com LEGO SPIKE.
+        </p>
+        <div class="callout success">
+          <strong>Desfecho primário recomendado</strong>
+          <p>Desempenho da dupla na missão autônoma, medido por rubrica padronizada de execução, explicação e participação. Esforço, bloqueio, colaboração e intenção de retorno permanecem como desfechos secundários.</p>
+          <p>O quiz e a corrida devem registrar acerto, tempo, conclusão e participação. “Chegar primeiro” não deve ser usado isoladamente como medida de aprendizagem.</p>
+        </div>
+
+        <h3>Objetivos específicos</h3>
+        <ol>
+          <li>Descrever o esforço mental aos 20 e 40 minutos.</li>
+          <li>Identificar episódios de bloqueio e necessidade de mediação.</li>
+          <li>Comparar as percepções dos papéis de programação e montagem.</li>
+          <li>Examinar a relação entre colaboração, ajuda e desempenho da missão.</li>
+          <li>Estimar o ganho imediato em conhecimentos específicos da oficina.</li>
+          <li>Avaliar a viabilidade da coleta distribuída em diferentes escolas e regiões.</li>
+        </ol>
+
+        <h3>Hipóteses testáveis</h3>
+        <div class="grid-2">
+          <article class="card"><span class="pill">H1</span><p>O esforço mental percebido apresenta diferença entre os minutos 20 e 40.</p></article>
+          <article class="card"><span class="pill">H2</span><p>Relatos de bloqueio estão associados a maior frequência de intervenção do instrutor.</p></article>
+          <article class="card"><span class="pill">H3</span><p>Participação mais equilibrada está associada a melhor desempenho na missão final.</p></article>
+          <article class="card"><span class="pill">H4</span><p>O desempenho nos itens de conhecimento é superior após a oficina.</p></article>
+        </div>
+
+        <div class="callout">
+          <strong>Carga alta não é automaticamente ruim</strong>
+          <p>
+            Pensar bastante pode representar engajamento produtivo. A interpretação de risco exige combinação com bloqueio, frustração, ausência de progresso, repetidas intervenções ou abandono da tarefa.
+          </p>
+        </div>
+
+        <h3>População, amostra e unidade de análise</h3>
+        <p>
+          A população de interesse deve ser definida por faixa etária, rede escolar e território. A amostragem provavelmente será não probabilística por conveniência ou disponibilidade das escolas; isso precisa ser declarado. O tamanho da amostra deve ser calculado a partir do desfecho primário e do efeito mínimo de interesse, considerando o agrupamento por dupla e oficina.
+        </p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Nível</th><th>Identificador sugerido</th><th>Exemplos de variáveis</th></tr></thead>
+            <tbody>
+              <tr><td>Escola</td><td><code>school_code</code></td><td>Polo, município, tipo de escola</td></tr>
+              <tr><td>Oficina</td><td><code>workshop_id</code></td><td>Data, duração, instrutor, atividade</td></tr>
+              <tr><td>Dupla</td><td><code>dyad_id</code></td><td>Composição, trocas de papel, kit utilizado</td></tr>
+              <tr><td>Estudante</td><td><code>participant_id</code></td><td>Faixa etária, ano escolar, experiência prévia</td></tr>
+              <tr><td>Evento</td><td><code>event_id</code></td><td>Momento, pergunta, resposta, latência e ausência</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          O banco analítico deve ter uma linha por estudante e evento. Os nomes completos não são necessários para a análise. Se a operação precisar relacionar um código a uma criança, essa chave deve ficar separada, protegida e com acesso restrito.
+        </p>
+      </section>
+
+      <section id="analise">
+        <p class="section-kicker">08 · Estatística e interpretação</p>
+        <h2>Plano de análise coerente com respostas ordinais e dados agrupados</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Pergunta</th><th>Desfecho</th><th>Análise recomendada</th></tr></thead>
+            <tbody>
+              <tr><td>O esforço muda entre 20 e 40 minutos?</td><td>Escala ordinal de esforço</td><td>Modelo ordinal de efeitos mistos</td></tr>
+              <tr><td>Bloqueio prevê ajuda?</td><td>Intervenção: sim/não</td><td>Regressão logística multinível</td></tr>
+              <tr><td>Há ganho imediato?</td><td>Escore pré e pós</td><td>Modelo misto ou comparação pareada</td></tr>
+              <tr><td>Colaboração se relaciona ao desempenho?</td><td>Rubrica da missão</td><td>Modelo ajustado por experiência, ano e atividade</td></tr>
+              <tr><td>PC e mesa percebem diferente?</td><td>Esforço e bloqueio</td><td>Modelo com papel, momento e interação</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>
+          Correlações de Pearson e médias simples podem aparecer como exploração, mas não devem ser a evidência principal. A escala de quatro pontos é ordinal e os dados de uma mesma dupla e oficina são correlacionados.
+        </p>
+
+        <div class="grid-3">
+          <article class="card">
+            <h3>Screenshot</h3>
+            <p>Contextualiza o momento, mas só vira dado qualitativo com rubrica, avaliadores independentes e concordância documentada.</p>
+          </article>
+          <article class="card">
+            <h3>Inatividade</h3>
+            <p>O valor atual é tempo desde a última entrada, não porcentagem do intervalo. Construção física também pode gerar inatividade legítima.</p>
+          </article>
+          <article class="card">
+            <h3>Arquivo SPIKE</h3>
+            <p>Tamanho absoluto é uma proxy fraca. Deve ser validado contra uma rubrica do artefato antes de representar evolução de código.</p>
+          </article>
+        </div>
+
+        <h3>Transparência analítica</h3>
+        <ul class="checklist">
+          <li>Definir um desfecho primário</li>
+          <li>Calcular a amostra antes da coleta final</li>
+          <li>Registrar hipóteses previamente</li>
+          <li>Documentar dados ausentes e timeouts</li>
+          <li>Separar análise confirmatória de exploração</li>
+          <li>Publicar dicionário de dados sem identificadores</li>
+        </ul>
+      </section>
+
+      <section id="validacao">
+        <p class="section-kicker">09 · Qualidade da medida</p>
+        <h2>O instrumento deve ser validado antes de ser apresentado como escala científica</h2>
+
+        <div class="timeline">
+          <article class="timeline-item">
+            <span class="timeline-label">Fase 1</span>
+            <h3>Validade de conteúdo</h3>
+            <p>Revisão por especialistas em educação, desenvolvimento infantil, psicometria e robótica educacional.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Fase 2</span>
+            <h3>Entrevistas cognitivas</h3>
+            <p>Crianças da faixa etária explicam com suas palavras o que entenderam de cada pergunta e alternativa.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Fase 3</span>
+            <h3>Piloto em poucas oficinas</h3>
+            <p>Avaliar tempo de resposta, omissões, efeito teto/piso, influência entre pares e funcionamento operacional.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Fase 4</span>
+            <h3>Validade convergente</h3>
+            <p>Comparar bloqueio relatado com ajuda recebida, observação estruturada e desempenho da missão.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Fase 5</span>
+            <h3>Protocolo definitivo</h3>
+            <p>Revisar itens, congelar versão, definir amostra e registrar previamente o plano de análise.</p>
+          </article>
+        </div>
+
+        <div class="callout success">
+          <strong>Denominação adequada durante o piloto</strong>
+          <p>“Instrumento experimental em processo de validação para avaliação da experiência em oficinas de robótica educacional.”</p>
+        </div>
+      </section>
+
+      <section id="etica">
+        <p class="section-kicker">10 · Proteção dos participantes</p>
+        <h2>Pesquisa com crianças exige mais do que RLS no banco de dados</h2>
+        <p>
+          A versão 1.2 auditada coletava nomes, capturava a tela inteira, usava bucket público e mantinha cache em pasta compartilhada. A versão 1.3 substituiu nomes por códigos temporários, limitou a captura à janela do SPIKE, tornou o bucket privado e moveu o cache para o perfil local. Essas salvaguardas técnicas ainda não substituem avaliação ética, governança e política de retenção.
+        </p>
+
+        <div class="callout danger">
+          <strong>Risco prioritário</strong>
+          <p>Screenshots potencialmente identificáveis não devem ser publicados em bucket aberto. A captura pode incluir nomes, mensagens, notificações e outras informações não relacionadas à pesquisa.</p>
+        </div>
+
+        <ul class="checklist">
+          <li>Avaliação pelo CEP aplicável antes da coleta científica</li>
+          <li>Consentimento do responsável</li>
+          <li>Assentimento da criança em linguagem adequada</li>
+          <li>Participação voluntária e sem impacto em notas</li>
+          <li>Identificadores pseudônimos no banco analítico</li>
+          <li>Bucket privado e acesso temporário</li>
+          <li>Captura apenas da janela do SPIKE ou sua retirada</li>
+          <li>Política de retenção e exclusão</li>
+          <li>Controle de acesso e registro de auditoria</li>
+          <li>Definição de controlador, operador e responsáveis</li>
+        </ul>
+
+        <p>
+          O tratamento deve observar o melhor interesse da criança. Também é preciso garantir que recusar a pesquisa não impeça a participação pedagógica na oficina. A coleta científica e a oferta educacional devem ser separáveis.
+        </p>
+      </section>
+
+      <section id="tecnico">
+        <p class="section-kicker">11 · Evolução do produto</p>
+        <h2>Status das prioridades técnicas na versão 1.3</h2>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Status</th><th>Mudança</th><th>Observação</th></tr></thead>
+            <tbody>
+              <tr><td><span class="pill">Feito</span></td><td>Privatizar screenshots, pseudonimizar participantes e rever cache</td><td>Pendente validar em Supabase/Windows</td></tr>
+              <tr><td><span class="pill">Feito</span></td><td>Remover a carga artificial do marco 99</td><td>Encerramento virou evento pós sem carga</td></tr>
+              <tr><td><span class="pill">Feito</span></td><td>Registrar horário real e horário de recebimento</td><td><code>occurred_at</code> e <code>received_at</code></td></tr>
+              <tr><td><span class="pill">Feito</span></td><td>Uma linha por participante e evento</td><td>Nova tabela <code>research_events</code></td></tr>
+              <tr><td><span class="pill">Feito</span></td><td>Corrigir encerramento automático após 40 min</td><td>Agente aguarda ação do instrutor</td></tr>
+              <tr><td><span class="pill">Feito</span></td><td>Registrar atividade, contexto, papel e versão</td><td>Incluído no contrato 1.3</td></tr>
+              <tr><td><span class="pill">Feito</span></td><td>Persistir recusas e timeouts</td><td>Estados separados no schema</td></tr>
+              <tr><td><span class="pill">Pendente</span></td><td>Integrar dashboard ao Supabase</td><td>O painel agora declara dados simulados</td></tr>
+              <tr><td><span class="pill">Pendente</span></td><td>Validar ou substituir proxies de telemetria</td><td>Depende do piloto e da rubrica</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout warning">
+          <strong>Validação em Windows ainda necessária</strong>
+          <p>
+            A documentação foi alinhada à versão 1.3, mas o agente WPF ainda precisa passar por teste ponta a ponta em Windows 10/11 com PowerShell 5.1, Supabase de homologação, modo offline e LEGO SPIKE aberto.
+          </p>
+        </div>
+      </section>
+
+      <section id="roadmap">
+        <p class="section-kicker">12 · Plano de avanço</p>
+        <h2>Uma trajetória acadêmica em cinco entregas</h2>
+
+        <div class="timeline">
+          <article class="timeline-item">
+            <span class="timeline-label">Entrega 1</span>
+            <h3>Protocolo de Pesquisa v1</h3>
+            <p>Pergunta, objetivos, hipóteses, população, instrumento, roteiro de aula, rubrica, ética e plano analítico.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Entrega 2</span>
+            <h3>Modelo de dados v2</h3>
+            <p>Escolas, oficinas, duplas, participantes pseudônimos, eventos, intervenções e resultados.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Entrega 3</span>
+            <h3>Agente de piloto</h3>
+            <p>Novo instrumento, respostas individuais, alertas de ajuda, privacidade e telemetria revisada.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Entrega 4</span>
+            <h3>Piloto e validação</h3>
+            <p>Entrevistas cognitivas, poucas oficinas, análise de qualidade e revisão dos itens.</p>
+          </article>
+          <article class="timeline-item">
+            <span class="timeline-label">Entrega 5</span>
+            <h3>Coleta multicêntrica</h3>
+            <p>Amostra calculada, protocolo congelado, dashboard real e análise reprodutível.</p>
+          </article>
+        </div>
+
+        <h3>Decisões que precisam ser fechadas</h3>
+        <div class="grid-2">
+          <article class="card"><h4>Faixa etária</h4><p>Idades e anos escolares atendidos pelo projeto.</p></article>
+          <article class="card"><h4>Objetivos pedagógicos</h4><p>Conhecimentos e competências de cada tipo de oficina.</p></article>
+          <article class="card"><h4>Duração real</h4><p>Tempo total e etapas padronizadas da aula.</p></article>
+          <article class="card"><h4>Prioridade científica</h4><p>Compreender o processo ou avaliar impacto imediato.</p></article>
+        </div>
+      </section>
+
+      <section id="fontes">
+        <p class="section-kicker">13 · Referências de apoio</p>
+        <h2>Fontes normativas e metodológicas</h2>
+        <ol class="source-list">
+          <li><a href="https://www.gov.br/conselho-nacional-de-saude/pt-br/atos-normativos/resolucoes/2016/resolucao-no-510.pdf/view">Conselho Nacional de Saúde — Resolução nº 510/2016</a>: ética em pesquisas nas Ciências Humanas e Sociais.</li>
+          <li><a href="https://planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm">Lei nº 13.709/2018 — LGPD</a>: tratamento de dados pessoais e melhor interesse de crianças e adolescentes.</li>
+          <li><a href="https://www.gov.br/anpd/pt-br/centrais-de-conteudo/materiais-educativos-e-publicacoes/guia_legitimo_interesse.pdf">ANPD — Guia sobre legítimo interesse</a>: balanceamento, necessidade e salvaguardas.</li>
+          <li><a href="https://pubmed.ncbi.nlm.nih.gov/24720100/">Laurie-Rose et al. — Measuring perceived mental workload in children</a>: adaptação de medida de carga para crianças.</li>
+          <li><a href="https://doi.org/10.1037/0022-0663.84.4.429">Paas — Training strategies for attaining transfer of problem-solving skill</a>: referência clássica sobre esforço mental e carga cognitiva.</li>
+        </ol>
+
+        <p>
+          Para rastreabilidade técnica, este relatório foi construído a partir da leitura de <a href="../agent/pulselab-agent.ps1">agent/pulselab-agent.ps1</a>, <a href="../schema/supabase-schema.sql">schema/supabase-schema.sql</a>, <a href="../config/config.json">config/config.json</a>, <a href="../dashboard/index.html">dashboard/index.html</a> e da documentação existente no repositório.
+        </p>
+      </section>
+    </main>
+  </div>
+
+  <footer class="footer">
+    <p><strong>PulseLab · Robótica Educacional</strong><br>Relatório de diagnóstico e orientação metodológica — documento vivo para discussão da equipe de pesquisa.</p>
+  </footer>
+
+  <script>
+    (() => {
+      const progress = document.getElementById('readingProgress');
+      const tocLinks = [...document.querySelectorAll('#tocNav a')];
+      const sections = tocLinks
+        .map(link => document.querySelector(link.getAttribute('href')))
+        .filter(Boolean);
+
+      const updateProgress = () => {
+        const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+        const ratio = scrollable > 0 ? window.scrollY / scrollable : 0;
+        progress.style.width = `${Math.min(100, Math.max(0, ratio * 100))}%`;
+      };
+
+      const observer = new IntersectionObserver(entries => {
+        const visible = entries
+          .filter(entry => entry.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+
+        if (!visible) return;
+        tocLinks.forEach(link => {
+          const isActive = link.getAttribute('href') === `#${visible.target.id}`;
+          link.classList.toggle('active', isActive);
+          if (isActive) link.setAttribute('aria-current', 'true');
+          else link.removeAttribute('aria-current');
+        });
+      }, { rootMargin: '-12% 0px -70% 0px', threshold: 0 });
+
+      sections.forEach(section => observer.observe(section));
+      window.addEventListener('scroll', updateProgress, { passive: true });
+      window.addEventListener('resize', updateProgress);
+      updateProgress();
+    })();
+  </script>
+</body>
+</html>

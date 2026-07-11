@@ -1,26 +1,16 @@
 #Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
-# Version    : 1.2.0
-# Description: Pulselab MMLA engagement collection daemon for LEGO Spike robotics.
-#              Runs under-demand in the background, displays rich kid-friendly
-#              WPF popup windows at fixed intervals, and captures deep system
-#              telemetry, file activity, and compressed screen captures with
-#              resilient offline local caching.
-#
-# Execution  : powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File pulselab-agent.ps1
-# Author     : Pulselab Project
+# Version    : 1.3.0
+# Description: Coletor de eventos de pesquisa para oficinas pontuais com LEGO
+#              SPIKE. Usa pseudônimos, respostas individuais, cache offline e
+#              capturas restritas à janela do SPIKE em bucket privado.
 # =============================================================================
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# Load WPF and WinForms early
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
-
-# =============================================================================
-# P/INVOKE: Win32 API for OS telemetry and LEGO Spike compatibility
-# =============================================================================
 
 Add-Type @"
 using System;
@@ -30,9 +20,6 @@ using System.Text;
 public class Win32 {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
@@ -49,36 +36,58 @@ public class Win32 {
         public uint dwTime;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
     [DllImport("user32.dll")]
     public static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
 }
 "@
 
 # =============================================================================
-# CONSTANTS & CONFIGURATION
+# ESTADO E CAMINHOS
 # =============================================================================
 
-$script:VERSION           = "1.2.0"
-$script:SCRIPT_DIR        = Split-Path -Parent $MyInvocation.MyCommand.Path
-$script:LOG_FILE          = Join-Path $script:SCRIPT_DIR "pulselab.log"
-$script:LOCAL_CONFIG      = Join-Path $script:SCRIPT_DIR "config\config.json"
-$script:OFFLINE_CACHE_DIR = "C:\Users\Public\Pulselab\cache"
-$script:OFFLINE_CACHE_FILE = Join-Path $script:OFFLINE_CACHE_DIR "queue.json"
+$script:VERSION = "1.3.0"
+$script:SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# State variables
-$script:SessionId         = $null
-$script:ComputerId        = $env:COMPUTERNAME
-$script:SupabaseUrl       = $null
-$script:SupabaseKey       = $null
-$script:Config            = $null
-$script:SpikeHandle       = [IntPtr]::Zero
-$script:StudentPC         = ""
-$script:StudentDesk       = ""
-$script:TriggerEnding     = $false
-$script:NotifyIcon        = $null
+$localConfigInAgent = Join-Path $script:SCRIPT_DIR "config\config.json"
+$localConfigInRepo = Join-Path (Split-Path -Parent $script:SCRIPT_DIR) "config\config.json"
+$script:LOCAL_CONFIG = if (Test-Path $localConfigInAgent) { $localConfigInAgent } else { $localConfigInRepo }
+
+$localDataRoot = [Environment]::GetFolderPath("LocalApplicationData")
+if ([string]::IsNullOrWhiteSpace($localDataRoot)) { $localDataRoot = $env:TEMP }
+$script:DATA_DIR = Join-Path $localDataRoot "PulseLab"
+$script:LOG_FILE = Join-Path $script:DATA_DIR "pulselab.log"
+$script:OFFLINE_CACHE_DIR = Join-Path $script:DATA_DIR "cache"
+$script:OFFLINE_CACHE_FILE = Join-Path $script:OFFLINE_CACHE_DIR "research-queue.json"
+
+$script:SessionId = $null
+$script:DyadId = $null
+$script:ComputerId = $env:COMPUTERNAME
+$script:ParticipantComputer = $null
+$script:ParticipantAssembly = $null
+$script:SchoolCode = ""
+$script:WorkshopCode = ""
+$script:ClassCode = ""
+$script:GradeBand = ""
+$script:SupabaseUrl = $null
+$script:SupabaseKey = $null
+$script:Config = $null
+$script:SpikeHandle = [IntPtr]::Zero
+$script:TriggerEnding = $false
+$script:NotifyIcon = $null
 
 # =============================================================================
-# LOGGING FUNCTION
+# INFRAESTRUTURA
 # =============================================================================
 
 function Write-PulseLog {
@@ -88,897 +97,887 @@ function Write-PulseLog {
         [string]$Message
     )
 
-    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    $entry     = "[$timestamp] [$Level] $Message"
-
-    if ($script:Config -and $script:Config.debug_mode) {
-        Write-Host $entry
+    if (-not (Test-Path $script:DATA_DIR)) {
+        New-Item -ItemType Directory -Path $script:DATA_DIR -Force | Out-Null
     }
 
+    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+    $entry = "[$timestamp] [$Level] $Message"
+
+    if ($script:Config -and $script:Config.debug_mode) { Write-Host $entry }
+
     if (Test-Path $script:LOG_FILE) {
-        $maxBytes = if ($script:Config) { $script:Config.log_max_size_mb * 1MB } else { 5MB }
+        $maxBytes = if ($script:Config) { [int]$script:Config.log_max_size_mb * 1MB } else { 5MB }
         if ((Get-Item $script:LOG_FILE).Length -gt $maxBytes) {
-            $bakFile = $script:LOG_FILE + ".bak"
-            if (Test-Path $bakFile) { Remove-Item $bakFile -Force }
-            Rename-Item -Path $script:LOG_FILE -NewName ($bakFile) -Force
+            $backup = $script:LOG_FILE + ".bak"
+            if (Test-Path $backup) { Remove-Item $backup -Force }
+            Move-Item $script:LOG_FILE $backup -Force
         }
     }
 
     Add-Content -Path $script:LOG_FILE -Value $entry -Encoding UTF8
 }
 
-# =============================================================================
-# ENVIRONMENT & SESSION INITIALIZATION
-# =============================================================================
-
 function Initialize-Session {
-    $script:SessionId = [System.Guid]::NewGuid().ToString()
-    
-    if (-not (Test-Path $script:OFFLINE_CACHE_DIR)) {
-        New-Item -ItemType Directory -Path $script:OFFLINE_CACHE_DIR -Force | Out-Null
-    }
+    $script:SessionId = [Guid]::NewGuid().ToString()
+    $script:DyadId = [Guid]::NewGuid().ToString()
+    $shortId = $script:SessionId.Substring(0, 8).ToUpperInvariant()
+    $script:ParticipantComputer = "$shortId-A"
+    $script:ParticipantAssembly = "$shortId-B"
 
-    Write-PulseLog -Level "INFO" -Message "Session manual launch initialized. version=$script:VERSION session_id=$script:SessionId computer_id=$script:ComputerId"
+    New-Item -ItemType Directory -Path $script:OFFLINE_CACHE_DIR -Force | Out-Null
+    Write-PulseLog "INFO" "Session initialized. version=$script:VERSION session_id=$script:SessionId dyad_id=$script:DyadId"
 }
 
 function Get-RemoteConfig {
-    $localConfig = $null
-    if (Test-Path $script:LOCAL_CONFIG) {
-        try {
-            $localConfig = Get-Content -Path $script:LOCAL_CONFIG -Raw -Encoding UTF8 | ConvertFrom-Json
-        } catch {
-            Write-PulseLog -Level "WARN" -Message "Local config parse failed: $_"
-        }
+    if (-not (Test-Path $script:LOCAL_CONFIG)) {
+        throw "Configuration file missing at $($script:LOCAL_CONFIG)."
     }
 
-    if ($null -eq $localConfig) {
-        Write-PulseLog -Level "ERROR" -Message "No local config found at $script:LOCAL_CONFIG. Terminating."
-        throw "Configuration file missing."
-    }
-
-    $remoteUrl = $localConfig.config_remote_url
-
+    $local = Get-Content $script:LOCAL_CONFIG -Raw -Encoding UTF8 | ConvertFrom-Json
     try {
-        $response = Invoke-WebRequest -Uri $remoteUrl -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-        $remoteConfig = $response.Content | ConvertFrom-Json
-
-        # Cache locally
-        $response.Content | Set-Content -Path $script:LOCAL_CONFIG -Encoding UTF8 -Force
-
-        $script:Config = $remoteConfig
-        Write-PulseLog -Level "INFO" -Message "Remote config synced. version=$($remoteConfig.version) hub=$($remoteConfig.regional_hub)"
+        $response = Invoke-WebRequest -Uri $local.config_remote_url -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+        $remote = $response.Content | ConvertFrom-Json
+        $response.Content | Set-Content $script:LOCAL_CONFIG -Encoding UTF8 -Force
+        $script:Config = $remote
+        Write-PulseLog "INFO" "Remote config loaded and frozen for session. version=$($remote.version)"
     } catch {
-        $script:Config = $localConfig
-        Write-PulseLog -Level "WARN" -Message "Remote config unreachable. Using cached local config. version=$($localConfig.version) error=$($_.Exception.Message)"
+        $script:Config = $local
+        Write-PulseLog "WARN" "Remote config unavailable; using local snapshot. error=$($_.Exception.Message)"
+    }
+
+    if (-not $script:Config.questions -or -not $script:Config.interval_marks_minutes) {
+        throw "Config version is incompatible with PulseLab 1.3.0."
     }
 }
 
 function Get-EnvCredentials {
-    $urlVarName = $script:Config.supabase_url_env_var
-    $keyVarName = $script:Config.supabase_key_env_var
-
-    $script:SupabaseUrl = [System.Environment]::GetEnvironmentVariable($urlVarName, "User")
-    $script:SupabaseKey = [System.Environment]::GetEnvironmentVariable($keyVarName, "User")
+    $urlName = [string]$script:Config.supabase_url_env_var
+    $keyName = [string]$script:Config.supabase_key_env_var
+    $script:SupabaseUrl = [Environment]::GetEnvironmentVariable($urlName, "User")
+    $script:SupabaseKey = [Environment]::GetEnvironmentVariable($keyName, "User")
 
     if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl) -or [string]::IsNullOrWhiteSpace($script:SupabaseKey)) {
-        Write-PulseLog -Level "ERROR" -Message "Supabase credentials missing. url_var=$urlVarName key_var=$keyVarName"
-        throw "Missing Supabase credentials. Run setup-startup.ps1 first."
+        throw "Missing Supabase credentials. Run the installer first."
     }
-
-    Write-PulseLog -Level "INFO" -Message "Credentials loaded from Windows environment. url_var=$urlVarName"
 }
 
-# =============================================================================
-# TELEMETRY IMPLEMENTATIONS
-# =============================================================================
-
 function Get-SpikeWindowHandle {
-    $spikeNames = @("Spike", "SPIKE", "LEGOEducationSPIKE", "LEGO Education SPIKE")
-    foreach ($name in $spikeNames) {
-        $proc = Get-Process -ErrorAction SilentlyContinue | Where-Object {
-            $_.MainWindowTitle -match $name -and $_.MainWindowHandle -ne 0
-        } | Select-Object -First 1
+    $process = Get-Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle -match 'SPIKE|Spike|LEGO Education'
+    } | Select-Object -First 1
 
-        if ($proc) {
-            Write-PulseLog -Level "DEBUG" -Message "LEGO Spike window found. pid=$($proc.Id)"
-            return $proc.MainWindowHandle
-        }
-    }
+    if ($process) { return $process.MainWindowHandle }
     return [IntPtr]::Zero
 }
 
 function Restore-SpikeFocus {
     param([IntPtr]$Handle)
-    if ($Handle -eq [IntPtr]::Zero) { return }
-    try {
+    if ($Handle -ne [IntPtr]::Zero) {
         [Win32]::SetForegroundWindow($Handle) | Out-Null
-        Write-PulseLog -Level "DEBUG" -Message "Active window focus returned to LEGO Spike."
-    } catch {
-        Write-PulseLog -Level "WARN" -Message "Failed to return focus to LEGO Spike: $_"
     }
 }
 
 function Get-ActiveTelemetry {
-    $fgHWnd = [Win32]::GetForegroundWindow()
-    $processId = 0
-    [Win32]::GetWindowThreadProcessId($fgHWnd, [ref]$processId) | Out-Null
-    
-    $appName = "Unknown"
-    $windowTitle = ""
-    
+    $handle = [Win32]::GetForegroundWindow()
+    [uint32]$processId = 0
+    [Win32]::GetWindowThreadProcessId($handle, [ref]$processId) | Out-Null
+
+    $app = "Unknown"
     if ($processId -ne 0) {
-        $fgProcess = Get-Process -Id $processId -ErrorAction SilentlyContinue
-        if ($fgProcess) { $appName = $fgProcess.ProcessName }
+        $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
+        if ($process) { $app = $process.ProcessName }
     }
 
-    $titleBuilder = New-Object System.Text.StringBuilder(256)
-    [Win32]::GetWindowText($fgHWnd, $titleBuilder, 256) | Out-Null
-    $windowTitle = $titleBuilder.ToString()
+    $title = New-Object Text.StringBuilder 256
+    [Win32]::GetWindowText($handle, $title, 256) | Out-Null
 
-    # System Idle Duration
     $lastInput = New-Object Win32+LASTINPUTINFO
-    $lastInput.cbSize = [System.Runtime.InteropServices.Marshal]::SizeOf($lastInput)
-    $idleSeconds = 0
+    $lastInput.cbSize = [Runtime.InteropServices.Marshal]::SizeOf($lastInput)
+    $idle = 0
     if ([Win32]::GetLastInputInfo([ref]$lastInput)) {
-        $elapsedTicks = [Environment]::TickCount - $lastInput.dwTime
-        if ($elapsedTicks -lt 0) { $elapsedTicks = 0 }
-        $idleSeconds = [math]::Round($elapsedTicks / 1000)
+        $elapsed = [Environment]::TickCount - $lastInput.dwTime
+        if ($elapsed -lt 0) { $elapsed = 0 }
+        $idle = [Math]::Round($elapsed / 1000)
     }
 
     return @{
-        WindowTitle   = $windowTitle
-        ForegroundApp = $appName
-        IdleSeconds   = $idleSeconds
+        WindowTitle = $title.ToString()
+        ForegroundApp = $app
+        IdleSeconds = $idle
     }
 }
 
 function Get-LastSpikeFileSize {
-    $spikeDir = Join-Path $env:USERPROFILE "Documents\LEGO SPIKE"
-    $fileSizeKb = 0.0
-    if (Test-Path $spikeDir) {
-        $lastFile = Get-ChildItem -Path $spikeDir -Filter *.llsp -Recurse -ErrorAction SilentlyContinue |
-                    Sort-Object LastWriteTime -Descending |
-                    Select-Object -First 1
-        if (-not $lastFile) {
-            $lastFile = Get-ChildItem -Path $spikeDir -Filter *.spk -Recurse -ErrorAction SilentlyContinue |
-                        Sort-Object LastWriteTime -Descending |
-                        Select-Object -First 1
-        }
-        if ($lastFile) {
-            $fileSizeKb = [math]::Round($lastFile.Length / 1KB, 2)
-        }
-    }
-    return $fileSizeKb
+    $directory = Join-Path $env:USERPROFILE "Documents\LEGO SPIKE"
+    if (-not (Test-Path $directory)) { return 0.0 }
+
+    $file = Get-ChildItem $directory -Include *.llsp, *.spk -File -Recurse -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $file) { return 0.0 }
+    return [Math]::Round($file.Length / 1KB, 2)
 }
 
-# =============================================================================
-# SCREEN CAPTURE & COMPRESSION (GDI+)
-# =============================================================================
+function Get-SpikeWindowCapture {
+    param([string]$FilePath, [IntPtr]$Handle)
 
-function Get-ScreenCapture {
-    param([string]$FilePath)
+    if ($Handle -eq [IntPtr]::Zero) {
+        Write-PulseLog "WARN" "SPIKE window not found; screenshot skipped."
+        return $false
+    }
 
     try {
-        $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-        $bmp = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height)
-        $graphics = [System.Drawing.Graphics]::FromImage($bmp)
-        
-        # Capture Desktop screen content
-        $graphics.CopyFromScreen($bounds.X, $bounds.Y, 0, 0, $bounds.Size)
-        
-        # Configure compressed JPEG encoder
-        $encoder = [System.Drawing.Imaging.ImageCodecInfo]::GetImageDecoders() | Where-Object { $_.FormatID -eq [System.Drawing.Imaging.ImageFormat]::Jpeg.Guid }
-        $encoderParams = New-Object System.Drawing.Imaging.EncoderParameters(1)
-        $encoderParams.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter([System.Drawing.Imaging.Encoder]::Quality, 60) # 60% quality ratio
-        
-        $bmp.Save($FilePath, $encoder, $encoderParams)
-        
+        $rect = New-Object Win32+RECT
+        if (-not [Win32]::GetWindowRect($Handle, [ref]$rect)) { return $false }
+        $width = $rect.Right - $rect.Left
+        $height = $rect.Bottom - $rect.Top
+        if ($width -le 0 -or $height -le 0) { return $false }
+
+        $bitmap = New-Object Drawing.Bitmap $width, $height
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        $graphics.CopyFromScreen($rect.Left, $rect.Top, 0, 0, $bitmap.Size)
+
+        $encoder = [Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() |
+            Where-Object { $_.FormatID -eq [Drawing.Imaging.ImageFormat]::Jpeg.Guid } |
+            Select-Object -First 1
+        $parameters = New-Object Drawing.Imaging.EncoderParameters 1
+        $parameters.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), 60L
+        $bitmap.Save($FilePath, $encoder, $parameters)
+
         $graphics.Dispose()
-        $bmp.Dispose()
-        
-        Write-PulseLog -Level "INFO" -Message "Desktop screen captured and compressed to local cache: $FilePath"
+        $bitmap.Dispose()
+        Write-PulseLog "INFO" "SPIKE window captured."
         return $true
     } catch {
-        Write-PulseLog -Level "ERROR" -Message "Pre-popup screen capture failed: $_"
+        Write-PulseLog "ERROR" "SPIKE window capture failed: $($_.Exception.Message)"
         return $false
     }
 }
 
 # =============================================================================
-# SUPABASE STORAGE & DATABASE INTEGRATION
+# ENVIO E CACHE OFFLINE
 # =============================================================================
 
 function Upload-ScreenshotToSupabase {
-    param(
-        [string]$LocalFilePath,
-        [string]$IntervalMark
-    )
+    param([string]$LocalFilePath, [int]$IntervalMark)
 
-    $fileName = "$($script:SessionId)_$($IntervalMark).jpg"
-    $endpoint = "$($script:SupabaseUrl)/storage/v1/object/screenshots/$fileName"
-    
-    $headers  = @{
-        "apikey"        = $script:SupabaseKey
-        "Authorization" = "Bearer $($script:SupabaseKey)"
+    if ([string]::IsNullOrWhiteSpace($LocalFilePath) -or -not (Test-Path $LocalFilePath)) { return $null }
+
+    $objectPath = "$($script:WorkshopCode)/$($script:SessionId)/checkpoint-$IntervalMark.jpg"
+    $endpoint = "$($script:SupabaseUrl)/storage/v1/object/screenshots/$objectPath"
+    $headers = @{
+        apikey = $script:SupabaseKey
+        Authorization = "Bearer $($script:SupabaseKey)"
+        "x-upsert" = "false"
     }
 
     try {
-        $bytes = [System.IO.File]::ReadAllBytes($LocalFilePath)
-        $response = Invoke-RestMethod -Method POST -Uri $endpoint -Headers $headers -Body $bytes -ContentType "image/jpeg" -ErrorAction Stop
-        
-        # Standard Supabase Storage public asset link format
-        $publicUrl = "$($script:SupabaseUrl)/storage/v1/object/public/screenshots/$fileName"
-        
-        Write-PulseLog -Level "INFO" -Message "Screenshot uploaded to Supabase Storage. Link=$publicUrl"
-        return $publicUrl
+        $bytes = [IO.File]::ReadAllBytes($LocalFilePath)
+        Invoke-RestMethod -Method Post -Uri $endpoint -Headers $headers -Body $bytes -ContentType "image/jpeg" -ErrorAction Stop | Out-Null
+        return $objectPath
     } catch {
-        Write-PulseLog -Level "ERROR" -Message "Screenshot storage upload failed: $($_.Exception.Message)"
+        $statusCode = $null
+        if ($_.Exception.Response) { $statusCode = [int]$_.Exception.Response.StatusCode }
+        if ($statusCode -eq 409) {
+            Write-PulseLog "WARN" "Screenshot already exists; reusing private object path."
+            return $objectPath
+        }
+        Write-PulseLog "ERROR" "Screenshot upload failed: $($_.Exception.Message)"
         return $null
     }
+}
+
+function Convert-ToSchemaPayload {
+    param([hashtable]$Payload)
+    $clean = @{}
+    foreach ($key in $Payload.Keys) {
+        if ($key -ne "local_screenshot_path") { $clean[$key] = $Payload[$key] }
+    }
+    return $clean
 }
 
 function Send-ResponseToSupabase {
     param([hashtable]$Payload)
 
-    $endpoint = "$($script:SupabaseUrl)/rest/v1/responses"
-    $headers  = @{
-        "apikey"        = $script:SupabaseKey
-        "Authorization" = "Bearer $($script:SupabaseKey)"
-        "Content-Type"  = "application/json"
-        "Prefer"        = "return=minimal"
+    $clean = Convert-ToSchemaPayload $Payload
+    $isResearchEvent = $clean.ContainsKey("event_id")
+    $endpoint = if ($isResearchEvent) {
+        "$($script:SupabaseUrl)/rest/v1/research_events?on_conflict=event_id"
+    } else {
+        "$($script:SupabaseUrl)/rest/v1/responses"
     }
-    
-    $body = $Payload | ConvertTo-Json -Depth 10 -Compress
+    $headers = @{
+        apikey = $script:SupabaseKey
+        Authorization = "Bearer $($script:SupabaseKey)"
+        "Content-Type" = "application/json"
+        Prefer = if ($isResearchEvent) { "resolution=ignore-duplicates,return=minimal" } else { "return=minimal" }
+    }
 
     try {
-        Invoke-RestMethod -Method POST -Uri $endpoint -Headers $headers -Body $body -ErrorAction Stop | Out-Null
-        Write-PulseLog -Level "INFO" -Message "Payload successfully posted to Supabase. Mark=$($Payload.interval_mark)"
+        $body = $clean | ConvertTo-Json -Depth 10 -Compress
+        Invoke-RestMethod -Method Post -Uri $endpoint -Headers $headers -Body $body -ErrorAction Stop | Out-Null
         return $true
     } catch {
-        Write-PulseLog -Level "ERROR" -Message "Supabase REST request failed: $($_.Exception.Message)"
+        Write-PulseLog "ERROR" "Database submission failed: $($_.Exception.Message)"
         return $false
     }
 }
 
-# =============================================================================
-# RESILIENT OFFLINE CACHE MECHANISMS
-# =============================================================================
-
 function Add-ToLocalQueue {
     param([hashtable]$Payload)
-
     try {
         $queue = @()
         if (Test-Path $script:OFFLINE_CACHE_FILE) {
-            $raw = Get-Content -Path $script:OFFLINE_CACHE_FILE -Raw -Encoding UTF8
-            if ($raw.Trim() -ne "") {
+            $raw = Get-Content $script:OFFLINE_CACHE_FILE -Raw -Encoding UTF8
+            if (-not [string]::IsNullOrWhiteSpace($raw)) {
                 $existing = $raw | ConvertFrom-Json
-                if ($existing -is [array]) { $queue = $existing } else { $queue = @($existing) }
+                $queue = if ($existing -is [array]) { $existing } else { @($existing) }
             }
         }
-
-        # Convert hashtable to PSCustomObject for serialization
-        $obj = New-Object PSCustomObject -Property $Payload
-        $queue += $obj
-
-        $queue | ConvertTo-Json -Depth 10 | Set-Content -Path $script:OFFLINE_CACHE_FILE -Encoding UTF8 -Force
-        Write-PulseLog -Level "WARN" -Message "Data cached offline in local storage. Cache size: $($queue.Count)"
+        $queue += New-Object PSCustomObject -Property $Payload
+        $queue | ConvertTo-Json -Depth 10 | Set-Content $script:OFFLINE_CACHE_FILE -Encoding UTF8 -Force
+        Write-PulseLog "WARN" "Event cached offline. count=$($queue.Count)"
     } catch {
-        Write-PulseLog -Level "ERROR" -Message "Failed to write payload to cache file: $_"
+        Write-PulseLog "ERROR" "Could not cache event: $($_.Exception.Message)"
     }
+}
+
+function Submit-Event {
+    param([hashtable]$Payload)
+    if (-not (Send-ResponseToSupabase $Payload)) { Add-ToLocalQueue $Payload }
 }
 
 function Invoke-FlushCache {
     if (-not (Test-Path $script:OFFLINE_CACHE_FILE)) { return }
-
     try {
-        $raw = Get-Content -Path $script:OFFLINE_CACHE_FILE -Raw -Encoding UTF8
+        $raw = Get-Content $script:OFFLINE_CACHE_FILE -Raw -Encoding UTF8
         if ([string]::IsNullOrWhiteSpace($raw)) { return }
-
-        $queue = $raw | ConvertFrom-Json
-        if ($null -eq $queue) { return }
-
-        if (-not ($queue -is [array])) { $queue = @($queue) }
-        if ($queue.Count -eq 0) { return }
-
-        Write-PulseLog -Level "INFO" -Message "Checking network state to flush offline cache queue. Size: $($queue.Count)"
+        $items = $raw | ConvertFrom-Json
+        if (-not ($items -is [array])) { $items = @($items) }
 
         $remaining = @()
-        foreach ($item in $queue) {
-            # Convert PSCustomObject back to hashtable for editing
-            $ht = @{}
-            $item.PSObject.Properties | ForEach-Object { $ht[$_.Name] = $_.Value }
+        $uploadedScreenshots = @{}
+        $filesToRemove = @()
+        foreach ($item in $items) {
+            $payload = @{}
+            $item.PSObject.Properties | ForEach-Object { $payload[$_.Name] = $_.Value }
 
-            # Attempt to upload local screenshot first if it is still cached locally
-            $localPic = $ht["local_screenshot_path"]
-            if ([string]::IsNullOrWhiteSpace($ht["screenshot_url"]) -and -not [string]::IsNullOrWhiteSpace($localPic) -and (Test-Path $localPic)) {
-                Write-PulseLog -Level "INFO" -Message "Uploading cached screenshot offline file: $localPic"
-                $pubUrl = Upload-ScreenshotToSupabase -LocalFilePath $localPic -IntervalMark $ht["interval_mark"]
-                if ($null -ne $pubUrl) {
-                    $ht["screenshot_url"] = $pubUrl
-                    $ht["local_screenshot_path"] = $null
-                    Remove-Item $localPic -Force -ErrorAction SilentlyContinue
+            $localPath = $payload["local_screenshot_path"]
+            if (-not [string]::IsNullOrWhiteSpace([string]$localPath) -and $uploadedScreenshots.ContainsKey([string]$localPath)) {
+                $payload["screenshot_path"] = $uploadedScreenshots[[string]$localPath]
+                $payload["local_screenshot_path"] = $null
+            } elseif ($payload.ContainsKey("screenshot_path") -and [string]::IsNullOrWhiteSpace([string]$payload["screenshot_path"]) -and
+                -not [string]::IsNullOrWhiteSpace([string]$localPath) -and (Test-Path $localPath)) {
+                $objectPath = Upload-ScreenshotToSupabase $localPath ([int]$payload["interval_mark"])
+                if (-not $objectPath) {
+                    # Preserve the event and its local evidence together. Sending
+                    # the row now with a null screenshot_path would silently lose
+                    # the visual modality while leaving an orphan file on disk.
+                    $remaining += $item
+                    continue
                 }
+                $payload["screenshot_path"] = $objectPath
+                $payload["local_screenshot_path"] = $null
+                $uploadedScreenshots[[string]$localPath] = $objectPath
+                $filesToRemove += [string]$localPath
             }
 
-            # Extract schema properties only (removes local path parameters)
-            $sendHt = @{}
-            foreach ($key in $ht.Keys) {
-                if ($key -ne "local_screenshot_path") {
-                    $sendHt[$key] = $ht[$key]
-                }
+            if (-not (Send-ResponseToSupabase $payload)) {
+                $remaining += New-Object PSCustomObject -Property $payload
             }
+        }
 
-            # Submit record
-            $sent = Send-ResponseToSupabase -Payload $sendHt
-            if (-not $sent) {
-                $remaining += $item
-            }
+        $filesToRemove | Select-Object -Unique | ForEach-Object {
+            Remove-Item $_ -Force -ErrorAction SilentlyContinue
         }
 
         if ($remaining.Count -eq 0) {
-            Remove-Item -Path $script:OFFLINE_CACHE_FILE -Force -ErrorAction SilentlyContinue
-            Write-PulseLog -Level "INFO" -Message "Offline cache fully flushed and cleaned."
+            Remove-Item $script:OFFLINE_CACHE_FILE -Force -ErrorAction SilentlyContinue
         } else {
-            $remaining | ConvertTo-Json -Depth 10 | Set-Content -Path $script:OFFLINE_CACHE_FILE -Encoding UTF8 -Force
-            Write-PulseLog -Level "WARN" -Message "Offline cache partially flushed. Remaining: $($remaining.Count)"
+            $remaining | ConvertTo-Json -Depth 10 | Set-Content $script:OFFLINE_CACHE_FILE -Encoding UTF8 -Force
         }
     } catch {
-        Write-PulseLog -Level "ERROR" -Message "Failed to execute cache flushing cycle: $_"
+        Write-PulseLog "ERROR" "Cache flush failed: $($_.Exception.Message)"
     }
 }
 
-# =============================================================================
-# WPF INTERFACES (KID-FRIENDLY MULTI-MODAL POPUPS)
-# =============================================================================
+function New-ResearchEvent {
+    param(
+        [string]$ParticipantId,
+        [ValidateSet("computer", "assembly")][string]$Role,
+        [ValidateSet("pre", "checkpoint", "post")][string]$EventType,
+        [Nullable[int]]$IntervalMark
+    )
 
-function Show-WpfLogin {
-    $xaml = @"
-    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            Title="Pulselab - Iniciar Oficina" Width="430" Height="460"
-            WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True">
-        <Border CornerRadius="20" Background="#1D152B" BorderBrush="#4A90E2" BorderThickness="3">
-            <Grid Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Title Header -->
-                <StackPanel Grid.Row="0" Margin="0,10,0,15" HorizontalAlignment="Center">
-                    <TextBlock Text="🚀 PULSELAB" FontSize="26" FontWeight="ExtraBold" Foreground="#4A90E2" HorizontalAlignment="Center"/>
-                    <TextBlock Text="Oficina de Robótica LEGO SPIKE" FontSize="14" Foreground="#A0A0C0" HorizontalAlignment="Center" Margin="0,5,0,0"/>
-                </StackPanel>
-                
-                <!-- Text inputs -->
-                <StackPanel Grid.Row="1" VerticalAlignment="Center">
-                    <TextBlock Text="Quem está no COMPUTADOR? 💻" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
-                    <TextBox Name="TxtPC" FontSize="16" Height="40" Background="#2E2648" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,20"/>
-                    
-                    <TextBlock Text="Quem está na MESA/PISTA? 🏗️" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
-                    <TextBox Name="TxtDesk" FontSize="16" Height="40" Background="#2E2648" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
-                </StackPanel>
-                
-                <!-- Launch button -->
-                <Button Name="BtnStart" Grid.Row="2" Content="Iniciar Oficina de Robótica ✨" FontSize="16" FontWeight="Bold" Height="50" Background="#4A90E2" Foreground="White" Cursor="Hand" IsEnabled="False" Margin="0,10,0,10"/>
-            </Grid>
-        </Border>
-    </Window>
-"@
-
-    $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
-    $window = [Windows.Markup.XamlReader]::Load($reader)
-
-    $txtPC = $window.FindName("TxtPC")
-    $txtDesk = $window.FindName("TxtDesk")
-    $btnStart = $window.FindName("BtnStart")
-
-    $checkFields = {
-        $btnStart.IsEnabled = ($txtPC.Text.Trim() -ne "" -and $txtDesk.Text.Trim() -ne "")
+    $event = @{
+        event_id = [Guid]::NewGuid().ToString()
+        session_id = $script:SessionId
+        dyad_id = $script:DyadId
+        participant_id = $ParticipantId
+        participant_role = $Role
+        event_type = $EventType
+        response_status = "completed"
+        interval_mark = $null
+        regional_hub = [string]$script:Config.regional_hub
+        school_code = $script:SchoolCode
+        workshop_code = $script:WorkshopCode
+        class_code = $script:ClassCode
+        grade_band = $script:GradeBand
+        activity_id = [string]$script:Config.activity_id
+        computer_id = $script:ComputerId
+        config_version = [string]$script:Config.version
+        client_version = $script:VERSION
+        occurred_at = [DateTimeOffset]::Now.ToString("o")
     }
+    if ($null -ne $IntervalMark) { $event["interval_mark"] = [int]$IntervalMark }
+    return $event
+}
 
-    $txtPC.add_TextChanged($checkFields)
-    $txtDesk.add_TextChanged($checkFields)
+# =============================================================================
+# INTERFACES WPF
+# =============================================================================
 
-    $btnStart.add_Click({
-        $script:StudentPC = $txtPC.Text.Trim()
-        $script:StudentDesk = $txtDesk.Text.Trim()
+function Show-WpfSessionSetup {
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Contexto da oficina"
+        Width="520" Height="620" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="22" Background="#171128" BorderBrush="#6D5BD0" BorderThickness="3" Padding="26">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,18">
+        <TextBlock Text="PULSELAB · CONTEXTO DA OFICINA" Foreground="#A99AF5" FontSize="20" FontWeight="Bold"/>
+        <TextBlock Text="Use apenas códigos institucionais. Não digite nomes de estudantes." Foreground="#D1CCE2" FontSize="13" TextWrapping="Wrap" Margin="0,7,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Row="1">
+        <TextBlock Text="Código da escola" Foreground="White" FontWeight="Bold"/>
+        <TextBox Name="TxtSchool" Height="38" Margin="0,6,0,14" Padding="8" FontSize="15"/>
+        <TextBlock Text="Código desta oficina" Foreground="White" FontWeight="Bold"/>
+        <TextBox Name="TxtWorkshop" Height="38" Margin="0,6,0,14" Padding="8" FontSize="15"/>
+        <TextBlock Text="Código da turma" Foreground="White" FontWeight="Bold"/>
+        <TextBox Name="TxtClass" Height="38" Margin="0,6,0,14" Padding="8" FontSize="15"/>
+        <TextBlock Text="Ano ou faixa escolar" Foreground="White" FontWeight="Bold"/>
+        <TextBox Name="TxtGrade" Height="38" Margin="0,6,0,14" Padding="8" FontSize="15"/>
+        <Border Background="#27203D" CornerRadius="10" Padding="12" Margin="0,8,0,0">
+          <TextBlock Text="Os participantes receberão códigos temporários A e B. A associação com nomes não será armazenada no banco analítico." Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="12"/>
+        </Border>
+        <CheckBox Name="ChkConsent" Content="Confirmo que a equipe verificou as autorizações e o consentimento aplicáveis para esta dupla." Foreground="White" FontSize="12" Margin="0,14,0,0"/>
+      </StackPanel>
+      <Button Name="BtnStart" Grid.Row="2" Content="Confirmar e iniciar" Height="48" Background="#6D5BD0" Foreground="White" FontSize="16" FontWeight="Bold" IsEnabled="False"/>
+    </Grid>
+  </Border>
+</Window>
+"@
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $school = $window.FindName("TxtSchool")
+    $workshop = $window.FindName("TxtWorkshop")
+    $class = $window.FindName("TxtClass")
+    $grade = $window.FindName("TxtGrade")
+    $consent = $window.FindName("ChkConsent")
+    $button = $window.FindName("BtnStart")
+    $school.Text = [string]$script:Config.school_code
+    $workshop.Text = [string]$script:Config.workshop_code
+    $class.Text = [string]$script:Config.class_code
+    $grade.Text = [string]$script:Config.grade_band
+
+    $validate = {
+        $values = @($school.Text.Trim(), $workshop.Text.Trim(), $class.Text.Trim())
+        $button.IsEnabled = (($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $consent.IsChecked -eq $true)
+    }
+    $school.add_TextChanged($validate); $workshop.add_TextChanged($validate); $class.add_TextChanged($validate)
+    $consent.add_Checked($validate); $consent.add_Unchecked($validate)
+    & $validate
+
+    $button.add_Click({
+        $script:SchoolCode = $school.Text.Trim()
+        $script:WorkshopCode = $workshop.Text.Trim()
+        $script:ClassCode = $class.Text.Trim()
+        $script:GradeBand = $grade.Text.Trim()
         $window.DialogResult = $true
         $window.Close()
     })
-
-    $window.ShowDialog() | Out-Null
+    return ($window.ShowDialog() -eq $true)
 }
 
-function Show-WpfSampling {
-    param(
-        [string]$Question,
-        [string]$StudentPCName,
-        [string]$StudentDeskName
-    )
-
+function Show-WpfAssent {
+    param([string]$RoleLabel)
     $xaml = @"
-    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            Title="Expedição Pulselab" Width="680" Height="480"
-            WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True">
-        <Border CornerRadius="24" Background="#120D24" BorderBrush="#FF5E62" BorderThickness="3">
-            <Grid Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Upper Title -->
-                <TextBlock Grid.Row="0" Text="🧠 EXPEDIÇÃO DE APRENDIZADO" FontSize="24" FontWeight="ExtraBold" Foreground="#FF5E62" HorizontalAlignment="Center" Margin="0,5,0,10"/>
-                
-                <!-- Main Question -->
-                <TextBlock Grid.Row="1" Text="$Question" FontSize="16" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,5,0,20"/>
-                
-                <!-- Kid Columns -->
-                <Grid Grid.Row="2" Margin="0,0,0,15">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="20"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- Computer kid panel -->
-                    <Border Grid.Column="0" CornerRadius="16" Background="#221A3D" Padding="15" BorderBrush="#4A90E2" BorderThickness="2">
-                        <StackPanel>
-                            <TextBlock Name="LblPCName" FontSize="18" FontWeight="Bold" Foreground="#4A90E2" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                            <RadioButton Name="RadPC1" GroupName="PCGroup" Content="🚀 Muito fácil! (Estou voando)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                            <RadioButton Name="RadPC2" GroupName="PCGroup" Content="💡 Tranquilo (Dá para fazer)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                            <RadioButton Name="RadPC3" GroupName="PCGroup" Content="🧠 Difícil (Está dando trabalho)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                            <RadioButton Name="RadPC4" GroupName="PCGroup" Content="🛑 Travado (Preciso de ajuda!)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                        </StackPanel>
-                    </Border>
-                    
-                    <!-- Separator -->
-                    <Grid Grid.Column="1"/>
-                    
-                    <!-- Desk kid panel -->
-                    <Border Grid.Column="2" CornerRadius="16" Background="#221A3D" Padding="15" BorderBrush="#00D2C4" BorderThickness="2">
-                        <StackPanel>
-                            <TextBlock Name="LblDeskName" FontSize="18" FontWeight="Bold" Foreground="#00D2C4" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                            <RadioButton Name="RadDesk1" GroupName="DeskGroup" Content="🚀 Muito fácil! (Estou voando)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                            <RadioButton Name="RadDesk2" GroupName="DeskGroup" Content="💡 Tranquilo (Dá para fazer)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                            <RadioButton Name="RadDesk3" GroupName="DeskGroup" Content="🧠 Difícil (Está dando trabalho)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                            <RadioButton Name="RadDesk4" GroupName="DeskGroup" Content="🛑 Travado (Preciso de ajuda!)" FontSize="13" Foreground="White" Margin="0,6,0,8" Height="26" VerticalContentAlignment="Center" Cursor="Hand"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-                
-                <!-- Save Button -->
-                <Button Name="BtnSave" Grid.Row="3" Content="Salvar Expedição 💾" FontSize="16" FontWeight="Bold" Height="48" Background="#FF5E62" Foreground="White" Cursor="Hand" IsEnabled="False"/>
-            </Grid>
-        </Border>
-    </Window>
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Convite para participar"
+        Width="570" Height="430" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="22" Background="#15102A" BorderBrush="#57E0D5" BorderThickness="3" Padding="28">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0">
+        <TextBlock Text="CONVITE PARA A PESQUISA" Foreground="#57E0D5" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,7,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Row="1" VerticalAlignment="Center">
+        <TextBlock Text="Durante a oficina, o PulseLab fará algumas perguntas curtas sobre como está a atividade. Você pode escolher participar ou não." Foreground="White" FontSize="15" TextWrapping="Wrap" Margin="0,0,0,14"/>
+        <TextBlock Text="Se escolher não participar, você continuará fazendo a oficina normalmente. Isso não muda sua nota, seu atendimento ou sua participação na aula." Foreground="#D2CCDF" FontSize="14" TextWrapping="Wrap"/>
+      </StackPanel>
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnNo" Grid.Column="0" Content="Não quero participar" Height="48" Background="#3B344B" Foreground="White"/>
+        <Button Name="BtnYes" Grid.Column="2" Content="Quero participar" Height="48" Background="#00A7A0" Foreground="White" FontWeight="Bold"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
 "@
-
-    $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
-    $window = [Windows.Markup.XamlReader]::Load($reader)
-
-    $lblPCName = $window.FindName("LblPCName")
-    $lblDeskName = $window.FindName("LblDeskName")
-    $btnSave = $window.FindName("BtnSave")
-
-    $radPC1 = $window.FindName("RadPC1")
-    $radPC2 = $window.FindName("RadPC2")
-    $radPC3 = $window.FindName("RadPC3")
-    $radPC4 = $window.FindName("RadPC4")
-
-    $radDesk1 = $window.FindName("RadDesk1")
-    $radDesk2 = $window.FindName("RadDesk2")
-    $radDesk3 = $window.FindName("RadDesk3")
-    $radDesk4 = $window.FindName("RadDesk4")
-
-    $lblPCName.Text = "$StudentPCName (no Computador)"
-    $lblDeskName.Text = "$StudentDeskName (na Mesa)"
-
-    $checkSelection = {
-        $pcVal = ($radPC1.IsChecked -eq $true -or $radPC2.IsChecked -eq $true -or $radPC3.IsChecked -eq $true -or $radPC4.IsChecked -eq $true)
-        $deskVal = ($radDesk1.IsChecked -eq $true -or $radDesk2.IsChecked -eq $true -or $radDesk3.IsChecked -eq $true -or $radDesk4.IsChecked -eq $true)
-        $btnSave.IsEnabled = ($pcVal -and $deskVal)
-    }
-
-    # Listeners
-    $radios = @($radPC1, $radPC2, $radPC3, $radPC4, $radDesk1, $radDesk2, $radDesk3, $radDesk4)
-    foreach ($rad in $radios) {
-        $rad.add_Checked($checkSelection)
-    }
-
-    # Result hashtable
-    $results = @{
-        PC_Load = 0
-        Desk_Load = 0
-        Status = $false
-    }
-
-    $btnSave.add_Click({
-        if ($radPC1.IsChecked) { $results.PC_Load = 1 }
-        elseif ($radPC2.IsChecked) { $results.PC_Load = 2 }
-        elseif ($radPC3.IsChecked) { $results.PC_Load = 3 }
-        elseif ($radPC4.IsChecked) { $results.PC_Load = 4 }
-
-        if ($radDesk1.IsChecked) { $results.Desk_Load = 1 }
-        elseif ($radDesk2.IsChecked) { $results.Desk_Load = 2 }
-        elseif ($radDesk3.IsChecked) { $results.Desk_Load = 3 }
-        elseif ($radDesk4.IsChecked) { $results.Desk_Load = 4 }
-
-        $results.Status = $true
-        $window.Close()
-    })
-
-    # Close Dialog on timeout parameter
-    $timer = New-Object System.Windows.Threading.DispatcherTimer
-    $timer.Interval = [TimeSpan]::FromSeconds($script:Config.timeout_seconds)
-    $timer.add_Tick({
-        $timer.Stop()
-        $window.Close()
-    })
-    $timer.Start()
-
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    # Use a mutable object because WPF event handlers execute in a child
+    # scope; assigning a captured scalar there would not reliably update the
+    # value returned by this function on PowerShell 5.1.
+    $result = @{ Accepted = $false }
+    $window.FindName("BtnYes").add_Click({ $result.Accepted = $true; $window.DialogResult = $true; $window.Close() })
+    $window.FindName("BtnNo").add_Click({ $result.Accepted = $false; $window.DialogResult = $false; $window.Close() })
     $window.ShowDialog() | Out-Null
-    $timer.Stop()
-
-    return $results
+    return [bool]$result.Accepted
 }
 
-function Show-WpfEnding {
-    param(
-        [string]$StudentPCName,
-        [string]$StudentDeskName
-    )
-
+function Show-WpfPreSurvey {
+    param([string]$RoleLabel)
     $xaml = @"
-    <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-            Title="Finalizar Oficina Pulselab" Width="720" Height="500"
-            WindowStartupLocation="CenterScreen" WindowStyle="None" AllowsTransparency="True" Background="Transparent" Topmost="True">
-        <Border CornerRadius="24" Background="#170F24" BorderBrush="#8E2DE2" BorderThickness="3">
-            <Grid Margin="20">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Header -->
-                <TextBlock Grid.Row="0" Text="🏁 CONCLUIR OFICINA DE ROBÓTICA" FontSize="24" FontWeight="ExtraBold" Foreground="#8E2DE2" HorizontalAlignment="Center" Margin="0,5,0,15"/>
-                
-                <!-- Student Panels -->
-                <Grid Grid.Row="1" Margin="0,0,0,10">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="15"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    
-                    <!-- PC kid ending panel -->
-                    <Border Grid.Column="0" CornerRadius="16" Background="#281A3A" Padding="15" BorderBrush="#4A90E2" BorderThickness="2">
-                        <StackPanel>
-                            <TextBlock Name="LblPCName" FontSize="18" FontWeight="Bold" Foreground="#4A90E2" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                            
-                            <!-- Question 1 -->
-                            <TextBlock Text="O que você mais sentiu na oficina?" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,5,0,5"/>
-                            <ComboBox Name="CboPCAfet" FontSize="14" Height="30" Background="#3D295C" Foreground="White" VerticalContentAlignment="Center" Margin="0,0,0,15">
-                                <ComboBoxItem Content="😃 Orgulho"/>
-                                <ComboBoxItem Content="😐 Concentração"/>
-                                <ComboBoxItem Content="🙁 Frustração"/>
-                            </ComboBox>
-                            
-                            <!-- Question 2 -->
-                            <TextBlock Text="Gostaria de participar de mais aulas?" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,5,0,5"/>
-                            <RadioButton Name="RadPCAttYes" Content="😍 Sim, com certeza!" FontSize="13" Foreground="White" Margin="0,5,0,6" Cursor="Hand"/>
-                            <RadioButton Name="RadPCAttNo" Content="🙁 Não, achei chato" FontSize="13" Foreground="White" Margin="0,5,0,6" Cursor="Hand"/>
-                        </StackPanel>
-                    </Border>
-                    
-                    <!-- Spacer -->
-                    <Grid Grid.Column="1"/>
-                    
-                    <!-- Desk kid ending panel -->
-                    <Border Grid.Column="2" CornerRadius="16" Background="#281A3A" Padding="15" BorderBrush="#00D2C4" BorderThickness="2">
-                        <StackPanel>
-                            <TextBlock Name="LblDeskName" FontSize="18" FontWeight="Bold" Foreground="#00D2C4" HorizontalAlignment="Center" Margin="0,0,0,15"/>
-                            
-                            <!-- Question 1 -->
-                            <TextBlock Text="O que você mais sentiu na oficina?" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,5,0,5"/>
-                            <ComboBox Name="CboDeskAfet" FontSize="14" Height="30" Background="#3D295C" Foreground="White" VerticalContentAlignment="Center" Margin="0,0,0,15">
-                                <ComboBoxItem Content="😃 Orgulho"/>
-                                <ComboBoxItem Content="😐 Concentração"/>
-                                <ComboBoxItem Content="🙁 Frustração"/>
-                            </ComboBox>
-                            
-                            <!-- Question 2 -->
-                            <TextBlock Text="Gostaria de participar de mais aulas?" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,5,0,5"/>
-                            <RadioButton Name="RadDeskAttYes" Content="😍 Sim, com certeza!" FontSize="13" Foreground="White" Margin="0,5,0,6" Cursor="Hand"/>
-                            <RadioButton Name="RadDeskAttNo" Content="🙁 Não, achei chato" FontSize="13" Foreground="White" Margin="0,5,0,6" Cursor="Hand"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-                
-                <!-- Complete Button -->
-                <Button Name="BtnFinish" Grid.Row="2" Content="Finalizar Oficina de Robótica 🏁" FontSize="16" FontWeight="Bold" Height="48" Background="#8E2DE2" Foreground="White" Cursor="Hand" IsEnabled="False"/>
-            </Grid>
-        </Border>
-    </Window>
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
+        Width="610" Height="570" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,15">
+        <TextBlock Text="ANTES DE COMEÇAR" Foreground="#57E0D5" FontSize="23" FontWeight="Bold"/>
+        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
+        <TextBlock Text="Responda sozinho. Sua resposta não será mostrada à sua dupla." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Row="1">
+        <TextBlock Text="$($script:Config.questions.prior_robotics)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+        <StackPanel Margin="10,8,0,20">
+          <RadioButton Name="Prior1" GroupName="Prior" Content="Nunca" Foreground="White" Margin="0,4"/>
+          <RadioButton Name="Prior2" GroupName="Prior" Content="Uma vez" Foreground="White" Margin="0,4"/>
+          <RadioButton Name="Prior3" GroupName="Prior" Content="Algumas vezes" Foreground="White" Margin="0,4"/>
+          <RadioButton Name="Prior4" GroupName="Prior" Content="Muitas vezes" Foreground="White" Margin="0,4"/>
+        </StackPanel>
+        <TextBlock Text="$($script:Config.questions.self_efficacy)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+        <StackPanel Margin="10,8,0,0">
+          <RadioButton Name="Self1" GroupName="Self" Content="Discordo muito" Foreground="White" Margin="0,4"/>
+          <RadioButton Name="Self2" GroupName="Self" Content="Discordo" Foreground="White" Margin="0,4"/>
+          <RadioButton Name="Self3" GroupName="Self" Content="Concordo" Foreground="White" Margin="0,4"/>
+          <RadioButton Name="Self4" GroupName="Self" Content="Concordo muito" Foreground="White" Margin="0,4"/>
+        </StackPanel>
+      </StackPanel>
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
+        <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Height="46" Background="#00A7A0" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
 "@
-
-    $reader = New-Object System.Xml.XmlNodeReader([xml]$xaml)
-    $window = [Windows.Markup.XamlReader]::Load($reader)
-
-    $lblPCName = $window.FindName("LblPCName")
-    $lblDeskName = $window.FindName("LblDeskName")
-    $btnFinish = $window.FindName("BtnFinish")
-
-    $cboPCAfet = $window.FindName("CboPCAfet")
-    $radPCAttYes = $window.FindName("RadPCAttYes")
-    $radPCAttNo = $window.FindName("RadPCAttNo")
-
-    $cboDeskAfet = $window.FindName("CboDeskAfet")
-    $radDeskAttYes = $window.FindName("RadDeskAttYes")
-    $radDeskAttNo = $window.FindName("RadDeskAttNo")
-
-    $lblPCName.Text = $StudentPCName
-    $lblDeskName.Text = $StudentDeskName
-
-    $checkCompletion = {
-        $pcA = ($cboPCAfet.SelectedIndex -ne -1)
-        $deskA = ($cboDeskAfet.SelectedIndex -ne -1)
-        $pcAtt = ($radPCAttYes.IsChecked -eq $true -or $radPCAttNo.IsChecked -eq $true)
-        $deskAtt = ($radDeskAttYes.IsChecked -eq $true -or $radDeskAttNo.IsChecked -eq $true)
-        $btnFinish.IsEnabled = ($pcA -and $deskA -and $pcAtt -and $deskAtt)
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $prior = 1..4 | ForEach-Object { $window.FindName("Prior$_") }
+    $self = 1..4 | ForEach-Object { $window.FindName("Self$_") }
+    $button = $window.FindName("BtnSave")
+    $skip = $window.FindName("BtnSkip")
+    $result = @{ Status = $false; Declined = $false; PriorRobotics = $null; SelfEfficacy = $null; LatencyMs = 0 }
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $validate = {
+        $button.IsEnabled = (($prior | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and ($self | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
     }
-
-    # Listeners
-    $cboPCAfet.add_SelectionChanged($checkCompletion)
-    $cboDeskAfet.add_SelectionChanged($checkCompletion)
-    $radPCAttYes.add_Checked($checkCompletion)
-    $radPCAttNo.add_Checked($checkCompletion)
-    $radDeskAttYes.add_Checked($checkCompletion)
-    $radDeskAttNo.add_Checked($checkCompletion)
-
-    $results = @{
-        PC_Afet = ""
-        PC_Att = $false
-        Desk_Afet = ""
-        Desk_Att = $false
-        Status = $false
-    }
-
-    $btnFinish.add_Click({
-        # Map values cleanly
-        # Extract emoji and space to get clean text e.g., 'Orgulho', 'Concentração', 'Frustração'
-        $selPC = $cboPCAfet.SelectedItem.Content
-        $results.PC_Afet = $selPC.Substring(2)
-        $results.PC_Att = ($radPCAttYes.IsChecked -eq $true)
-
-        $selDesk = $cboDeskAfet.SelectedItem.Content
-        $results.Desk_Afet = $selDesk.Substring(2)
-        $results.Desk_Att = ($radDeskAttYes.IsChecked -eq $true)
-
-        $results.Status = $true
+    @($prior + $self) | ForEach-Object { $_.add_Checked($validate) }
+    $button.add_Click({
+        for ($i = 0; $i -lt 4; $i++) {
+            if ($prior[$i].IsChecked) { $result.PriorRobotics = $i + 1 }
+            if ($self[$i].IsChecked) { $result.SelfEfficacy = $i + 1 }
+        }
+        $result.Status = $true
+        $result.LatencyMs = [int]$watch.ElapsedMilliseconds
         $window.Close()
     })
-
+    $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
     $window.ShowDialog() | Out-Null
-    return $results
+    $watch.Stop()
+    return $result
+}
+
+function Show-WpfCheckpoint {
+    param([string]$RoleLabel, [int]$IntervalMark, [bool]$AskCollaboration)
+    $collabVisibility = if ($AskCollaboration) { "Visible" } else { "Collapsed" }
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Checkpoint"
+        Width="650" Height="720" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="22" Background="#15102A" BorderBrush="#FF686B" BorderThickness="3" Padding="26">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,14">
+        <TextBlock Text="CHECKPOINT · $IntervalMark MIN" Foreground="#FF8B8E" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
+        <TextBlock Text="Responda sozinho. Depois, passe o computador para sua dupla." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+      </StackPanel>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+          <TextBlock Text="$($script:Config.questions.mental_effort)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,7,0,17">
+            <RadioButton Name="Effort1" GroupName="Effort" Content="Muito pouco" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Effort2" GroupName="Effort" Content="Pouco" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Effort3" GroupName="Effort" Content="Bastante" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Effort4" GroupName="Effort" Content="Muito" Foreground="White" Margin="0,3"/>
+          </StackPanel>
+          <TextBlock Text="$($script:Config.questions.progress_state)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,7,0,17">
+            <RadioButton Name="Progress1" GroupName="Progress" Content="Avançando sem ajuda" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Progress2" GroupName="Progress" Content="Avançando, mas com dúvida" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Progress3" GroupName="Progress" Content="Tentando, mas sem conseguir avançar" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Progress4" GroupName="Progress" Content="Precisamos de ajuda agora" Foreground="#FFB5B6" FontWeight="Bold" Margin="0,3"/>
+          </StackPanel>
+          <StackPanel Name="CollabPanel" Visibility="$collabVisibility">
+            <TextBlock Text="$($script:Config.questions.collaboration)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+            <StackPanel Margin="10,7,0,12">
+              <RadioButton Name="Collab1" GroupName="Collab" Content="Nunca" Foreground="White" Margin="0,3"/>
+              <RadioButton Name="Collab2" GroupName="Collab" Content="Algumas vezes" Foreground="White" Margin="0,3"/>
+              <RadioButton Name="Collab3" GroupName="Collab" Content="Quase sempre" Foreground="White" Margin="0,3"/>
+              <RadioButton Name="Collab4" GroupName="Collab" Content="Sempre" Foreground="White" Margin="0,3"/>
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+      <Grid Grid.Row="2" Margin="0,12,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
+        <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Height="46" Background="#FF686B" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
+"@
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $effort = 1..4 | ForEach-Object { $window.FindName("Effort$_") }
+    $progress = 1..4 | ForEach-Object { $window.FindName("Progress$_") }
+    $collab = 1..4 | ForEach-Object { $window.FindName("Collab$_") }
+    $button = $window.FindName("BtnSave")
+    $skip = $window.FindName("BtnSkip")
+    $result = @{ Status = $false; Declined = $false; MentalEffort = $null; ProgressState = $null; Collaboration = $null; LatencyMs = 0 }
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $validate = {
+        $baseComplete = (($effort | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and ($progress | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
+        $collabComplete = (-not $AskCollaboration -or ($collab | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
+        $button.IsEnabled = ($baseComplete -and $collabComplete)
+    }
+    @($effort + $progress + $collab) | ForEach-Object { $_.add_Checked($validate) }
+    $button.add_Click({
+        for ($i = 0; $i -lt 4; $i++) {
+            if ($effort[$i].IsChecked) { $result.MentalEffort = $i + 1 }
+            if ($progress[$i].IsChecked) {
+                $result.ProgressState = @('progressing_independently','progressing_with_doubt','trying_without_progress','needs_help_now')[$i]
+            }
+            if ($AskCollaboration -and $collab[$i].IsChecked) { $result.Collaboration = $i + 1 }
+        }
+        $result.Status = $true
+        $result.LatencyMs = [int]$watch.ElapsedMilliseconds
+        $window.Close()
+    })
+    $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
+
+    $timer = New-Object Windows.Threading.DispatcherTimer
+    $timer.Interval = [TimeSpan]::FromSeconds([int]$script:Config.timeout_seconds)
+    $timer.add_Tick({ $timer.Stop(); $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
+    $timer.Start(); $window.ShowDialog() | Out-Null; $timer.Stop(); $watch.Stop()
+    return $result
+}
+
+function Show-WpfInstructorRubric {
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Registro do instrutor"
+        Width="560" Height="500" WindowStartupLocation="CenterScreen" Topmost="True">
+  <Grid Margin="26">
+    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+    <StackPanel Grid.Row="0" Margin="0,0,0,18">
+      <TextBlock Text="REGISTRO DO INSTRUTOR" Foreground="#4C35A3" FontSize="22" FontWeight="Bold"/>
+      <TextBlock Text="Avalie a dupla antes de chamar os participantes para o encerramento." Foreground="#555" TextWrapping="Wrap"/>
+    </StackPanel>
+    <StackPanel Grid.Row="1">
+      <TextBlock Text="Desempenho da missão" FontWeight="Bold"/>
+      <ComboBox Name="Mission" Height="36" Margin="0,6,0,16">
+        <ComboBoxItem Content="0 · Não executou a missão"/><ComboBoxItem Content="1 · Executou parcialmente"/>
+        <ComboBoxItem Content="2 · Concluiu com muita ajuda"/><ComboBoxItem Content="3 · Concluiu com pouca ou nenhuma ajuda"/>
+      </ComboBox>
+      <TextBlock Text="Quantidade aproximada de intervenções" FontWeight="Bold"/>
+      <ComboBox Name="Interventions" Height="36" Margin="0,6,0,16">
+        <ComboBoxItem Content="0"/><ComboBoxItem Content="1"/><ComboBoxItem Content="2"/><ComboBoxItem Content="3 ou mais"/>
+      </ComboBox>
+      <TextBlock Text="Principal dificuldade observada" FontWeight="Bold"/>
+      <ComboBox Name="Issue" Height="36" Margin="0,6,0,16">
+        <ComboBoxItem Content="Nenhuma"/><ComboBoxItem Content="Montagem"/><ComboBoxItem Content="Lógica de programação"/>
+        <ComboBoxItem Content="Sensor"/><ComboBoxItem Content="Problema técnico"/><ComboBoxItem Content="Colaboração"/><ComboBoxItem Content="Outra"/>
+      </ComboBox>
+    </StackPanel>
+    <Button Name="BtnSave" Grid.Row="2" Content="Salvar avaliação da dupla" Height="44" Background="#4C35A3" Foreground="White" IsEnabled="False"/>
+  </Grid>
+</Window>
+"@
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $mission = $window.FindName("Mission"); $interventions = $window.FindName("Interventions"); $issue = $window.FindName("Issue")
+    $button = $window.FindName("BtnSave")
+    $result = @{ Status = $false; Mission = $null; Interventions = $null; Issue = $null }
+    $validate = { $button.IsEnabled = ($mission.SelectedIndex -ge 0 -and $interventions.SelectedIndex -ge 0 -and $issue.SelectedIndex -ge 0) }
+    $mission.add_SelectionChanged($validate); $interventions.add_SelectionChanged($validate); $issue.add_SelectionChanged($validate)
+    $button.add_Click({
+        $result.Mission = $mission.SelectedIndex
+        $result.Interventions = $interventions.SelectedIndex
+        $result.Issue = @('none','assembly','logic','sensor','technical','collaboration','other')[$issue.SelectedIndex]
+        $result.Status = $true
+        $window.DialogResult = $true
+        $window.Close()
+    })
+    $window.ShowDialog() | Out-Null
+    return $result
+}
+
+function Show-WpfPostSurvey {
+    param([string]$RoleLabel)
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Encerramento"
+        Width="660" Height="710" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="22" Background="#171128" BorderBrush="#8B62E8" BorderThickness="3" Padding="26">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,14">
+        <TextBlock Text="ENCERRAMENTO" Foreground="#B9A0FF" FontSize="23" FontWeight="Bold"/>
+        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
+        <TextBlock Text="Responda sozinho. Não existem respostas certas ou erradas." Foreground="#BDB8D0" FontSize="12"/>
+      </StackPanel>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+          <TextBlock Text="$($script:Config.questions.post_understanding)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,7,0,17">
+            <RadioButton Name="Understand1" GroupName="Understand" Content="Discordo muito" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Understand2" GroupName="Understand" Content="Discordo" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Understand3" GroupName="Understand" Content="Concordo" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Understand4" GroupName="Understand" Content="Concordo muito" Foreground="White" Margin="0,3"/>
+          </StackPanel>
+          <TextBlock Text="$($script:Config.questions.post_affect)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <UniformGrid Columns="2" Margin="10,7,0,5">
+            <CheckBox Name="AffectCurious" Content="Curioso" Foreground="White" Margin="0,4"/>
+            <CheckBox Name="AffectConfident" Content="Confiante" Foreground="White" Margin="0,4"/>
+            <CheckBox Name="AffectExcited" Content="Animado" Foreground="White" Margin="0,4"/>
+            <CheckBox Name="AffectFrustrated" Content="Frustrado" Foreground="White" Margin="0,4"/>
+            <CheckBox Name="AffectTired" Content="Cansado" Foreground="White" Margin="0,4"/>
+            <CheckBox Name="AffectIndifferent" Content="Indiferente" Foreground="White" Margin="0,4"/>
+          </UniformGrid>
+          <TextBlock Name="AffectHint" Text="Escolha uma ou duas opções." Foreground="#BDB8D0" FontSize="12" Margin="10,0,0,17"/>
+          <TextBlock Text="$($script:Config.questions.post_return)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,7,0,10">
+            <RadioButton Name="Return1" GroupName="Return" Content="Não" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Return2" GroupName="Return" Content="Talvez não" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Return3" GroupName="Return" Content="Talvez sim" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="Return4" GroupName="Return" Content="Sim" Foreground="White" Margin="0,3"/>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+      <Grid Grid.Row="2" Margin="0,12,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
+        <Button Name="BtnSave" Grid.Column="2" Content="Salvar e concluir" Height="46" Background="#8B62E8" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+      </Grid>
+    </Grid>
+  </Border>
+</Window>
+"@
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $understand = 1..4 | ForEach-Object { $window.FindName("Understand$_") }
+    $returns = 1..4 | ForEach-Object { $window.FindName("Return$_") }
+    $affects = @(
+        @{ Box = $window.FindName("AffectCurious"); Value = 'curious' },
+        @{ Box = $window.FindName("AffectConfident"); Value = 'confident' },
+        @{ Box = $window.FindName("AffectExcited"); Value = 'excited' },
+        @{ Box = $window.FindName("AffectFrustrated"); Value = 'frustrated' },
+        @{ Box = $window.FindName("AffectTired"); Value = 'tired' },
+        @{ Box = $window.FindName("AffectIndifferent"); Value = 'indifferent' }
+    )
+    $hint = $window.FindName("AffectHint"); $button = $window.FindName("BtnSave")
+    $skip = $window.FindName("BtnSkip")
+    $result = @{ Status = $false; Declined = $false; Understanding = $null; Affects = @(); ReturnIntent = $null; LatencyMs = 0 }
+    $watch = [Diagnostics.Stopwatch]::StartNew()
+    $validate = {
+        $affectCount = @($affects | Where-Object { $_.Box.IsChecked -eq $true }).Count
+        $hint.Text = if ($affectCount -gt 2) { "Escolha no máximo duas opções." } else { "Escolha uma ou duas opções." }
+        $hint.Foreground = if ($affectCount -gt 2) { "#FF9B9D" } else { "#BDB8D0" }
+        $button.IsEnabled = (($understand | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and
+            ($returns | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and $affectCount -ge 1 -and $affectCount -le 2)
+    }
+    @($understand + $returns) | ForEach-Object { $_.add_Checked($validate) }
+    $affects | ForEach-Object { $_.Box.add_Checked($validate); $_.Box.add_Unchecked($validate) }
+    $button.add_Click({
+        for ($i = 0; $i -lt 4; $i++) {
+            if ($understand[$i].IsChecked) { $result.Understanding = $i + 1 }
+            if ($returns[$i].IsChecked) { $result.ReturnIntent = $i + 1 }
+        }
+        $result.Affects = @($affects | Where-Object { $_.Box.IsChecked -eq $true } | ForEach-Object { $_.Value })
+        $result.Status = $true
+        $result.LatencyMs = [int]$watch.ElapsedMilliseconds
+        $window.Close()
+    })
+    $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
+    $window.ShowDialog() | Out-Null
+    $watch.Stop()
+    return $result
 }
 
 # =============================================================================
-# TRAY NOTIFICATION ARCHITECTURE
+# TRAY E ORQUESTRAÇÃO
 # =============================================================================
 
 function Initialize-TrayIcon {
-    try {
-        $script:NotifyIcon = New-Object System.Windows.Forms.NotifyIcon
-        $script:NotifyIcon.Icon = [System.Drawing.SystemIcons]::Application
-        $script:NotifyIcon.Text = "Pulselab - Oficina de Robótica"
-        $script:NotifyIcon.Visible = $true
+    $script:NotifyIcon = New-Object Windows.Forms.NotifyIcon
+    $script:NotifyIcon.Icon = [Drawing.SystemIcons]::Application
+    $script:NotifyIcon.Text = "PulseLab - Oficina em andamento"
+    $script:NotifyIcon.Visible = $true
+    $menu = New-Object Windows.Forms.ContextMenu
+    $finish = New-Object Windows.Forms.MenuItem "Concluir Oficina"
+    $finish.add_Click({ $script:TriggerEnding = $true; Write-PulseLog "INFO" "Manual ending requested." })
+    $menu.MenuItems.Add($finish) | Out-Null
+    $script:NotifyIcon.ContextMenu = $menu
+}
 
-        $contextMenu = New-Object System.Windows.Forms.ContextMenu
-        $menuItemExit = New-Object System.Windows.Forms.MenuItem
-        $menuItemExit.Text = "Concluir Oficina"
-        $contextMenu.MenuItems.Add($menuItemExit) | Out-Null
-        $script:NotifyIcon.ContextMenu = $contextMenu
-
-        $menuItemExit.Add_Click({
-            Write-PulseLog -Level "INFO" -Message "Manual session termination triggered from Tray Icon."
-            $script:TriggerEnding = $true
-        })
-
-        Write-PulseLog -Level "INFO" -Message "System Tray Icon successfully registered in notification area."
-    } catch {
-        Write-PulseLog -Level "WARN" -Message "Failed to initialize Notification Tray Icon: $_"
+function Show-HelpAlert {
+    param([string]$RoleLabel)
+    Write-PulseLog "WARN" "Participant requested help. role=$RoleLabel"
+    if ($script:NotifyIcon) {
+        $script:NotifyIcon.BalloonTipTitle = "Dupla precisa de ajuda"
+        $script:NotifyIcon.BalloonTipText = "$RoleLabel solicitou apoio do instrutor."
+        $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Warning
+        $script:NotifyIcon.ShowBalloonTip(8000)
     }
 }
 
 function Dispose-TrayIcon {
-    if ($null -ne $script:NotifyIcon) {
+    if ($script:NotifyIcon) {
         $script:NotifyIcon.Visible = $false
         $script:NotifyIcon.Dispose()
         $script:NotifyIcon = $null
-        Write-PulseLog -Level "INFO" -Message "Notification Tray Icon successfully disposed."
     }
 }
 
-# =============================================================================
-# MAIN EVENT ORCHESTRATION LOOP
-# =============================================================================
-
-function Start-DaemonLoop {
-    $marks = [int[]]$script:Config.interval_marks_minutes
-    $markCount = $marks.Count
-
-    Write-PulseLog -Level "INFO" -Message "Daemon background collector loop started. Marks=$($marks -join ',')"
-
-    $script:SpikeHandle = Get-SpikeWindowHandle
-    $cycleIndex = 0
-
-    while ($cycleIndex -lt $markCount -and -not $script:TriggerEnding) {
-        $currentMark = $marks[$cycleIndex]
-        $lastMark = if ($cycleIndex -gt 0) { $marks[$cycleIndex - 1] } else { 0 }
-        $gapMinutes = $currentMark - $lastMark
-
-        # Determine interval target
-        $targetSeconds = if ($script:Config.debug_mode) { $gapMinutes } else { $gapMinutes * 60 }
-        Write-PulseLog -Level "INFO" -Message "Timer counting down until next evaluation mark. Mark=$currentMark GapSeconds=$targetSeconds"
-
-        # Responsive sleep loop to keep System Tray Icon active
-        $sleptMs = 0
-        $totalSleepMs = $targetSeconds * 1000
-        while ($sleptMs -lt $totalSleepMs -and -not $script:TriggerEnding) {
-            [System.Windows.Forms.Application]::DoEvents()
-            Start-Sleep -Milliseconds 100
-            $sleptMs += 100
-        }
-
-        # If manual conclusion was triggered during sleep, break loop
-        if ($script:TriggerEnding) {
-            break
-        }
-
-        # Sync active window handle
-        $script:SpikeHandle = Get-SpikeWindowHandle
-
-        # Reload remote config for runtime changes
-        Get-RemoteConfig
-
-        # Flush cache offline queue if online
-        Invoke-FlushCache
-
-        # ----------------------------------------------------
-        # Telemetry collection (BEFORE displaying WPF pop-up)
-        # ----------------------------------------------------
-        Write-PulseLog -Level "INFO" -Message "Collecting workspace state telemetries for Mark=$currentMark..."
-        $osTelemetry = Get-ActiveTelemetry
-        $spikeFileSize = Get-LastSpikeFileSize
-        
-        # Local compressed screenshot capture
-        $localPicPath = Join-Path $script:OFFLINE_CACHE_DIR "screenshot_$($script:SessionId)_$($currentMark).jpg"
-        Get-ScreenCapture -FilePath $localPicPath
-
-        # Display kid-friendly popup
-        $results = Show-WpfSampling `
-            -Question $script:Config.question_text `
-            -StudentPCName $script:StudentPC `
-            -StudentDeskName $script:StudentDesk
-
-        # Return focus to SPIKE
-        Restore-SpikeFocus -Handle $script:SpikeHandle
-
-        if ($results.Status) {
-            # Build payload hash
-            $payload = @{
-                session_id                 = $script:SessionId
-                regional_hub               = $script:Config.regional_hub
-                computer_id                = $script:ComputerId
-                interval_mark              = $currentMark
-                student_pc_name            = $script:StudentPC
-                student_pc_load            = $results.PC_Load
-                student_desk_name          = $script:StudentDesk
-                student_desk_load          = $results.Desk_Load
-                telemetry_window_title     = $osTelemetry.WindowTitle
-                telemetry_foreground_app   = $osTelemetry.ForegroundApp
-                telemetry_idle_seconds     = $osTelemetry.IdleSeconds
-                telemetry_file_size_kb     = $spikeFileSize
-                screenshot_url             = $null
-                local_screenshot_path      = $localPicPath
-            }
-
-            # Attempt upload and submission
-            Write-PulseLog -Level "INFO" -Message "Uploading and submitting Mark=$currentMark data..."
-            $pubUrl = Upload-ScreenshotToSupabase -LocalFilePath $localPicPath -IntervalMark $currentMark
-            if ($null -ne $pubUrl) {
-                $payload["screenshot_url"] = $pubUrl
-                $payload["local_screenshot_path"] = $null
-                Remove-Item $localPicPath -Force -ErrorAction SilentlyContinue
-                
-                $sent = Send-ResponseToSupabase -Payload $payload
-                if (-not $sent) {
-                    $payload["local_screenshot_path"] = $localPicPath # restore path for cached uploads
-                    Add-ToLocalQueue -Payload $payload
-                }
-            } else {
-                # Offline/Failure cache save
-                Add-ToLocalQueue -Payload $payload
-            }
-        } else {
-            Write-PulseLog -Level "WARN" -Message "Evaluation mark pop-up timed out without child responses."
-            # Delete unused screen capture file
-            Remove-Item $localPicPath -Force -ErrorAction SilentlyContinue
-        }
-
-        $cycleIndex++
-    }
-
-    # ----------------------------------------------------
-    # JANELA 3: POST-TEST ENDING (Mark 99)
-    # ----------------------------------------------------
-    Write-PulseLog -Level "INFO" -Message "Triggering final post-test and office exit evaluation (Mark 99)..."
-    
-    $script:SpikeHandle = Get-SpikeWindowHandle
-    
-    $endingResults = Show-WpfEnding -StudentPCName $script:StudentPC -StudentDeskName $script:StudentDesk
-    
-    # Return focus to SPIKE
-    Restore-SpikeFocus -Handle $script:SpikeHandle
-
-    if ($endingResults.Status) {
-        # Final telemetries
-        $osTelemetry = Get-ActiveTelemetry
-        $spikeFileSize = Get-LastSpikeFileSize
-        
-        $localPicPath = Join-Path $script:OFFLINE_CACHE_DIR "screenshot_$($script:SessionId)_99.jpg"
-        Get-ScreenCapture -FilePath $localPicPath
-
-        $payload99 = @{
-            session_id                 = $script:SessionId
-            regional_hub               = $script:Config.regional_hub
-            computer_id                = $script:ComputerId
-            interval_mark              = 99
-            student_pc_name            = $script:StudentPC
-            student_pc_load            = 1 # baseline cognitive load defaults
-            student_pc_post_afet       = $endingResults.PC_Afet
-            student_pc_post_att        = $endingResults.PC_Att
-            student_desk_name          = $script:StudentDesk
-            student_desk_load          = 1
-            student_desk_post_afet     = $endingResults.Desk_Afet
-            student_desk_post_att      = $endingResults.Desk_Att
-            telemetry_window_title     = $osTelemetry.WindowTitle
-            telemetry_foreground_app   = $osTelemetry.ForegroundApp
-            telemetry_idle_seconds     = $osTelemetry.IdleSeconds
-            telemetry_file_size_kb     = $spikeFileSize
-            screenshot_url             = $null
-            local_screenshot_path      = $localPicPath
-        }
-
-        # Upload and post
-        $pubUrl = Upload-ScreenshotToSupabase -LocalFilePath $localPicPath -IntervalMark "99"
-        if ($null -ne $pubUrl) {
-            $payload99["screenshot_url"] = $pubUrl
-            $payload99["local_screenshot_path"] = $null
-            Remove-Item $localPicPath -Force -ErrorAction SilentlyContinue
-
-            $sent = Send-ResponseToSupabase -Payload $payload99
-            if (-not $sent) {
-                $payload99["local_screenshot_path"] = $localPicPath
-                Add-ToLocalQueue -Payload $payload99
-            }
-        } else {
-            Add-ToLocalQueue -Payload $payload99
-        }
+function Save-PreSurvey {
+    param([string]$ParticipantId, [string]$Role, [string]$Label)
+    $result = Show-WpfPreSurvey $Label
+    $event = New-ResearchEvent $ParticipantId $Role "pre" $null
+    $event["response_latency_ms"] = [int]$result.LatencyMs
+    if ($result.Status) {
+        $event["prior_robotics"] = [int]$result.PriorRobotics
+        $event["self_efficacy_pre"] = [int]$result.SelfEfficacy
     } else {
-        Write-PulseLog -Level "WARN" -Message "Post-test ending evaluations skipped by child termination."
+        $event["response_status"] = if ($result.Declined) { "declined" } else { "timeout" }
+    }
+    Submit-Event $event
+}
+
+function Save-CheckpointSurvey {
+    param(
+        [string]$ParticipantId, [string]$Role, [string]$Label, [int]$Mark,
+        [bool]$AskCollaboration, [hashtable]$Telemetry, [decimal]$FileSize,
+        [string]$ScreenshotPath, [string]$LocalScreenshotPath
+    )
+    $result = Show-WpfCheckpoint $Label $Mark $AskCollaboration
+    $event = New-ResearchEvent $ParticipantId $Role "checkpoint" $Mark
+    $event["telemetry_window_title"] = $Telemetry.WindowTitle
+    $event["telemetry_foreground_app"] = $Telemetry.ForegroundApp
+    $event["telemetry_idle_seconds"] = [int]$Telemetry.IdleSeconds
+    $event["telemetry_file_size_kb"] = $FileSize
+    $event["screenshot_path"] = $ScreenshotPath
+    $event["local_screenshot_path"] = $LocalScreenshotPath
+    $event["response_latency_ms"] = [int]$result.LatencyMs
+
+    if ($result.Status) {
+        $event["mental_effort"] = [int]$result.MentalEffort
+        $event["progress_state"] = [string]$result.ProgressState
+        $event["help_requested"] = ($result.ProgressState -eq "needs_help_now")
+        if ($null -ne $result.Collaboration) { $event["collaboration"] = [int]$result.Collaboration }
+        if ($event["help_requested"]) { Show-HelpAlert $Label }
+    } else {
+        $event["response_status"] = if ($result.Declined) { "declined" } else { "timeout" }
+    }
+    Submit-Event $event
+}
+
+function Save-PostSurvey {
+    param([string]$ParticipantId, [string]$Role, [string]$Label, [hashtable]$Rubric)
+    $result = Show-WpfPostSurvey $Label
+    $event = New-ResearchEvent $ParticipantId $Role "post" $null
+    $event["mission_performance"] = [int]$Rubric.Mission
+    $event["instructor_interventions"] = [int]$Rubric.Interventions
+    $event["primary_issue"] = [string]$Rubric.Issue
+    $event["response_latency_ms"] = [int]$result.LatencyMs
+    if ($result.Status) {
+        $event["post_understanding"] = [int]$result.Understanding
+        $event["post_affects"] = [string[]]$result.Affects
+        $event["post_return_intent"] = [int]$result.ReturnIntent
+    } else {
+        $event["response_status"] = if ($result.Declined) { "declined" } else { "timeout" }
+    }
+    Submit-Event $event
+}
+
+function Start-ResearchLoop {
+    $marks = [int[]]$script:Config.interval_marks_minutes
+    $lastMark = 0
+
+    foreach ($mark in $marks) {
+        if ($script:TriggerEnding) { break }
+        $gapMinutes = $mark - $lastMark
+        $targetSeconds = if ($script:Config.debug_mode) { $gapMinutes } else { $gapMinutes * 60 }
+        $elapsedMs = 0
+        while ($elapsedMs -lt ($targetSeconds * 1000) -and -not $script:TriggerEnding) {
+            [Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 100
+            $elapsedMs += 100
+        }
+        if ($script:TriggerEnding) { break }
+
+        Invoke-FlushCache
+        $script:SpikeHandle = Get-SpikeWindowHandle
+        $telemetry = Get-ActiveTelemetry
+        $fileSize = Get-LastSpikeFileSize
+        $localScreenshot = $null
+        $privatePath = $null
+
+        if ($script:Config.screenshot_enabled) {
+            $candidate = Join-Path $script:OFFLINE_CACHE_DIR "screenshot-$($script:SessionId)-$mark.jpg"
+            if (Get-SpikeWindowCapture $candidate $script:SpikeHandle) {
+                $localScreenshot = $candidate
+                $privatePath = Upload-ScreenshotToSupabase $candidate $mark
+                if ($privatePath) {
+                    Remove-Item $candidate -Force -ErrorAction SilentlyContinue
+                    $localScreenshot = $null
+                }
+            }
+        }
+
+        $askCollaboration = ([int[]]$script:Config.collaboration_marks_minutes -contains $mark)
+        Save-CheckpointSurvey $script:ParticipantComputer "computer" "Participante do computador" $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot
+        Save-CheckpointSurvey $script:ParticipantAssembly "assembly" "Participante da montagem" $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot
+        Restore-SpikeFocus $script:SpikeHandle
+        $lastMark = $mark
     }
 
-    # Final attempt to flush offline queue
+    if (-not $script:TriggerEnding) {
+        Write-PulseLog "INFO" "All checkpoints completed. Waiting for instructor to finish the workshop."
+        while (-not $script:TriggerEnding) {
+            [Windows.Forms.Application]::DoEvents()
+            Start-Sleep -Milliseconds 150
+        }
+    }
+
+    $rubric = Show-WpfInstructorRubric
+    if (-not $rubric.Status) {
+        Write-PulseLog "WARN" "Instructor rubric canceled; session ending postponed."
+        return
+    }
+    Save-PostSurvey $script:ParticipantComputer "computer" "Participante do computador" $rubric
+    Save-PostSurvey $script:ParticipantAssembly "assembly" "Participante da montagem" $rubric
     Invoke-FlushCache
 }
 
@@ -991,26 +990,32 @@ try {
     Get-RemoteConfig
     Get-EnvCredentials
 
-    # Display Login
-    Show-WpfLogin
-
-    if ([string]::IsNullOrWhiteSpace($script:StudentPC) -or [string]::IsNullOrWhiteSpace($script:StudentDesk)) {
-        Write-PulseLog -Level "WARN" -Message "Login window canceled or empty. Terminating daemon."
+    if (-not (Show-WpfSessionSetup)) {
+        Write-PulseLog "WARN" "Session setup canceled."
         exit 0
     }
 
-    # Setup interactive Tray Icon in background
+    $computerAssent = Show-WpfAssent "Participante do computador"
+    $assemblyAssent = Show-WpfAssent "Participante da montagem"
+    if (-not $computerAssent -or -not $assemblyAssent) {
+        Write-PulseLog "INFO" "Research collection canceled because assent was not granted by all members of the dyad."
+        [Windows.MessageBox]::Show(
+            "A coleta de pesquisa foi encerrada. A dupla pode continuar participando normalmente da oficina.",
+            "PulseLab",
+            [Windows.MessageBoxButton]::OK,
+            [Windows.MessageBoxImage]::Information
+        ) | Out-Null
+        exit 0
+    }
+
     Initialize-TrayIcon
-
-    # Attempt cache sync on boot
     Invoke-FlushCache
-
-    # Enter core loops
-    Start-DaemonLoop
-
+    Save-PreSurvey $script:ParticipantComputer "computer" "Participante do computador"
+    Save-PreSurvey $script:ParticipantAssembly "assembly" "Participante da montagem"
+    Start-ResearchLoop
 } catch {
-    Write-PulseLog -Level "ERROR" -Message "Fatal daemon execution crash: $($_.Exception.Message)"
+    Write-PulseLog "ERROR" "Fatal error: $($_.Exception.Message)"
 } finally {
     Dispose-TrayIcon
-    Write-PulseLog -Level "INFO" -Message "Pulselab session terminated gracefully. Goodbye."
+    Write-PulseLog "INFO" "PulseLab session finished."
 }
