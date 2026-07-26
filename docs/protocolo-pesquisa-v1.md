@@ -1,7 +1,7 @@
 # Protocolo de Pesquisa PulseLab v1
 
-> Status: versão de trabalho para revisão pedagógica, ética e estatística.  
-> Compatibilidade técnica: agente e schema 1.3.0.  
+> Status: versão de trabalho para revisão pedagógica, ética e estatística.
+> Compatibilidade técnica: agente e schema 1.4.0.
 > População: estudantes participantes de oficinas pontuais de robótica educacional com LEGO SPIKE, com idade máxima prevista de 15 anos. A idade mínima ainda precisa ser definida para adequar linguagem, assentimento e instrumentos.
 
 ## 1. Enquadramento
@@ -73,7 +73,7 @@ Cada participante responde individualmente:
    - Concordo muito
 
 3. **Conhecimento específico**  
-   De três a cinco itens alinhados ao objetivo da oficina. Esses itens ainda não foram definidos e não aparecem na interface 1.3.0.
+   De três a cinco itens alinhados ao objetivo da oficina. Esses itens ainda não foram definidos e não aparecem na interface 1.4.0.
 
 ### 5.3 Checkpoints de 20 e 40 minutos
 
@@ -240,7 +240,7 @@ Estas respostas são necessárias para completar o método e implementar o pré/
 
 - [ ] Questões 1–20 acima respondidas.
 - [ ] Fluxo testado em Windows 10/11 com PowerShell 5.1.
-- [ ] Schema 1.3.0 aplicado em ambiente de teste.
+- [ ] Schema 1.4.0 aplicado em ambiente de teste.
 - [ ] Bucket confirmado como privado.
 - [ ] Procedimentos de consentimento e assentimento aprovados.
 - [ ] Instrutores treinados na rubrica e no protocolo de ajuda.

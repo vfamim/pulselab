@@ -1,9 +1,10 @@
 -- =============================================================================
 -- PulseLab - Supabase Schema
--- Version: 1.3.0
+-- Version: 1.4.0
 -- Description: Eventos individuais e pseudonimizados de oficinas pontuais de
---              robótica educacional. O script é não destrutivo: a tabela
---              legada `responses` não é removida.
+--              robótica educacional, acompanhados por uma linha do tempo
+--              append-only de evidências e qualidade. O script é não
+--              destrutivo: tabelas e dados legados não são removidos.
 -- =============================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
@@ -16,6 +17,8 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     event_id                   uuid         NOT NULL UNIQUE,
     session_id                 uuid         NOT NULL,
     dyad_id                    uuid         NOT NULL,
+    installation_id            uuid,
+    site_id                    text,
     participant_id             text         NOT NULL,
     participant_role           text         NOT NULL
         CHECK (participant_role IN ('computer', 'assembly')),
@@ -33,8 +36,13 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     grade_band                 text,
     activity_id                text         NOT NULL,
     computer_id                text         NOT NULL,
+    protocol_version           text,
     config_version             text         NOT NULL,
+    config_hash                text
+        CONSTRAINT research_events_config_hash_format
+        CHECK (config_hash IS NULL OR config_hash ~ '^[0-9a-f]{64}$'),
     client_version             text         NOT NULL,
+    activity_stage             text,
 
     -- Pré-oficina
     prior_robotics             smallint     CHECK (prior_robotics BETWEEN 1 AND 4),
@@ -72,6 +80,15 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     screenshot_path            text,
 
     response_latency_ms        integer      CHECK (response_latency_ms >= 0),
+    elapsed_ms                 bigint
+        CONSTRAINT research_events_elapsed_nonnegative
+        CHECK (elapsed_ms >= 0),
+    checkpoint_lateness_ms     integer
+        CONSTRAINT research_events_lateness_nonnegative
+        CHECK (checkpoint_lateness_ms >= 0),
+    scheduled_at               timestamptz,
+    prompted_at                timestamptz,
+    captured_at                timestamptz,
     occurred_at                timestamptz  NOT NULL,
     received_at                timestamptz  NOT NULL DEFAULT timezone('utc'::text, now()),
 
@@ -86,8 +103,61 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     )
 );
 
+-- Compatibilidade com bancos que já possuam a tabela da versão 1.3.
+ALTER TABLE public.research_events
+    ADD COLUMN IF NOT EXISTS installation_id uuid,
+    ADD COLUMN IF NOT EXISTS site_id text,
+    ADD COLUMN IF NOT EXISTS protocol_version text,
+    ADD COLUMN IF NOT EXISTS config_hash text,
+    ADD COLUMN IF NOT EXISTS activity_stage text,
+    ADD COLUMN IF NOT EXISTS elapsed_ms bigint,
+    ADD COLUMN IF NOT EXISTS checkpoint_lateness_ms integer,
+    ADD COLUMN IF NOT EXISTS scheduled_at timestamptz,
+    ADD COLUMN IF NOT EXISTS prompted_at timestamptz,
+    ADD COLUMN IF NOT EXISTS captured_at timestamptz;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'research_events_config_hash_format'
+          AND conrelid = 'public.research_events'::regclass
+    ) THEN
+        ALTER TABLE public.research_events
+            ADD CONSTRAINT research_events_config_hash_format
+            CHECK (config_hash IS NULL OR config_hash ~ '^[0-9a-f]{64}$');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'research_events_elapsed_nonnegative'
+          AND conrelid = 'public.research_events'::regclass
+    ) THEN
+        ALTER TABLE public.research_events
+            ADD CONSTRAINT research_events_elapsed_nonnegative
+            CHECK (elapsed_ms IS NULL OR elapsed_ms >= 0);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'research_events_lateness_nonnegative'
+          AND conrelid = 'public.research_events'::regclass
+    ) THEN
+        ALTER TABLE public.research_events
+            ADD CONSTRAINT research_events_lateness_nonnegative
+            CHECK (checkpoint_lateness_ms IS NULL OR checkpoint_lateness_ms >= 0);
+    END IF;
+END
+$$;
+
 CREATE INDEX IF NOT EXISTS idx_research_events_session
     ON public.research_events (session_id);
+
+CREATE INDEX IF NOT EXISTS idx_research_events_installation_time
+    ON public.research_events (installation_id, occurred_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_research_events_workshop
     ON public.research_events (workshop_code, occurred_at);
@@ -100,12 +170,190 @@ CREATE INDEX IF NOT EXISTS idx_research_events_received
 
 ALTER TABLE public.research_events ENABLE ROW LEVEL SECURITY;
 
+-- Novos projetos Supabase não expõem mais tabelas automaticamente na Data API.
+-- O agente recebe somente INSERT; SELECT, UPDATE e DELETE continuam revogados.
+REVOKE ALL ON TABLE public.research_events FROM anon, authenticated;
+GRANT INSERT ON TABLE public.research_events TO anon;
+
 DROP POLICY IF EXISTS "anon_insert_research_events" ON public.research_events;
 CREATE POLICY "anon_insert_research_events"
     ON public.research_events
     FOR INSERT
     TO anon
     WITH CHECK (true);
+
+-- =============================================================================
+-- LINHA DO TEMPO DE SESSÃO E CONTROLE DE QUALIDADE
+-- =============================================================================
+
+-- Eventos append-only permitem reconstruir o ciclo de vida da oficina mesmo
+-- quando a rede está instável. Esta tabela não contém respostas dos estudantes.
+CREATE TABLE IF NOT EXISTS public.research_session_events (
+    event_id                   uuid         PRIMARY KEY,
+    session_id                 uuid         NOT NULL,
+    dyad_id                    uuid         NOT NULL,
+    installation_id           uuid         NOT NULL,
+
+    site_id                    text         NOT NULL,
+    regional_hub               text         NOT NULL,
+    school_code                text         NOT NULL,
+    workshop_code              text         NOT NULL,
+    class_code                 text         NOT NULL,
+    grade_band                 text,
+    activity_id                text         NOT NULL,
+    computer_id                text         NOT NULL,
+
+    protocol_version           text         NOT NULL,
+    config_version             text         NOT NULL,
+    config_hash                text         NOT NULL
+        CHECK (config_hash ~ '^[0-9a-f]{64}$'),
+    client_version             text         NOT NULL,
+
+    event_type                 text         NOT NULL
+        CHECK (event_type IN (
+            'session_started',
+            'phase_completed',
+            'activity_started',
+            'heartbeat',
+            'checkpoint_started',
+            'checkpoint_completed',
+            'help_requested',
+            'role_swapped',
+            'ending_requested',
+            'rubric_completed',
+            'session_completed',
+            'session_aborted',
+            'quality_issue'
+        )),
+    severity                   text         NOT NULL DEFAULT 'info'
+        CHECK (severity IN ('info', 'warning', 'error')),
+    interval_mark              integer      CHECK (interval_mark IS NULL OR interval_mark >= 0),
+    participant_id             text,
+    participant_role           text
+        CHECK (participant_role IS NULL OR participant_role IN ('computer', 'assembly')),
+    activity_stage             text,
+
+    elapsed_ms                 bigint       CHECK (elapsed_ms IS NULL OR elapsed_ms >= 0),
+    scheduled_at               timestamptz,
+    occurred_at                timestamptz  NOT NULL,
+    received_at                timestamptz  NOT NULL DEFAULT timezone('utc'::text, now()),
+    details                    jsonb        NOT NULL DEFAULT '{}'::jsonb
+        CHECK (jsonb_typeof(details) = 'object')
+);
+
+CREATE INDEX IF NOT EXISTS idx_research_session_events_session_time
+    ON public.research_session_events (session_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS idx_research_session_events_installation_time
+    ON public.research_session_events (installation_id, occurred_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_research_session_events_type_time
+    ON public.research_session_events (event_type, occurred_at DESC);
+
+ALTER TABLE public.research_session_events ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.research_session_events FROM anon, authenticated;
+GRANT INSERT ON TABLE public.research_session_events TO anon;
+
+DROP POLICY IF EXISTS "anon_insert_research_session_events" ON public.research_session_events;
+CREATE POLICY "anon_insert_research_session_events"
+    ON public.research_session_events
+    FOR INSERT
+    TO anon
+    WITH CHECK (true);
+
+-- =============================================================================
+-- LEITURA ANALÍTICA PROTEGIDA
+-- =============================================================================
+
+-- Consolida completude e alertas sem expor dados ao agente de coleta. A view
+-- usa os privilégios do chamador e permanece revogada para anon/authenticated;
+-- deve ser consultada apenas pelo backend administrativo autorizado.
+CREATE OR REPLACE VIEW public.research_session_quality
+WITH (security_invoker = true)
+AS
+WITH timeline AS (
+    SELECT
+        session_id,
+        min(installation_id::text)::uuid AS installation_id,
+        max(site_id) AS site_id,
+        max(regional_hub) AS regional_hub,
+        max(school_code) AS school_code,
+        max(workshop_code) AS workshop_code,
+        max(class_code) AS class_code,
+        min(occurred_at) AS first_event_at,
+        max(occurred_at) AS last_event_at,
+        max(received_at) AS last_received_at,
+        count(*) FILTER (WHERE event_type = 'heartbeat') AS heartbeat_count,
+        count(*) FILTER (WHERE event_type = 'checkpoint_started') AS checkpoint_started_count,
+        count(*) FILTER (WHERE event_type = 'checkpoint_completed') AS checkpoint_completed_count,
+        count(*) FILTER (WHERE event_type = 'quality_issue') AS quality_issue_count,
+        bool_or(event_type = 'session_completed') AS has_completed,
+        bool_or(event_type = 'session_aborted') AS has_aborted,
+        coalesce(
+            max(jsonb_array_length(details -> 'expected_checkpoints'))
+                FILTER (
+                    WHERE event_type = 'session_started'
+                      AND jsonb_typeof(details -> 'expected_checkpoints') = 'array'
+                ),
+            0
+        ) AS expected_checkpoint_count
+    FROM public.research_session_events
+    GROUP BY session_id
+),
+responses AS (
+    SELECT
+        session_id,
+        count(*) FILTER (WHERE event_type = 'pre') AS pre_response_count,
+        count(*) FILTER (WHERE event_type = 'checkpoint') AS checkpoint_response_count,
+        count(*) FILTER (WHERE event_type = 'post') AS post_response_count,
+        count(*) FILTER (WHERE response_status = 'declined') AS declined_response_count,
+        count(*) FILTER (WHERE response_status = 'timeout') AS timeout_response_count,
+        count(DISTINCT interval_mark)
+            FILTER (WHERE event_type = 'checkpoint' AND screenshot_path IS NOT NULL)
+            AS checkpoint_with_screenshot_count
+    FROM public.research_events
+    GROUP BY session_id
+)
+SELECT
+    timeline.session_id,
+    timeline.installation_id,
+    timeline.site_id,
+    timeline.regional_hub,
+    timeline.school_code,
+    timeline.workshop_code,
+    timeline.class_code,
+    timeline.first_event_at,
+    timeline.last_event_at,
+    timeline.last_received_at,
+    timeline.heartbeat_count,
+    timeline.expected_checkpoint_count,
+    timeline.checkpoint_started_count,
+    timeline.checkpoint_completed_count,
+    coalesce(responses.pre_response_count, 0) AS pre_response_count,
+    coalesce(responses.checkpoint_response_count, 0) AS checkpoint_response_count,
+    coalesce(responses.post_response_count, 0) AS post_response_count,
+    coalesce(responses.declined_response_count, 0) AS declined_response_count,
+    coalesce(responses.timeout_response_count, 0) AS timeout_response_count,
+    coalesce(responses.checkpoint_with_screenshot_count, 0) AS checkpoint_with_screenshot_count,
+    timeline.quality_issue_count,
+    timeline.has_completed,
+    timeline.has_aborted,
+    CASE
+        WHEN timeline.has_aborted THEN 'aborted'
+        WHEN NOT timeline.has_completed THEN 'in_progress'
+        WHEN timeline.quality_issue_count > 0
+          OR timeline.checkpoint_completed_count < timeline.expected_checkpoint_count
+          OR coalesce(responses.pre_response_count, 0) < 2
+          OR coalesce(responses.checkpoint_response_count, 0) < (timeline.expected_checkpoint_count * 2)
+          OR coalesce(responses.post_response_count, 0) < 2
+        THEN 'needs_review'
+        ELSE 'complete'
+    END AS quality_status
+FROM timeline
+LEFT JOIN responses USING (session_id);
+
+REVOKE ALL ON TABLE public.research_session_quality FROM anon, authenticated;
 
 -- =============================================================================
 -- STORAGE PRIVADO
@@ -128,6 +376,15 @@ DROP POLICY IF EXISTS "Allow public read access to screenshots" ON storage.objec
 
 COMMENT ON TABLE public.research_events IS
     'Eventos individuais e pseudonimizados coletados durante oficinas pontuais do PulseLab.';
+
+COMMENT ON TABLE public.research_session_events IS
+    'Linha do tempo append-only de execução, evidências técnicas minimizadas e qualidade da coleta.';
+
+COMMENT ON VIEW public.research_session_quality IS
+    'Resumo protegido de completude e alertas por sessão; leitura exclusiva do backend administrativo.';
+
+COMMENT ON COLUMN public.research_session_events.details IS
+    'Metadados técnicos minimizados do evento; não deve receber nomes, respostas livres ou títulos de janelas.';
 
 COMMENT ON COLUMN public.research_events.occurred_at IS
     'Horário do evento no cliente; preserva o momento real mesmo quando o envio ocorre offline.';

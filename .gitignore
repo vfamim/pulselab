@@ -14,6 +14,9 @@
 .env
 *.env
 
+# Generated standalone installer contains the Supabase anon key
+Install-Pulselab*.bat
+
 # OS artifacts
 Thumbs.db
 .DS_Store
@@ -22,3 +25,7 @@ desktop.ini
 # Editor
 .vscode/
 *.code-workspace
+
+# Python test/build artifacts
+__pycache__/
+*.py[cod]
