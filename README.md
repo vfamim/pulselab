@@ -32,6 +32,8 @@ pulselab/
 │   └── config.json             # Configuração remota GitOps (fonte de verdade no GitHub)
 ├── dashboard/
 │   └── index.html              # Painel Analytics (Resultados, Metodologia, TCC e Coletor)
+├── web/
+│   └── agent-simulator/        # Simulador navegável do agente para Linux e validação
 ├── installer/
 │   ├── build-installer.py      # Script Python para compilar o instalador único (Linux/macOS)
 │   ├── build-installer.ps1     # Script PowerShell para compilar o instalador único (Windows)
@@ -43,6 +45,7 @@ pulselab/
     ├── protocolo-pesquisa-v1.md # Protocolo acadêmico e decisões pendentes
     ├── parecer-roadmap-observacao-distribuida.md # Parecer e roadmap de longo prazo
     ├── arquitetura-evidencias-v1.4.md # Contrato técnico do primeiro incremento
+    ├── validacao-simulador-web.md # Protocolo de validação do fluxo navegável
     ├── relatorio-metodologia-pulselab.html # Relatório navegável
     └── tcc-research-framework.md # Guia histórico do TCC
 ```
@@ -51,9 +54,30 @@ pulselab/
 
 ## Pré-requisitos
 
-- Windows 10 ou superior com PowerShell 5.1 (padrão de fábrica)
-- Projeto configurado no [Supabase](https://supabase.com)
-- Permissão de usuário padrão (sem privilégios administrativos / UAC)
+- Para o agente real: Windows 10 ou superior com PowerShell 5.1, um projeto
+  configurado no [Supabase](https://supabase.com) e permissão de usuário padrão.
+- Para o simulador: Linux, macOS ou Windows, Node.js e um navegador atual. O
+  simulador não precisa de Supabase e não coleta dados reais.
+
+## Simulador web no Linux
+
+O fluxo da versão 1.4 pode ser percorrido no navegador sem uma máquina Windows:
+
+```bash
+cd web/agent-simulator
+npm install
+npm run dev
+```
+
+Acesse `http://localhost:3000`. A interface permite simular o fluxo padrão,
+atraso de checkpoint, ausência do SPIKE e queda de rede, além de inspecionar os
+eventos e exportar a sessão em JSON.
+
+Essa versão valida a experiência do instrumento e seus contratos. Captura de
+tela, detecção da janela do SPIKE, cache em disco, sincronização com Supabase e
+integração Win32 continuam sendo responsabilidades do agente Windows. O roteiro
+de avaliação está em
+[`docs/validacao-simulador-web.md`](docs/validacao-simulador-web.md).
 
 ---
 
@@ -262,3 +286,11 @@ python3 -m unittest discover -s tests -v
 ```
 
 Os testes conferem configuração, versões, eventos aceitos pelo schema, permissões do coletor, minimização da telemetria, integridade básica dos blocos XAML e conteúdo embutido no instalador.
+
+Para verificar também o simulador web:
+
+```bash
+npm test --prefix web/agent-simulator
+npm run check --prefix web/agent-simulator
+npm run build --prefix web/agent-simulator
+```

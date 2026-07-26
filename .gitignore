@@ -29,3 +29,10 @@ desktop.ini
 # Python test/build artifacts
 __pycache__/
 *.py[cod]
+
+# Web simulator build artifacts
+node_modules/
+dist/
+.next/
+.vinext/
+.vite/

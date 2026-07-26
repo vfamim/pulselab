@@ -1,0 +1,23 @@
+{
+  "name": "pulselab-agent-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vinext dev --hostname 0.0.0.0",
+    "build": "vinext build",
+    "start": "vinext start",
+    "check": "vinext check",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@mdx-js/rollup": "3.1.1",
+    "@vitejs/plugin-react": "6.0.1",
+    "@vitejs/plugin-rsc": "0.5.26",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-server-dom-webpack": "19.2.8",
+    "vinext": "1.0.0-beta.4",
+    "vite": "8.1.5"
+  }
+}
