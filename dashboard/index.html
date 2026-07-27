@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PulseLab Analytics - Painel de Observabilidade Multimodal e Carga Cognitiva para Educação Robótica.">
+    <title>PulseLab Analytics - Central de Observabilidade Acadêmica</title>
+    
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js para gráficos interativos de alta qualidade -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #070612;
+            --card-bg: #111024;
+            --border-purple: #232145;
+            --accent-violet: #8A2BE2;
+            --accent-blue: #00BFFF;
+            --text-main: #E6E6FA;
+            --text-secondary: #9696AA;
+            --neon-green: #39FF14;
+            --neon-red: #FF3131;
+            --transition-speed: 0.3s;
+            --sidebar-width: 280px;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            display: flex;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .demo-notice {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.8rem;
+            padding: 1rem 1.2rem;
+            color: #fff3c4;
+            background: rgba(255, 181, 71, 0.10);
+            border: 1px solid rgba(255, 181, 71, 0.42);
+            border-radius: 12px;
+            line-height: 1.45;
+            font-size: 0.88rem;
+        }
+
+        .demo-notice strong { color: #ffd77c; }
+
+        /* --- SIDEBAR NAVIGATION --- */
+        aside {
+            width: var(--sidebar-width);
+            background-color: #080718;
+            border-right: 1px solid var(--border-purple);
+            display: flex;
+            flex-direction: column;
+            padding: 2rem 1.5rem;
+            position: fixed;
+            height: 100vh;
+            z-index: 10;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 3rem;
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--accent-violet), var(--accent-blue));
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px rgba(138, 43, 226, 0.4);
+        }
+
+        .logo-icon svg {
+            width: 22px;
+            height: 22px;
+            fill: white;
+        }
+
+        .logo-text {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #ffffff, var(--accent-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        nav {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.85rem 1rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 10px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition-speed) ease;
+            border: 1px solid transparent;
+        }
+
+        .nav-item:hover, .nav-item.active {
+            color: white;
+            background-color: var(--card-bg);
+            border-color: var(--border-purple);
+        }
+
+        .nav-item.active {
+            border-left: 4px solid var(--accent-blue);
+            background-color: rgba(35, 33, 69, 0.3);
+        }
+
+        .nav-item svg {
+            width: 20px;
+            height: 20px;
+            fill: currentColor;
+        }
+
+        .sidebar-footer {
+            margin-top: auto;
+            border-top: 1px solid var(--border-purple);
+            padding-top: 1.5rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .sidebar-footer strong {
+            color: var(--text-main);
+        }
+
+        /* --- MAIN CONTENT AREA --- */
+        main {
+            margin-left: var(--sidebar-width);
+            flex: 1;
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            min-height: 100vh;
+        }
+
+        /* --- HEADER --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-purple);
+            padding-bottom: 1.5rem;
+        }
+
+        .header-title-area h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 0.3rem;
+            background: linear-gradient(to right, #ffffff, #dcdcf0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-title-area p {
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .hub-selector-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            padding: 0.6rem 1.2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .hub-selector-container label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .hub-select {
+            background-color: transparent;
+            border: none;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-weight: 600;
+            font-size: 0.95rem;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .hub-select option {
+            background-color: var(--card-bg);
+            color: white;
+        }
+
+        /* --- TABS CONTENT CONTAINER --- */
+        .tab-content {
+            display: none;
+            flex-direction: column;
+            gap: 2rem;
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .tab-content.active {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- KPI CARD GRID --- */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .kpi-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 1.5rem;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            transition: transform var(--transition-speed) ease, border-color var(--transition-speed);
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent-blue);
+        }
+
+        .kpi-card::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: linear-gradient(to bottom, var(--accent-blue), var(--accent-violet));
+        }
+
+        .kpi-title {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .kpi-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            color: white;
+        }
+
+        .kpi-description {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* --- CHARTS GRID --- */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 1024px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .chart-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .chart-header h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 320px;
+        }
+
+        /* --- GEODISTRIBUTED ASYNC MONITOR --- */
+        .async-monitor-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .async-monitor-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .async-map-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .async-map-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .hubs-status-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            margin-top: 0.5rem;
+        }
+
+        .hub-status-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: rgba(35, 33, 69, 0.2);
+            border: 1px solid var(--border-purple);
+            padding: 0.8rem 1rem;
+            border-radius: 10px;
+        }
+
+        .hub-info {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--neon-green);
+            box-shadow: 0 0 8px var(--neon-green);
+        }
+
+        .status-dot.offline {
+            background-color: var(--text-secondary);
+            box-shadow: none;
+        }
+
+        .hub-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .hub-machines {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .terminal-log-card {
+            background-color: #04030a;
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 1.5rem;
+            font-family: 'Fira Code', monospace;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-purple);
+            padding-bottom: 0.5rem;
+        }
+
+        .terminal-header span {
+            font-size: 0.85rem;
+            color: var(--accent-blue);
+            font-weight: 500;
+        }
+
+        .terminal-body {
+            height: 220px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            padding-right: 0.5rem;
+        }
+
+        /* --- STALLS TABLE CARD --- */
+        .table-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .table-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .responsive-table {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-purple);
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-purple);
+            font-size: 0.9rem;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            padding: 0.3rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-red {
+            background-color: rgba(255, 49, 49, 0.15);
+            color: var(--neon-red);
+            border: 1px solid rgba(255, 49, 49, 0.3);
+        }
+
+        .badge-orange {
+            background-color: rgba(255, 165, 0, 0.15);
+            color: orange;
+            border: 1px solid rgba(255, 165, 0, 0.3);
+        }
+
+        /* --- METHODOLOGY/TCC TAB STYLES --- */
+        .method-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 1024px) {
+            .method-info-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .method-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+        }
+
+        .method-card h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: white;
+            border-bottom: 2px solid var(--border-purple);
+            padding-bottom: 0.5rem;
+        }
+
+        .method-card p {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .method-card strong {
+            color: var(--text-main);
+        }
+
+        .formula-card-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        @media (max-width: 600px) {
+            .formula-card-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .formula-card {
+            background: linear-gradient(135deg, rgba(20, 19, 40, 0.8), rgba(13, 12, 32, 0.8));
+            border: 1px solid var(--border-purple);
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+        }
+
+        .formula-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .formula-expr {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--accent-blue);
+            margin: 0.5rem 0;
+        }
+
+        /* --- TCC CHAPTER CARDS --- */
+        .tcc-chapter-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            transition: transform var(--transition-speed);
+        }
+
+        .tcc-chapter-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-blue);
+        }
+
+        .tcc-chapter-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent-blue);
+            border-left: 3px solid var(--accent-violet);
+            padding-left: 0.8rem;
+        }
+
+        .tcc-chapter-body {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* --- STATISTICAL CORRELATION MATRIX --- */
+        .correlation-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .correlation-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            color: white;
+        }
+
+        .correlation-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: center;
+        }
+
+        .correlation-table th {
+            text-align: center;
+            font-size: 0.75rem;
+        }
+
+        .correlation-table td {
+            font-weight: bold;
+            font-family: 'Fira Code', monospace;
+            padding: 1rem;
+            font-size: 1rem;
+        }
+
+        .corr-header-label {
+            color: var(--text-main);
+            font-weight: 600;
+            text-align: left;
+            font-size: 0.85rem;
+        }
+
+        /* --- ACADEMIC DATA EXPORT MOCK --- */
+        .export-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .export-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            color: white;
+        }
+
+        .export-buttons-group {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .export-btn {
+            background: linear-gradient(135deg, rgba(37, 35, 71, 0.6), rgba(20, 19, 40, 0.6));
+            border: 1px solid var(--border-purple);
+            color: var(--text-main);
+            padding: 0.8rem 1.5rem;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            font-size: 0.85rem;
+            transition: all var(--transition-speed) ease;
+        }
+
+        .export-btn:hover {
+            border-color: var(--accent-blue);
+            background-color: var(--border-purple);
+            transform: translateY(-2px);
+        }
+
+        .export-btn svg {
+            width: 18px;
+            height: 18px;
+            fill: currentColor;
+        }
+
+        /* --- THE APP TAB STYLES --- */
+        .app-arch-section {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-purple);
+            border-radius: 16px;
+            padding: 2.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .app-arch-section h2 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            color: white;
+        }
+
+        .flow-diagram-horizontal {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            margin: 2rem 0;
+            overflow-x: auto;
+            padding: 1rem 0;
+        }
+
+        @media (max-width: 900px) {
+            .flow-diagram-horizontal {
+                flex-direction: column;
+                gap: 2rem;
+            }
+            .flow-arrow {
+                transform: rotate(90deg);
+            }
+        }
+
+        .flow-step {
+            flex: 1;
+            min-width: 180px;
+            background-color: rgba(37, 35, 71, 0.4);
+            border: 1px solid var(--border-purple);
+            border-radius: 12px;
+            padding: 1.2rem;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .flow-step-num {
+            width: 28px;
+            height: 28px;
+            background-color: var(--accent-blue);
+            color: #000;
+            font-weight: 700;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .flow-step h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .flow-step p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .flow-arrow {
+            color: var(--accent-violet);
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+
+        .details-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .detail-item {
+            background-color: rgba(13, 12, 32, 0.5);
+            border: 1px solid var(--border-purple);
+            border-radius: 12px;
+            padding: 1.5rem;
+            display: flex;
+            gap: 1rem;
+        }
+
+        .detail-icon {
+            font-size: 1.5rem;
+        }
+
+        .detail-content h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .detail-content p {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- --- SIDEBAR --- -->
+    <aside>
+        <div class="logo-container">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+                </svg>
+            </div>
+            <span class="logo-text">PulseLab</span>
+        </div>
+        
+        <nav>
+            <div class="nav-item active" id="btn-resultados" onclick="switchTab('resultados')">
+                <svg viewBox="0 0 24 24">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                </svg>
+                Resultados
+            </div>
+            <div class="nav-item" id="btn-metodologia" onclick="switchTab('metodologia')">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5.89 12.57l6.11 3.33 6.11-3.33v2.33l-6.11 3.33-6.11-3.33v-2.33z"/>
+                </svg>
+                Tese & Metodologia
+            </div>
+            <div class="nav-item" id="btn-tcc" onclick="switchTab('tcc')">
+                <svg viewBox="0 0 24 24">
+                    <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5.89 12.57l6.11 3.33 6.11-3.33v2.33l-6.11 3.33-6.11-3.33v-2.33z"/>
+                </svg>
+                Estrutura do TCC
+            </div>
+            <div class="nav-item" id="btn-aplicativo" onclick="switchTab('aplicativo')">
+                <svg viewBox="0 0 24 24">
+                    <path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z"/>
+                </svg>
+                O Aplicativo
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <p>Projeto <strong>Educação Robótica</strong></p>
+            <p>Versão do Agente: 1.4.0</p>
+        </div>
+    </aside>
+
+    <!-- --- MAIN CONTENT --- -->
+    <main>
+        <div class="demo-notice" role="status">
+            <span>⚠</span>
+            <div><strong>Protótipo demonstrativo:</strong> os números, correlações, nomes, alertas e o feed exibidos nesta página são dados simulados. O painel ainda não está conectado ao Supabase e não deve ser usado para relatar resultados de pesquisa.</div>
+        </div>
+        
+        <!-- HEADER -->
+        <header>
+            <div class="header-title-area">
+                <h1 id="main-heading">Resultados das Oficinas</h1>
+                <p id="main-subheading">Acompanhamento e monitoramento de carga cognitiva em tempo real</p>
+            </div>
+            
+            <div class="hub-selector-container" id="selector-box">
+                <label for="hub-select">Polo Ativo:</label>
+                <select id="hub-select" class="hub-select" onchange="updateHubData()">
+                    <option value="Polo-Nordeste-01">Polo Nordeste 01</option>
+                    <option value="Polo-Sudeste-02">Polo Sudeste 02</option>
+                    <option value="Polo-Sul-01">Polo Sul 01</option>
+                </select>
+            </div>
+        </header>
+
+        <!-- ================= TAB: RESULTADOS ================= -->
+        <section class="tab-content active" id="tab-resultados">
+            
+            <!-- KPI GRID -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-title">Estudantes Impactados</span>
+                    <span class="kpi-value" id="kpi-students">142</span>
+                    <span class="kpi-description">Engajamento contínuo nas oficinas</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-title">Média de Carga Cognitiva</span>
+                    <span class="kpi-value" id="kpi-load">2.4 / 4.0</span>
+                    <span class="kpi-description">Equilíbrio produtivo ideal</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-title">Nível de Satisfação</span>
+                    <span class="kpi-value" id="kpi-satisfaction">96%</span>
+                    <span class="kpi-description">Expressaram desejo de retornar</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-title">Recuperação de Cache</span>
+                    <span class="kpi-value" id="kpi-cache">100%</span>
+                    <span class="kpi-description">Dados retransmitidos após quedas</span>
+                </div>
+            </div>
+
+            <!-- GEODISTRIBUTED MONITOR GRID -->
+            <div class="async-monitor-grid">
+                <!-- Map / Hub status -->
+                <div class="async-map-card">
+                    <h3>Monitor de Coleta Remota (Assíncrona e Simultânea)</h3>
+                    <p style="font-size:0.85rem; color:var(--text-secondary);">Demonstra como o painel poderá indicar quais salas estão sincronizando dados. A cobertura remota reduz a presença logística, mas <strong>não comprova sozinha a qualidade da observação</strong>.</p>
+                    
+                    <div class="hubs-status-list">
+                        <div class="hub-status-row">
+                            <div class="hub-info">
+                                <div class="status-dot"></div>
+                                <div>
+                                    <div class="hub-name">Polo Nordeste 01 (Ceará)</div>
+                                    <div class="hub-machines">12 computadores ativos</div>
+                                </div>
+                            </div>
+                            <span class="badge" style="background-color:rgba(57,255,20,0.1); color:var(--neon-green);">ATIVO</span>
+                        </div>
+                        <div class="hub-status-row">
+                            <div class="hub-info">
+                                <div class="status-dot"></div>
+                                <div>
+                                    <div class="hub-name">Polo Sudeste 02 (São Paulo)</div>
+                                    <div class="hub-machines">18 computadores ativos</div>
+                                </div>
+                            </div>
+                            <span class="badge" style="background-color:rgba(57,255,20,0.1); color:var(--neon-green);">ATIVO</span>
+                        </div>
+                        <div class="hub-status-row">
+                            <div class="hub-info">
+                                <div class="status-dot offline"></div>
+                                <div>
+                                    <div class="hub-name">Polo Sul 01 (Paraná)</div>
+                                    <div class="hub-machines">Sessão finalizada há 2h</div>
+                                </div>
+                            </div>
+                            <span class="badge" style="background-color:rgba(150,150,170,0.15); color:var(--text-secondary);">STANDBY</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live log stream -->
+                <div class="terminal-log-card">
+                    <div class="terminal-header">
+                        <span>Console de Entrada (Supabase Live Feed)</span>
+                        <span style="color:var(--neon-green); font-size:0.75rem;">● ONLINE</span>
+                    </div>
+                    <div class="terminal-body" id="live-log-stream">
+                        <!-- Append dynamic console logs here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- CHARTS GRID -->
+            <div class="charts-grid">
+                <!-- Line Chart: Trajectory -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Trajetória da Carga Cognitiva Média</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="trajectoryChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Doughnut Chart: Emotions -->
+                <div class="chart-card">
+                    <div class="chart-header">
+                        <h3>Saldo Emocional (Encerramento)</h3>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="emotionsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLE: STALLS -->
+            <div class="table-card">
+                <h3>Gargalos Cognitivos e Bloqueios Recentes (Auto-detecção MMLA)</h3>
+                <div class="responsive-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Horário</th>
+                                <th>Dupla</th>
+                                <th>Carga Relatada</th>
+                                <th>Ponto Crítico Identificado</th>
+                                <th>Software</th>
+                                <th>Ação no Dashboard</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stalls-table-body">
+                            <!-- Inserido dinamicamente via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ================= TAB: METODOLOGIA / TCC ================= -->
+        <section class="tab-content" id="tab-metodologia">
+            
+            <div class="method-info-grid">
+                <!-- Left: MMLA & Hawthorne -->
+                <div class="method-card">
+                    <h2>Observação Distribuída e Reatividade</h2>
+                    <p>O PulseLab reduz a necessidade de um pesquisador externo ao lado de cada dupla e facilita a coleta simultânea em diferentes escolas. Essa arquitetura pode reduzir uma fonte de reatividade, mas <strong>não elimina nem comprova a eliminação do efeito Hawthorne</strong>.</p>
+                    <p>1. <strong>Escala multicêntrica:</strong> o mesmo protocolo pode ser aplicado em oficinas distintas, com registro de escola, turma, atividade e versão do instrumento.</p>
+                    <p>2. <strong>Autorrelatos contextualizados:</strong> esforço mental, situação da dupla e colaboração são medidos separadamente. A captura privada da janela do SPIKE oferece contexto e não é tratada como validação do estado mental da criança.</p>
+                </div>
+
+                <!-- Right: Formulas & Metrology -->
+                <div class="method-card">
+                    <h2>Fórmulas de Triangulação Metodológica</h2>
+                    <div class="formula-card-grid">
+                        <div class="formula-card">
+                            <div class="formula-title">Dissonância de Carga Cognitiva</div>
+                            <div class="formula-expr">DCC = |Carga_{PC} - Carga_{Mesa}|</div>
+                            <p style="font-size:0.75rem; color:var(--text-secondary);">Diferença exploratória de esforço entre participantes. Não permite concluir, sozinha, que existe colaboração fraca.</p>
+                        </div>
+
+                        <div class="formula-card">
+                            <div class="formula-title">Inatividade Ativa</div>
+                            <div class="formula-expr">Idle = segundos desde a última entrada</div>
+                            <p style="font-size:0.75rem; color:var(--text-secondary);">Instantâneo técnico. Pode indicar construção física, conversa, observação ou bloqueio; não é uma fração do intervalo.</p>
+                        </div>
+                    </div>
+
+                    <div class="formula-card" style="margin-top:0.8rem;">
+                        <div class="formula-title">Taxa de Evolução do Código</div>
+                        <div class="formula-expr">TEC = Tamanho_{t40} - Tamanho_{t20} (KB)</div>
+                        <p style="font-size:0.75rem; color:var(--text-secondary);">Indicador exploratório que deve ser validado contra a rubrica da missão. Tamanho de arquivo não equivale diretamente a aprendizagem.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STATISTICAL CORRELATION MATRIX -->
+            <div class="correlation-card">
+                <h3>Matriz Exploratória — Valores Simulados</h3>
+                <p style="font-size:0.85rem; color:var(--text-secondary);">Esta matriz é apenas uma visualização de interface. A análise definitiva deve considerar respostas ordinais e o agrupamento por estudante, dupla, oficina e escola.</p>
+                
+                <div class="responsive-table">
+                    <table class="correlation-table">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;">Métrica</th>
+                                <th>Carga Cognitiva</th>
+                                <th>Evolução de Código (KB)</th>
+                                <th>Inatividade (segundos)</th>
+                                <th>Desvio de Foco (Apps fora do SPIKE)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="corr-header-label">Carga Cognitiva</td>
+                                <td style="background-color:rgba(138,43,226,0.3); color:#fff;">1.00</td>
+                                <td id="corr-load-code" style="color:var(--neon-red);">-0.48</td>
+                                <td id="corr-load-idle" style="color:var(--neon-green);">+0.32</td>
+                                <td id="corr-load-focus" style="color:var(--neon-green);">+0.18</td>
+                            </tr>
+                            <tr>
+                                <td class="corr-header-label">Evolução de Código (KB)</td>
+                                <td id="corr-code-load" style="color:var(--neon-red);">-0.48</td>
+                                <td style="background-color:rgba(138,43,226,0.3); color:#fff;">1.00</td>
+                                <td id="corr-code-idle" style="color:var(--neon-red);">-0.55</td>
+                                <td id="corr-code-focus" style="color:var(--neon-red);">-0.32</td>
+                            </tr>
+                            <tr>
+                                <td class="corr-header-label">Inatividade (segundos)</td>
+                                <td id="corr-idle-load" style="color:var(--neon-green);">+0.32</td>
+                                <td id="corr-idle-code" style="color:var(--neon-red);">-0.55</td>
+                                <td style="background-color:rgba(138,43,226,0.3); color:#fff;">1.00</td>
+                                <td id="corr-idle-focus" style="color:var(--neon-green);">+0.41</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ACADEMIC DATA EXPORT -->
+            <div class="export-card">
+                <h3>Módulo de Exportação para Análise Estatística (TCC)</h3>
+                <p style="font-size:0.85rem; color:var(--text-secondary);">Baixe a base de dados tratada ou os scripts de modelagem estatística prontos para rodar no SPSS, R, Jamovi ou Python.</p>
+                <div class="export-buttons-group">
+                    <button class="export-btn" onclick="mockExport('SPSS/R (.CSV)')">
+                        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/></svg>
+                        Base Inteira Trata (.CSV)
+                    </button>
+                    <button class="export-btn" onclick="mockExport('Sintaxe R (.R)')">
+                        <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
+                        Script de Regressão (.R)
+                    </button>
+                    <button class="export-btn" onclick="mockExport('Dataset de Carga Cognitiva (.XLSX)')">
+                        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 7h-4V6h4v4zm-6-4v4H6V6h6zm-6 6h6v4H6v-4zm12 4h-4v-4h4v4z"/></svg>
+                        Dataset de Alunos (.XLSX)
+                    </button>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ================= TAB: ESTRUTURA DO TCC ================= -->
+        <section class="tab-content" id="tab-tcc">
+            
+            <!-- --- CHAPTERS SECTION --- -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.4rem; color: white; border-bottom: 2px solid var(--border-purple); padding-bottom: 0.5rem;">
+                    Estrutura de Capítulos Proposta para o TCC
+                </h3>
+                
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+                    <div class="tcc-chapter-card">
+                        <div class="tcc-chapter-title">Capítulo 1: Introdução</div>
+                        <div class="tcc-chapter-body">
+                            Define o problema da robótica educacional e a necessidade de avaliações não invasivas. Introduz a mitigação do <strong>Efeito Hawthorne</strong> e a escalabilidade da coleta sem observadores locais.
+                        </div>
+                    </div>
+                    
+                    <div class="tcc-chapter-card">
+                        <div class="tcc-chapter-title">Capítulo 2: Fundamentação Teórica</div>
+                        <div class="tcc-chapter-body">
+                            Aborda a <strong>Teoria da Carga Cognitiva</strong> (Sweller), o framework de <strong>Multimodal Learning Analytics (MMLA)</strong> e a dinâmica colaborativa da Robótica Educacional.
+                        </div>
+                    </div>
+
+                    <div class="tcc-chapter-card">
+                        <div class="tcc-chapter-title">Capítulo 3: Metodologia (Protocolo Pulselab)</div>
+                        <div class="tcc-chapter-body">
+                            Explica a arquitetura de telemetria distribuída, o pareamento temporal das capturas de tela (*Grounding Visual*) e a conformidade da resiliência offline com a LGPD.
+                        </div>
+                    </div>
+
+                    <div class="tcc-chapter-card">
+                        <div class="tcc-chapter-title">Capítulo 4: Resultados e Discussão</div>
+                        <div class="tcc-chapter-body">
+                            Analisa esforço, bloqueio, colaboração e desempenho com modelos compatíveis com respostas ordinais e dados agrupados. Evidências visuais e telemetria são tratadas como contexto auxiliar.
+                        </div>
+                    </div>
+
+                    <div class="tcc-chapter-card">
+                        <div class="tcc-chapter-title">Capítulo 5: Conclusões</div>
+                        <div class="tcc-chapter-body">
+                            Sintetiza as contribuições pedagógicas do Pulselab, validando o monitoramento de múltiplos centros e indicando melhorias curriculares.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- --- DEFENSE ARGUMENTS SECTION --- -->
+            <div style="display: flex; flex-direction: column; gap: 1.5rem; margin-top: 1rem;">
+                <h3 style="font-family: 'Outfit', sans-serif; font-size: 1.4rem; color: white; border-bottom: 2px solid var(--border-purple); padding-bottom: 0.5rem;">
+                    Argumentos de Defesa para a Banca Examinadora
+                </h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div style="background-color: rgba(0, 191, 255, 0.05); border: 1px solid var(--accent-blue); padding: 1.5rem; border-radius: 12px;">
+                        <h4 style="color: var(--accent-blue); font-family: 'Outfit', sans-serif; margin-bottom: 0.5rem;">Pergunta 1: Como vocês garantem a confiabilidade do auto-relato de crianças?</h4>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
+                            <strong>Resposta de Defesa:</strong> O instrumento ainda está em validação. Separamos esforço mental, bloqueio e colaboração, realizamos entrevistas cognitivas e comparamos os relatos com intervenções e desempenho observável. A captura privada do SPIKE contextualiza o momento, mas não valida sozinha o estado mental da criança.
+                        </p>
+                    </div>
+
+                    <div style="background-color: rgba(138, 43, 226, 0.05); border: 1px solid var(--accent-violet); padding: 1.5rem; border-radius: 12px;">
+                        <h4 style="color: var(--accent-violet); font-family: 'Outfit', sans-serif; margin-bottom: 0.5rem;">Pergunta 2: Sem um pesquisador na sala, como sabemos se os alunos não estavam dispersos?</h4>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
+                            <strong>Resposta de Defesa:</strong> O PulseLab registra um instantâneo técnico no checkpoint. Janela ativa e tempo desde a última entrada ajudam a interpretar o contexto, mas não provam dispersão: construção física, conversa produtiva e observação também podem deixar o computador inativo.
+                        </p>
+                    </div>
+
+                    <div style="background-color: rgba(57, 255, 20, 0.05); border: 1px solid var(--neon-green); padding: 1.5rem; border-radius: 12px;">
+                        <h4 style="color: var(--neon-green); font-family: 'Outfit', sans-serif; margin-bottom: 0.5rem;">Pergunta 3: A coleta distribuída não sofre com instabilidades de rede das escolas?</h4>
+                        <p style="font-size: 0.9rem; color: var(--text-secondary); line-height: 1.5;">
+                            <strong>Resposta de Defesa:</strong> Eventos preservam horário de ocorrência, ficam temporariamente em <code>%LOCALAPPDATA%\PulseLab\cache</code> e são reenviados de forma idempotente. A completude deve ser auditada; o protocolo não promete “zero perda” sem evidência operacional.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- ================= TAB: APLICATIVO ================= -->
+        <section class="tab-content" id="tab-aplicativo">
+            
+            <div class="app-arch-section">
+                <h2>Como Funciona o PulseLab Agent</h2>
+                <p>O <strong>PulseLab Agent</strong> é um coletor de eventos de pesquisa construído em PowerShell nativo (WPF/XAML) para computadores Windows usados nas oficinas.</p>
+                
+                <!-- DIAGRAM -->
+                <div class="flow-diagram-horizontal">
+                    <div class="flow-step">
+                        <span class="flow-step-num">1</span>
+                        <h4>Lançamento</h4>
+                        <p>O instrutor inicia a sessão clicando duas vezes no atalho da Área de Trabalho.</p>
+                    </div>
+                    <div class="flow-arrow">&rarr;</div>
+                    <div class="flow-step">
+                        <span class="flow-step-num">2</span>
+                        <h4>Contexto e assentimento</h4>
+                        <p>O instrutor informa códigos da oficina; as crianças recebem pseudônimos e aceitam ou recusam a pesquisa.</p>
+                    </div>
+                    <div class="flow-arrow">&rarr;</div>
+                    <div class="flow-step">
+                        <span class="flow-step-num">3</span>
+                        <h4>Respostas individuais</h4>
+                        <p>Aos 20/40 minutos, cada criança responde separadamente sobre esforço, progresso e colaboração.</p>
+                    </div>
+                    <div class="flow-arrow">&rarr;</div>
+                    <div class="flow-step">
+                        <span class="flow-step-num">4</span>
+                        <h4>Finalização</h4>
+                        <p>O instrutor registra a rubrica e cada criança responde compreensão, afetos e intenção de retorno.</p>
+                    </div>
+                </div>
+
+                <!-- DETAILS -->
+                <div class="details-list">
+                    <div class="detail-item">
+                        <div class="detail-icon">🔒</div>
+                        <div class="detail-content">
+                            <h4>Execução Sob Demanda</h4>
+                            <p>Não há alteração na inicialização automática do computador e não requer UAC/Administrador. Respeita políticas de segurança rígidas de laboratórios de informática.</p>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-icon">📡</div>
+                        <div class="detail-content">
+                            <h4>Resiliência Offline Auditável</h4>
+                            <p>Eventos recebem identificador único, preservam o horário real e são reenviados do perfil local sem duplicação quando a rede retorna.</p>
+                        </div>
+                    </div>
+                    <div class="detail-item">
+                        <div class="detail-icon">📸</div>
+                        <div class="detail-content">
+                            <h4>Captura Privada e Limitada</h4>
+                            <p>Quando habilitada, captura apenas a janela do SPIKE, comprime o arquivo e o armazena em bucket privado como evidência contextual.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- JS LOGIC FOR SPA AND CHARTS -->
+    <script>
+        // --- DATA DICTIONARY FOR HUBS ---
+        const dashboardData = {
+            "Polo-Nordeste-01": {
+                students: 142,
+                avgLoad: "2.4 / 4.0",
+                satisfaction: "96%",
+                offlineRecovery: "100%",
+                emotions: [34, 26, 21, 8, 7, 4], // dados simulados
+                trajectory: [2.1, 3.2], // t20, t40
+                correlations: {
+                    loadCode: "-0.48",
+                    loadIdle: "+0.32",
+                    loadFocus: "+0.18",
+                    codeIdle: "-0.55",
+                    codeFocus: "-0.32"
+                },
+                stalls: [
+                    { time: "10:24", student: "Arthur & Beatriz", load: 4, reason: "Sensor de Cor Redundante", app: "SPIKE" },
+                    { time: "10:45", student: "Carlos & Davi", load: 3, reason: "Loop Infinito sem Delay", app: "SPIKE" },
+                    { time: "11:15", student: "Elisa & Gabriel", load: 4, reason: "Estagnação em Bloco Condicional", app: "SPIKE" }
+                ]
+            },
+            "Polo-Sudeste-02": {
+                students: 218,
+                avgLoad: "2.8 / 4.0",
+                satisfaction: "91%",
+                offlineRecovery: "98%",
+                emotions: [29, 24, 20, 12, 10, 5],
+                trajectory: [2.4, 3.6],
+                correlations: {
+                    loadCode: "-0.56",
+                    loadIdle: "+0.41",
+                    loadFocus: "+0.25",
+                    codeIdle: "-0.62",
+                    codeFocus: "-0.38"
+                },
+                stalls: [
+                    { time: "08:15", student: "Helena & Igor", load: 4, reason: "Conectores Lógicos Invertidos", app: "SPIKE" },
+                    { time: "09:30", student: "Júlia & Kevin", load: 4, reason: "Falha de Leitura do Giroscópio", app: "SPIKE" },
+                    { time: "09:42", student: "Laura & Mateus", load: 3, reason: "Ociosidade excessiva de mouse", app: "Chrome" }
+                ]
+            },
+            "Polo-Sul-01": {
+                students: 96,
+                avgLoad: "1.9 / 4.0",
+                satisfaction: "98%",
+                offlineRecovery: "100%",
+                emotions: [38, 27, 22, 5, 5, 3],
+                trajectory: [1.8, 2.4],
+                correlations: {
+                    loadCode: "-0.38",
+                    loadIdle: "+0.24",
+                    loadFocus: "+0.11",
+                    codeIdle: "-0.45",
+                    codeFocus: "-0.28"
+                },
+                stalls: [
+                    { time: "14:10", student: "Nícolas & Olívia", load: 3, reason: "Estagnação do Tamanho do Arquivo", app: "SPIKE" }
+                ]
+            }
+        };
+
+        // --- GLOBAL CHART VARIABLES ---
+        let trajectoryChart = null;
+        let emotionsChart = null;
+
+        // --- TAB SWITCHER LOGIC ---
+        function switchTab(tabId) {
+            // Remove active classes
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+
+            // Set active
+            if (tabId === 'resultados') {
+                document.getElementById('btn-resultados').classList.add('active');
+                document.getElementById('tab-resultados').classList.add('active');
+                document.getElementById('main-heading').innerText = "Resultados das Oficinas";
+                document.getElementById('main-subheading').innerText = "Acompanhamento e monitoramento de carga cognitiva em tempo real";
+                document.getElementById('selector-box').style.display = 'flex';
+            } else if (tabId === 'metodologia') {
+                document.getElementById('btn-metodologia').classList.add('active');
+                document.getElementById('tab-metodologia').classList.add('active');
+                document.getElementById('main-heading').innerText = "Metodologia & Validação Acadêmica";
+                document.getElementById('main-subheading').innerText = "Estrutura científica de análise de dados e mitigação de vieses";
+                document.getElementById('selector-box').style.display = 'flex';
+            } else if (tabId === 'tcc') {
+                document.getElementById('btn-tcc').classList.add('active');
+                document.getElementById('tab-tcc').classList.add('active');
+                document.getElementById('main-heading').innerText = "Estrutura de Pesquisa (TCC)";
+                document.getElementById('main-subheading').innerText = "Capítulos acadêmicos e argumentos de defesa para a banca examinadora";
+                document.getElementById('selector-box').style.display = 'none';
+            } else if (tabId === 'aplicativo') {
+                document.getElementById('btn-aplicativo').classList.add('active');
+                document.getElementById('tab-aplicativo').classList.add('active');
+                document.getElementById('main-heading').innerText = "O Aplicativo Coletor";
+                document.getElementById('main-subheading').innerText = "Arquitetura e fluxo de telemetria local no Windows";
+                document.getElementById('selector-box').style.display = 'none';
+            }
+        }
+
+        // --- CHART INITIALIZATION ---
+        function initCharts() {
+            const ctxTrajectory = document.getElementById('trajectoryChart').getContext('2d');
+            trajectoryChart = new Chart(ctxTrajectory, {
+                type: 'line',
+                data: {
+                    labels: ['20 minutos (t20)', '40 minutos (t40)'],
+                    datasets: [{
+                        label: 'Carga Média',
+                        data: [2.1, 3.2],
+                        borderColor: '#00BFFF',
+                        backgroundColor: 'rgba(0, 191, 255, 0.1)',
+                        borderWidth: 3,
+                        tension: 0.3,
+                        fill: true,
+                        pointBackgroundColor: '#8A2BE2',
+                        pointBorderColor: '#fff',
+                        pointHoverRadius: 7
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            min: 1,
+                            max: 4,
+                            ticks: {
+                                color: '#9E9EAE',
+                                stepSize: 1
+                            },
+                            grid: { color: '#232145' }
+                        },
+                        x: {
+                            ticks: { color: '#9E9EAE' },
+                            grid: { color: '#232145' }
+                        }
+                    }
+                }
+            });
+
+            const ctxEmotions = document.getElementById('emotionsChart').getContext('2d');
+            emotionsChart = new Chart(ctxEmotions, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Curioso', 'Confiante', 'Animado', 'Frustrado', 'Cansado', 'Indiferente'],
+                    datasets: [{
+                        data: [34, 26, 21, 8, 7, 4],
+                        backgroundColor: ['#00D2C4', '#00BFFF', '#39FF14', '#FF3131', '#FFB547', '#9696AA'],
+                        borderColor: '#111024',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#E6E6FA',
+                                padding: 15,
+                                font: { family: 'Inter', size: 12 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- UPDATE DATA BASED ON ACTIVE HUB ---
+        function updateHubData() {
+            const selectEl = document.getElementById('hub-select');
+            const hubKey = selectEl.value;
+            const data = dashboardData[hubKey];
+
+            if (!data) return;
+
+            // Update KPIs
+            document.getElementById('kpi-students').innerText = data.students;
+            document.getElementById('kpi-load').innerText = data.avgLoad;
+            document.getElementById('kpi-satisfaction').innerText = data.satisfaction;
+            document.getElementById('kpi-cache').innerText = data.offlineRecovery;
+
+            // Update Trajectory Chart
+            trajectoryChart.data.datasets[0].data = data.trajectory;
+            trajectoryChart.update();
+
+            // Update Emotions Chart
+            emotionsChart.data.datasets[0].data = data.emotions;
+            emotionsChart.update();
+
+            // Update Correlations Table
+            document.getElementById('corr-load-code').innerText = data.correlations.loadCode;
+            document.getElementById('corr-code-load').innerText = data.correlations.loadCode;
+            
+            document.getElementById('corr-load-idle').innerText = data.correlations.loadIdle;
+            document.getElementById('corr-idle-load').innerText = data.correlations.loadIdle;
+
+            document.getElementById('corr-load-focus').innerText = data.correlations.loadFocus;
+            
+            document.getElementById('corr-code-idle').innerText = data.correlations.codeIdle;
+            document.getElementById('corr-idle-code').innerText = data.correlations.codeIdle;
+
+            document.getElementById('corr-code-focus').innerText = data.correlations.codeFocus;
+            document.getElementById('corr-idle-focus').innerText = data.correlations.codeFocus;
+
+            // Update Table
+            const tbody = document.getElementById('stalls-table-body');
+            tbody.innerHTML = '';
+            
+            data.stalls.forEach(stall => {
+                const tr = document.createElement('tr');
+                const loadBadgeClass = stall.load >= 4 ? 'badge-red' : 'badge-orange';
+                
+                tr.innerHTML = `
+                    <td>${stall.time}</td>
+                    <td><strong>${stall.student}</strong></td>
+                    <td><span class="badge ${loadBadgeClass}">Nível ${stall.load}</span></td>
+                    <td>${stall.reason}</td>
+                    <td><code>${stall.app}</code></td>
+                    <td><a href="#" onclick="alert('Link simulado: Grounding visual do código pareado ao Supabase no timestamp correspondente.'); return false;" style="color:var(--accent-blue); text-decoration:none; font-weight:600; font-size:0.8rem;">Ver Printscreen &rarr;</a></td>
+                `;
+                
+                tbody.appendChild(tr);
+            });
+        }
+
+        // --- ASYNC MULTI-SITE LOG SIMULATION ---
+        const locations = [
+            "Polo Nordeste (Ceará - Escola A)", 
+            "Polo Sudeste (SP - Escola B)", 
+            "Polo Nordeste (Ceará - Escola C)", 
+            "Polo Sudeste (SP - Escola D)",
+            "Polo Sul (PR - Escola E)"
+        ];
+        const studentsMock = ["Maria & João", "Pedro & Luana", "Vitor & Ana", "Laura & Felipe", "Gabriela & Thiago"];
+        const statusMock = [
+            "Lançado de forma assíncrona. Agent ID registrado.",
+            "Enviando printscreen comprimido (JPEG 60%) ao Supabase Bucket.",
+            "Marco t20 respondido. Carga cognitiva salva com sucesso.",
+            "Marco t40 respondido. Carga cognitiva salva com sucesso.",
+            "Conexão restaurada: Sincronizando logs offline salvos em cache.",
+            "Oficina finalizada de forma autônoma. Payload t99 gravado no banco."
+        ];
+
+        function simulateLiveLog() {
+            const logBox = document.getElementById("live-log-stream");
+            if (!logBox) return;
+            
+            const randomLoc = locations[Math.floor(Math.random() * locations.length)];
+            const randomStudent = studentsMock[Math.floor(Math.random() * studentsMock.length)];
+            const randomStatus = statusMock[Math.floor(Math.random() * statusMock.length)];
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const logItem = document.createElement("div");
+            logItem.style.marginBottom = "0.5rem";
+            logItem.style.fontSize = "0.8rem";
+            logItem.style.lineHeight = "1.4";
+            logItem.style.borderBottom = "1px solid #1c1a35";
+            logItem.style.paddingBottom = "0.4rem";
+            logItem.innerHTML = `<span style="color:var(--accent-blue); font-weight:600;">[${timestamp}]</span> 
+                                 <span style="color:var(--accent-violet); font-weight:600;">[${randomLoc}]</span> 
+                                 <strong>${randomStudent}:</strong> ${randomStatus}`;
+                                 
+            logBox.insertBefore(logItem, logBox.firstChild);
+            
+            // Limit to 6 items
+            if (logBox.children.length > 6) {
+                logBox.removeChild(logBox.lastChild);
+            }
+        }
+
+        // Run mock logs every 3 seconds
+        setInterval(simulateLiveLog, 3000);
+
+        // Mock download warning
+        function mockExport(formatName) {
+            alert(`[Sucesso Acadêmico] Dataset formatado para ${formatName} preparado com sucesso!\nO arquivo contém os dados consolidados das sessões do Supabase prontos para importação.`);
+        }
+
+        // Run on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            initCharts();
+            updateHubData();
+            // Pre-populate some logs
+            for (let i = 0; i < 5; i++) {
+                simulateLiveLog();
+            }
+        });
+    </script>
+</body>
+</html>
