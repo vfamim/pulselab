@@ -114,7 +114,7 @@ Write-InstallLog "INFO" "Baixando repositório de '$zipUrl'..."
 try {
     # Ensure TLS 1.2 is enabled for secure connection to GitHub
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-    
+
     # Download ZIP file
     Invoke-WebRequest -Uri $zipUrl -OutFile $tempZipPath -UseBasicParsing
     Write-InstallLog "SUCCESS" "Download concluído com sucesso."
@@ -130,7 +130,7 @@ Write-InstallLog "INFO" "Extraindo arquivos do projeto..."
 try {
     # Create temp extraction folder
     New-Item -ItemType Directory -Path $tempExtractDir -Force | Out-Null
-    
+
     # Extract ZIP
     Expand-Archive -Path $tempZipPath -DestinationPath $tempExtractDir -Force
     Write-InstallLog "SUCCESS" "Extração concluída."
@@ -208,7 +208,7 @@ try {
     # Create Desktop shortcut pointing to the new install
     $wshell   = New-Object -ComObject WScript.Shell
     $shortcut = $wshell.CreateShortcut($shortcutPath)
-    
+
     $shortcut.TargetPath       = "powershell.exe"
     $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$DestinationDir\pulselab.ps1`""
     $shortcut.WorkingDirectory = $DestinationDir

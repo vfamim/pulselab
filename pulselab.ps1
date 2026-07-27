@@ -71,23 +71,23 @@ function Show-WpfSetup {
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                
+
                 <!-- Header with Robot -->
                 <StackPanel Grid.Row="0" Margin="0,5,0,15" HorizontalAlignment="Center">
                     <Image Name="ImgRobot" Width="85" Height="85" HorizontalAlignment="Center" Margin="0,0,0,10"/>
                     <TextBlock Text="⚙️ CONFIGURAÇÃO" FontSize="24" FontWeight="ExtraBold" Foreground="#4A90E2" HorizontalAlignment="Center"/>
                     <TextBlock Text="Servidor de Dados do Supabase" FontSize="14" Foreground="#A0A0C0" HorizontalAlignment="Center" Margin="0,5,0,0"/>
                 </StackPanel>
-                
+
                 <!-- Inputs -->
                 <StackPanel Grid.Row="1" VerticalAlignment="Center">
                     <TextBlock Text="SUPABASE URL 🌐" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
                     <TextBox Name="TxtUrl" FontSize="15" Height="40" Background="#1C0F35" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,20"/>
-                    
+
                     <TextBlock Text="SUPABASE ANON KEY 🔑" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,8"/>
                     <TextBox Name="TxtKey" FontSize="15" Height="40" Background="#1C0F35" Foreground="White" BorderBrush="#4A90E2" BorderThickness="1.5" Padding="8,4" VerticalContentAlignment="Center" Margin="0,0,0,10"/>
                 </StackPanel>
-                
+
                 <!-- Save Button -->
                 <Button Name="BtnSave" Grid.Row="2" Content="Salvar e Iniciar Oficina ✨" FontSize="16" FontWeight="Bold" Height="50" Background="#4A90E2" Foreground="White" Cursor="Hand" IsEnabled="False" Margin="0,10,0,10"/>
             </Grid>
@@ -139,7 +139,7 @@ $hasEnvCreds    = (-not [string]::IsNullOrWhiteSpace($envUrl) -and -not [string]
 
 if (-not $hasConfigCreds -and -not $hasEnvCreds) {
     Write-SetupLog "INFO" "Supabase credentials missing. Displaying setup GUI..."
-    
+
     $setup = Show-WpfSetup
     if (-not $setup.Status) {
         Write-SetupLog "ERROR" "Setup dialog cancelled. Setup incomplete."
@@ -172,10 +172,10 @@ $shortcutPath = Join-Path $desktopDir "Iniciar Pulselab - Oficina de Robótica.l
 if (-not (Test-Path $shortcutPath)) {
     try {
         Write-SetupLog "INFO" "Creating Desktop shortcut for manual launch..."
-        
+
         $wshell   = New-Object -ComObject WScript.Shell
         $shortcut = $wshell.CreateShortcut($shortcutPath)
-        
+
         $shortcut.TargetPath       = "powershell.exe"
         $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\pulselab.ps1`""
         $shortcut.WorkingDirectory = $PSScriptRoot
@@ -183,7 +183,7 @@ if (-not (Test-Path $shortcutPath)) {
         $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
         $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
         $shortcut.Save()
-        
+
         Write-SetupLog "INFO" "Desktop shortcut created successfully at $shortcutPath"
     } catch {
         Write-SetupLog "WARN" "Failed to generate Desktop shortcut: $_"
@@ -195,7 +195,7 @@ if (-not (Test-Path $shortcutPath)) {
 # =============================================================================
 if (Test-Path $script:AGENT_PATH) {
     Write-SetupLog "INFO" "Starting Pulselab agent daemon..."
-    
+
     # Forward command switches
     $params = @{}
     if ($DebugMode) { $params["DebugMode"] = $true }
