@@ -267,15 +267,85 @@ Verifique `config_remote_url`, a versão registrada no log e se a máquina conse
 
 ---
 
-## Modo de Simulação Rápida (Desenvolvedor / Teste)
+## Testar o agente no Windows sem esperar o timer
 
-Para testar todo o fluxo sem esperar 20/40 minutos reais:
+Estas instruções percorrem o agente real em WPF. Use somente códigos e dados de
+teste.
 
-1. Abra `config/config.json` e altere as opções:
-   - `"debug_mode"`: `true`
-   - `"debug_no_wait"`: `true` para abrir os checkpoints sem aguardar intervalo
-   - `"interval_marks_minutes"`: `[1, 2]`
-2. Execute o agente manualmente. Com `debug_no_wait: true`, os checkpoints são abertos consecutivamente, sem espera de tempo. Com `debug_no_wait: false`, cada unidade do array equivale a um segundo: `[1, 2]` abre os checkpoints aproximadamente no primeiro e no segundo segundo. Use somente com dados de teste.
+### 1. Baixar a versão correta
+
+Em uma pasta de trabalho, abra o PowerShell:
+
+```powershell
+git clone https://github.com/vfamim/pulselab.git
+cd pulselab
+git switch feature/learning-analytics-core
+```
+
+Se o repositório já estiver no computador:
+
+```powershell
+git fetch origin
+git switch feature/learning-analytics-core
+git pull --ff-only
+```
+
+### 2. Ativar o modo sem espera
+
+Abra `config/config.json` e mantenha os marcos reais, mas ative as duas opções de
+teste:
+
+```json
+"interval_marks_minutes": [20, 40],
+"debug_mode": true,
+"debug_no_wait": true
+```
+
+Com `debug_no_wait: true`, os checkpoints identificados como 20 e 40 minutos
+abrem consecutivamente. Não é necessário alterar os marcos para `[1, 2]`.
+
+### 3. Impedir que a configuração remota reative o timer
+
+Ao iniciar com internet, o agente tenta baixar `config_remote_url` e pode
+substituir o arquivo local pela configuração da branch `main`, que utiliza o
+timer normal.
+
+Para testar a configuração local:
+
+1. desligue temporariamente o Wi-Fi;
+2. execute o agente;
+3. aguarde aparecer a janela **Contexto da oficina**;
+4. ligue o Wi-Fi novamente.
+
+Quando a primeira janela aparece, a configuração já está congelada para aquela
+sessão. A internet pode ser restaurada para testar envio e sincronização.
+
+### 4. Executar o agente
+
+Na raiz do repositório:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\agent\pulselab-agent.ps1
+```
+
+O agente ainda exige `PULSELAB_URL` e `PULSELAB_KEY` no ambiente do usuário. Se
+ele informar que faltam credenciais, execute primeiro o instalador ou o setup
+descrito neste README.
+
+### 5. Voltar ao comportamento normal
+
+Depois do teste, restaure:
+
+```json
+"interval_marks_minutes": [20, 40],
+"debug_mode": false,
+"debug_no_wait": false
+```
+
+No modo alternativo acelerado, `debug_mode: true`,
+`debug_no_wait: false` e os marcos `[1, 2]` representam aproximadamente um e
+dois segundos. Para um teste totalmente sem espera, prefira
+`debug_no_wait: true`.
 
 ## Verificações automatizadas
 
