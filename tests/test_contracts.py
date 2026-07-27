@@ -15,6 +15,10 @@ AGENT_PATH = REPO_ROOT / "agent" / "pulselab-agent.ps1"
 SCHEMA_PATH = REPO_ROOT / "schema" / "supabase-schema.sql"
 INSTALLER_PATH = REPO_ROOT / "installer" / "build-installer.py"
 SETUP_PATH = REPO_ROOT / "installer" / "setup-startup.ps1"
+POWERSHELL_INSTALLER_PATH = REPO_ROOT / "installer" / "build-installer.ps1"
+BOOTSTRAP_PATH = REPO_ROOT / "installer" / "install.ps1"
+PORTABLE_LAUNCHER_PATH = REPO_ROOT / "pulselab.ps1"
+FAST_LAUNCHER_PATH = REPO_ROOT / "Testar-Pulselab-Rapido.bat"
 
 
 def read_text(path):
@@ -120,6 +124,36 @@ class AgentStaticTests(unittest.TestCase):
         self.assertIsNotNone(version_match)
         self.assertEqual(version_match.group(1), self.config["version"])
         self.assertIn(f"version={self.config['version']}", read_text(SETUP_PATH))
+        for path in (BOOTSTRAP_PATH, PORTABLE_LAUNCHER_PATH):
+            self.assertIn(f"Version    : {self.config['version']}", read_text(path))
+
+    def test_windows_launchers_forward_accelerated_test_modes(self):
+        portable = read_text(PORTABLE_LAUNCHER_PATH)
+        fast = read_text(FAST_LAUNCHER_PATH)
+        self.assertIn("[switch]$DebugMode", self.agent)
+        self.assertIn("[switch]$ProductionTest", self.agent)
+        self.assertIn("$script:Config.debug_no_wait = $true", self.agent)
+        self.assertIn("$script:Config.debug_no_wait = $false", self.agent)
+        self.assertNotIn("interval_marks_minutes = @(1, 2)", self.agent)
+        self.assertIn('$params["DebugMode"] = $true', portable)
+        self.assertIn('$params["ProductionTest"] = $true', portable)
+        self.assertIn("-ProductionTest", fast)
+
+    def test_windows_compatibility_guards_are_present(self):
+        for path in (
+            AGENT_PATH,
+            SETUP_PATH,
+            POWERSHELL_INSTALLER_PATH,
+            BOOTSTRAP_PATH,
+            PORTABLE_LAUNCHER_PATH,
+        ):
+            self.assertTrue(path.read_bytes().startswith(b"\xef\xbb\xbf"), path)
+        self.assertIn("RawContentStream.ToArray()", self.agent)
+        self.assertIn("[Text.Encoding]::UTF8.GetString($rawBytes)", self.agent)
+        self.assertGreaterEqual(
+            self.agent.count("[Security.SecurityElement]::Escape"),
+            10,
+        )
 
     def test_raw_window_title_is_not_sent(self):
         self.assertIn('$event["telemetry_window_title"] = $null', self.agent)

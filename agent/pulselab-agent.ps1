@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
 # Version    : 1.4.0
@@ -6,6 +6,12 @@
 #              SPIKE. Produz respostas pseudonimizadas e uma linha do tempo
 #              append-only para observação distribuída e controle de qualidade.
 # =============================================================================
+
+[CmdletBinding()]
+param(
+    [switch]$DebugMode,
+    [switch]$ProductionTest
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -98,6 +104,8 @@ $script:ActivityStopwatch = $null
 $script:NextHeartbeatElapsedMs = 0L
 $script:ParticipantComputerRole = "computer"
 $script:ParticipantAssemblyRole = "assembly"
+$script:DebugModeRequested = [bool]$DebugMode
+$script:ProductionTest = [bool]$ProductionTest
 
 # =============================================================================
 # INFRAESTRUTURA
@@ -220,20 +228,38 @@ function Get-RemoteConfig {
     $localRaw = Get-Content $script:LOCAL_CONFIG -Raw -Encoding UTF8
     $local = $localRaw | ConvertFrom-Json
     $selectedRaw = $localRaw
-    try {
-        $response = Invoke-WebRequest -Uri $local.config_remote_url -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
-        $remote = $response.Content | ConvertFrom-Json
-        if (-not $remote.questions -or -not $remote.interval_marks_minutes -or
-            -not ($remote.PSObject.Properties.Name -contains "protocol_version")) {
-            throw "Remote config is not compatible with PulseLab 1.4.0."
-        }
-        $response.Content | Set-Content $script:LOCAL_CONFIG -Encoding UTF8 -Force
-        $script:Config = $remote
-        $selectedRaw = $response.Content
-        Write-PulseLog "INFO" "Remote config loaded and frozen for session. version=$($remote.version)"
-    } catch {
+    if ($script:DebugModeRequested) {
         $script:Config = $local
-        Write-PulseLog "WARN" "Remote config unavailable; using local snapshot. error=$($_.Exception.Message)"
+        $script:Config.debug_mode = $true
+        $script:Config.debug_no_wait = $true
+        $selectedRaw = $script:Config | ConvertTo-Json -Depth 10
+        Write-PulseLog "INFO" "Command line -DebugMode active; using local config with immediate checkpoints."
+    } else {
+        try {
+            $response = Invoke-WebRequest -Uri $local.config_remote_url -UseBasicParsing -TimeoutSec 10 -ErrorAction Stop
+            # Windows PowerShell 5.1 may decode raw.githubusercontent.com as
+            # ANSI when no charset is present. Decode the response explicitly.
+            $rawBytes = $response.RawContentStream.ToArray()
+            $remoteRaw = [Text.Encoding]::UTF8.GetString($rawBytes)
+            $remote = $remoteRaw | ConvertFrom-Json
+            if (-not $remote.questions -or -not $remote.interval_marks_minutes -or
+                -not ($remote.PSObject.Properties.Name -contains "protocol_version")) {
+                throw "Remote config is not compatible with PulseLab 1.4.0."
+            }
+            $remoteRaw | Set-Content $script:LOCAL_CONFIG -Encoding UTF8 -Force
+            $script:Config = $remote
+            $selectedRaw = $remoteRaw
+            Write-PulseLog "INFO" "Remote config loaded and frozen for session. version=$($remote.version)"
+        } catch {
+            $script:Config = $local
+            Write-PulseLog "WARN" "Remote config unavailable; using local snapshot. error=$($_.Exception.Message)"
+        }
+    }
+
+    if ($script:ProductionTest) {
+        $script:Config.debug_mode = $true
+        $script:Config.debug_no_wait = $false
+        Write-PulseLog "INFO" "Command line -ProductionTest active; treating checkpoint minutes as seconds."
     }
 
     if (-not $script:Config.questions -or -not $script:Config.interval_marks_minutes -or
@@ -257,6 +283,16 @@ function Get-RemoteConfig {
 }
 
 function Get-EnvCredentials {
+    if ($script:Config.PSObject.Properties.Name -contains "supabase_url" -and
+        $script:Config.PSObject.Properties.Name -contains "supabase_key" -and
+        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_url) -and
+        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_key)) {
+        $script:SupabaseUrl = [string]$script:Config.supabase_url
+        $script:SupabaseKey = [string]$script:Config.supabase_key
+        Write-PulseLog "INFO" "Supabase credentials loaded from portable config."
+        return
+    }
+
     $urlName = [string]$script:Config.supabase_url_env_var
     $keyName = [string]$script:Config.supabase_key_env_var
     $script:SupabaseUrl = [Environment]::GetEnvironmentVariable($urlName, "User")
@@ -774,6 +810,7 @@ function Show-WpfSessionSetup {
 
 function Show-WpfAssent {
     param([string]$RoleLabel)
+    $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Convite para participar"
         Width="570" Height="430" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -783,7 +820,7 @@ function Show-WpfAssent {
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0">
         <TextBlock Text="CONVITE PARA A PESQUISA" Foreground="#57E0D5" FontSize="22" FontWeight="Bold"/>
-        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,7,0,0"/>
+        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,7,0,0"/>
       </StackPanel>
       <StackPanel Grid.Row="1" VerticalAlignment="Center">
         <TextBlock Text="Durante a oficina, o PulseLab fará perguntas curtas e registrará sinais do computador, como uso do SPIKE, tempo sem mexer e imagens da janela do projeto quando autorizadas. Você pode escolher participar ou não." Foreground="White" FontSize="15" TextWrapping="Wrap" Margin="0,0,0,14"/>
@@ -811,6 +848,9 @@ function Show-WpfAssent {
 
 function Show-WpfPreSurvey {
     param([string]$RoleLabel)
+    $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
+    $priorRoboticsXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.prior_robotics)
+    $selfEfficacyXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.self_efficacy)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
         Width="610" Height="570" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -820,18 +860,18 @@ function Show-WpfPreSurvey {
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,15">
         <TextBlock Text="ANTES DE COMEÇAR" Foreground="#57E0D5" FontSize="23" FontWeight="Bold"/>
-        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
+        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
         <TextBlock Text="Responda sozinho. Sua resposta não será mostrada à sua dupla." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
       </StackPanel>
       <StackPanel Grid.Row="1">
-        <TextBlock Text="$($script:Config.questions.prior_robotics)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+        <TextBlock Text="$priorRoboticsXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
         <StackPanel Margin="10,8,0,20">
           <RadioButton Name="Prior1" GroupName="Prior" Content="Nunca" Foreground="White" Margin="0,4"/>
           <RadioButton Name="Prior2" GroupName="Prior" Content="Uma vez" Foreground="White" Margin="0,4"/>
           <RadioButton Name="Prior3" GroupName="Prior" Content="Algumas vezes" Foreground="White" Margin="0,4"/>
           <RadioButton Name="Prior4" GroupName="Prior" Content="Muitas vezes" Foreground="White" Margin="0,4"/>
         </StackPanel>
-        <TextBlock Text="$($script:Config.questions.self_efficacy)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+        <TextBlock Text="$selfEfficacyXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
         <StackPanel Margin="10,8,0,0">
           <RadioButton Name="Self1" GroupName="Self" Content="Discordo muito" Foreground="White" Margin="0,4"/>
           <RadioButton Name="Self2" GroupName="Self" Content="Discordo" Foreground="White" Margin="0,4"/>
@@ -877,6 +917,10 @@ function Show-WpfPreSurvey {
 function Show-WpfCheckpoint {
     param([string]$RoleLabel, [int]$IntervalMark, [bool]$AskCollaboration)
     $collabVisibility = if ($AskCollaboration) { "Visible" } else { "Collapsed" }
+    $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
+    $mentalEffortXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.mental_effort)
+    $progressStateXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.progress_state)
+    $collaborationXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.collaboration)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Checkpoint"
         Width="650" Height="720" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -886,19 +930,19 @@ function Show-WpfCheckpoint {
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,14">
         <TextBlock Text="CHECKPOINT · $IntervalMark MIN" Foreground="#FF8B8E" FontSize="22" FontWeight="Bold"/>
-        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
+        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
         <TextBlock Text="Responda sozinho. Depois, passe o computador para sua dupla." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
         <StackPanel>
-          <TextBlock Text="$($script:Config.questions.mental_effort)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock Text="$mentalEffortXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <StackPanel Margin="10,7,0,17">
             <RadioButton Name="Effort1" GroupName="Effort" Content="Muito pouco" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Effort2" GroupName="Effort" Content="Pouco" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Effort3" GroupName="Effort" Content="Bastante" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Effort4" GroupName="Effort" Content="Muito" Foreground="White" Margin="0,3"/>
           </StackPanel>
-          <TextBlock Text="$($script:Config.questions.progress_state)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock Text="$progressStateXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <StackPanel Margin="10,7,0,17">
             <RadioButton Name="Progress1" GroupName="Progress" Content="Avançando sem ajuda" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Progress2" GroupName="Progress" Content="Avançando, mas com dúvida" Foreground="White" Margin="0,3"/>
@@ -906,7 +950,7 @@ function Show-WpfCheckpoint {
             <RadioButton Name="Progress4" GroupName="Progress" Content="Precisamos de ajuda agora" Foreground="#FFB5B6" FontWeight="Bold" Margin="0,3"/>
           </StackPanel>
           <StackPanel Name="CollabPanel" Visibility="$collabVisibility">
-            <TextBlock Text="$($script:Config.questions.collaboration)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+            <TextBlock Text="$collaborationXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
             <StackPanel Margin="10,7,0,12">
               <RadioButton Name="Collab1" GroupName="Collab" Content="Nunca" Foreground="White" Margin="0,3"/>
               <RadioButton Name="Collab2" GroupName="Collab" Content="Algumas vezes" Foreground="White" Margin="0,3"/>
@@ -963,6 +1007,8 @@ function Show-WpfCheckpoint {
 function Show-WpfRoleSwap {
     param([string]$ParticipantALabel, [string]$ParticipantBLabel)
 
+    $participantALabelXaml = [Security.SecurityElement]::Escape($ParticipantALabel)
+    $participantBLabelXaml = [Security.SecurityElement]::Escape($ParticipantBLabel)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Troca de papéis"
         Width="560" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -975,8 +1021,8 @@ function Show-WpfRoleSwap {
         <TextBlock Text="A troca ajuda as duas pessoas a experimentar partes diferentes da atividade." Foreground="#D2CCDF" FontSize="13" TextWrapping="Wrap" Margin="0,7,0,0"/>
       </StackPanel>
       <StackPanel Grid.Row="1" VerticalAlignment="Center">
-        <TextBlock Text="$ParticipantALabel" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,5"/>
-        <TextBlock Text="$ParticipantBLabel" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,5"/>
+        <TextBlock Text="$participantALabelXaml" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,5"/>
+        <TextBlock Text="$participantBLabelXaml" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,5"/>
       </StackPanel>
       <Button Name="BtnConfirm" Grid.Row="2" Content="Papéis trocados · continuar" Height="48" Background="#B78600" Foreground="White" FontWeight="Bold"/>
     </Grid>
@@ -1041,6 +1087,10 @@ function Show-WpfInstructorRubric {
 
 function Show-WpfPostSurvey {
     param([string]$RoleLabel)
+    $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
+    $postUnderstandingXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.post_understanding)
+    $postAffectXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.post_affect)
+    $postReturnXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.post_return)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Encerramento"
         Width="660" Height="710" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -1050,19 +1100,19 @@ function Show-WpfPostSurvey {
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,14">
         <TextBlock Text="ENCERRAMENTO" Foreground="#B9A0FF" FontSize="23" FontWeight="Bold"/>
-        <TextBlock Text="$RoleLabel" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
+        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
         <TextBlock Text="Responda sozinho. Não existem respostas certas ou erradas." Foreground="#BDB8D0" FontSize="12"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
         <StackPanel>
-          <TextBlock Text="$($script:Config.questions.post_understanding)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock Text="$postUnderstandingXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <StackPanel Margin="10,7,0,17">
             <RadioButton Name="Understand1" GroupName="Understand" Content="Discordo muito" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Understand2" GroupName="Understand" Content="Discordo" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Understand3" GroupName="Understand" Content="Concordo" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Understand4" GroupName="Understand" Content="Concordo muito" Foreground="White" Margin="0,3"/>
           </StackPanel>
-          <TextBlock Text="$($script:Config.questions.post_affect)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock Text="$postAffectXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <UniformGrid Columns="2" Margin="10,7,0,5">
             <CheckBox Name="AffectCurious" Content="Curioso" Foreground="White" Margin="0,4"/>
             <CheckBox Name="AffectConfident" Content="Confiante" Foreground="White" Margin="0,4"/>
@@ -1072,7 +1122,7 @@ function Show-WpfPostSurvey {
             <CheckBox Name="AffectIndifferent" Content="Indiferente" Foreground="White" Margin="0,4"/>
           </UniformGrid>
           <TextBlock Name="AffectHint" Text="Escolha uma ou duas opções." Foreground="#BDB8D0" FontSize="12" Margin="10,0,0,17"/>
-          <TextBlock Text="$($script:Config.questions.post_return)" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock Text="$postReturnXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <StackPanel Margin="10,7,0,10">
             <RadioButton Name="Return1" GroupName="Return" Content="Não" Foreground="White" Margin="0,3"/>
             <RadioButton Name="Return2" GroupName="Return" Content="Talvez não" Foreground="White" Margin="0,3"/>

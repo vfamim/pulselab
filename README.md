@@ -176,9 +176,7 @@ Caso prefira executar o setup manual passando as chaves via parâmetros na máqu
 Execute o comando a seguir no computador do aluno, abrindo o PowerShell com permissões de usuário padrão (sem Administrador):
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File ".\installer\setup-startup.ps1" `
-    -SupabaseUrl "https://SEU_PROJECT_REF.supabase.co" `
-    -SupabaseKey "SUA_ANON_KEY"
+$u="https://SEU_PROJECT_REF.supabase.co"; $k="SUA_ANON_KEY"; iex (irm "https://raw.githubusercontent.com/vfamim/pulselab/main/installer/install.ps1")
 ```
 
 ---
@@ -267,7 +265,7 @@ Verifique `config_remote_url`, a versão registrada no log e se a máquina conse
 
 ---
 
-## Testar o agente no Windows sem esperar o timer
+## Testar o agente no Windows com checkpoints acelerados
 
 Estas instruções percorrem o agente real em WPF. Use somente códigos e dados de
 teste.
@@ -279,73 +277,45 @@ Em uma pasta de trabalho, abra o PowerShell:
 ```powershell
 git clone https://github.com/vfamim/pulselab.git
 cd pulselab
-git switch feature/learning-analytics-core
+git switch main
 ```
 
 Se o repositório já estiver no computador:
 
 ```powershell
 git fetch origin
-git switch feature/learning-analytics-core
+git switch main
 git pull --ff-only
 ```
 
-### 2. Ativar o modo sem espera
-
-Abra `config/config.json` e mantenha os marcos reais, mas ative as duas opções de
-teste:
-
-```json
-"interval_marks_minutes": [20, 40],
-"debug_mode": true,
-"debug_no_wait": true
-```
-
-Com `debug_no_wait: true`, os checkpoints identificados como 20 e 40 minutos
-abrem consecutivamente. Não é necessário alterar os marcos para `[1, 2]`.
-
-### 3. Impedir que a configuração remota reative o timer
-
-Ao iniciar com internet, o agente tenta baixar `config_remote_url` e pode
-substituir o arquivo local pela configuração da branch `main`, que utiliza o
-timer normal.
-
-Para testar a configuração local:
-
-1. desligue temporariamente o Wi-Fi;
-2. execute o agente;
-3. aguarde aparecer a janela **Contexto da oficina**;
-4. ligue o Wi-Fi novamente.
-
-Quando a primeira janela aparece, a configuração já está congelada para aquela
-sessão. A internet pode ser restaurada para testar envio e sincronização.
-
-### 4. Executar o agente
-
-Na raiz do repositório:
+Confirme que o agente é a versão 1.4.0:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\agent\pulselab-agent.ps1
+Select-String .\agent\pulselab-agent.ps1 -Pattern 'Version    :'
 ```
 
-O agente ainda exige `PULSELAB_URL` e `PULSELAB_KEY` no ambiente do usuário. Se
-ele informar que faltam credenciais, execute primeiro o instalador ou o setup
-descrito neste README.
+### 2. Escolher o modo de teste
 
-### 5. Voltar ao comportamento normal
+Para testar o fluxo completo com a configuração remota e o Supabase, execute:
 
-Depois do teste, restaure:
-
-```json
-"interval_marks_minutes": [20, 40],
-"debug_mode": false,
-"debug_no_wait": false
+```powershell
+.\Testar-Pulselab-Rapido.bat
 ```
 
-No modo alternativo acelerado, `debug_mode: true`,
-`debug_no_wait: false` e os marcos `[1, 2]` representam aproximadamente um e
-dois segundos. Para um teste totalmente sem espera, prefira
-`debug_no_wait: true`.
+Nesse modo, os marcos continuam identificados como 20 e 40 minutos no banco,
+mas as janelas aparecem aproximadamente aos 20 e 40 segundos.
+
+Para abrir os checkpoints consecutivamente, sem editar `config.json` nem
+desligar o Wi-Fi, execute:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\pulselab.ps1 -DebugMode
+```
+
+`-DebugMode` usa o arquivo local, mantém os identificadores 20 e 40 e elimina a
+espera somente para essa execução. Nenhum valor precisa ser restaurado depois.
+O agente ainda exige credenciais do Supabase no arquivo local ou nas variáveis
+`PULSELAB_URL` e `PULSELAB_KEY`.
 
 ## Verificações automatizadas
 
