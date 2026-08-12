@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     workshop_code              text         NOT NULL,
     class_code                 text         NOT NULL,
     grade_band                 text,
-    group_size                 integer      CHECK (group_size IS NULL OR group_size >= 1),
+    group_size                 integer      CHECK (group_size IS NULL OR (group_size BETWEEN 1 AND 3)),
     activity_id                text         NOT NULL,
     computer_id                text         NOT NULL,
     protocol_version           text,

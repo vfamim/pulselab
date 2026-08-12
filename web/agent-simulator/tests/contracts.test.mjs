@@ -93,7 +93,7 @@ test("contexto operacional persiste sem autorização ou faixa escolar", () => {
   });
 
   assert.deepEqual(Object.keys(stored), PERSISTED_CONTEXT_FIELDS);
-  assert.equal(stored.group_size, 4);
+  assert.equal(stored.group_size, 3);
   assert.equal("authorization_verified" in stored, false);
   assert.equal("grade_band" in stored, false);
 });

@@ -13,7 +13,7 @@ export const PERSISTED_CONTEXT_FIELDS = [
 function normalizeGroupSize(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 2;
-  return Math.max(1, Math.min(4, Math.trunc(parsed)));
+  return Math.max(1, Math.min(3, Math.trunc(parsed)));
 }
 
 export function createStoredContext(context) {

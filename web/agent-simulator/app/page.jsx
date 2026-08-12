@@ -313,8 +313,8 @@ export default function AgentSimulatorPage() {
   const participantKey = participantMatch ? participantMatch[1].toUpperCase() : "A";
 
   const activeParticipants = useMemo(() => {
-    const count = Math.max(1, Math.min(4, Number(context.group_size) || 2));
-    return ["A", "B", "C", "D"].slice(0, count);
+    const count = Math.max(1, Math.min(3, Number(context.group_size) || 2));
+    return ["A", "B", "C"].slice(0, count);
   }, [context.group_size]);
 
   function getNextParticipant(currentKey) {
@@ -1009,14 +1009,14 @@ export default function AgentSimulatorPage() {
             />
           </label>
           <label>
-            <span>Integrantes por grupo</span>
+            <span>Integrantes por grupo (máx 3)</span>
             <input
               type="number"
               min="1"
-              max="4"
+              max="3"
               value={context.group_size ?? 2}
               onChange={(event) =>
-                setContext({ ...context, group_size: Math.max(1, Number(event.target.value)) })
+                setContext({ ...context, group_size: Math.max(1, Math.min(3, Number(event.target.value))) })
               }
             />
           </label>

@@ -821,7 +821,7 @@ function Show-WpfSessionSetup {
             <TextBox Name="TxtActivity" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
           </StackPanel>
           <StackPanel Name="PnlGroupSize">
-            <TextBlock Text="Integrantes por computador/grupo" Foreground="White" FontWeight="Bold"/>
+            <TextBlock Text="Integrantes por computador/grupo (1 a 3)" Foreground="White" FontWeight="Bold"/>
             <TextBox Name="TxtGroupSize" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14" Text="2"/>
           </StackPanel>
         </StackPanel>
@@ -854,7 +854,7 @@ function Show-WpfSessionSetup {
     $workshop.Text = $script:WorkshopCode
     $class.Text = $script:ClassCode
     $activity.Text = $script:ActivityId
-    $groupSizeTxt.Text = [string]$script:GroupSize
+    $groupSizeTxt.Text = [string][Math]::Max(1, [Math]::Min(3, $script:GroupSize))
 
     foreach ($field in @($site, $regional, $school, $workshop, $class, $activity)) {
         if (Test-NeedsSetupValue $field.Text) { $field.Clear() }
@@ -867,7 +867,7 @@ function Show-WpfSessionSetup {
         )
         $parsedGroup = 0
         [int]::TryParse($groupSizeTxt.Text.Trim(), [ref]$parsedGroup) | Out-Null
-        $button.IsEnabled = (($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $parsedGroup -gt 0 -and $consent.IsChecked -eq $true)
+        $button.IsEnabled = (($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $parsedGroup -ge 1 -and $parsedGroup -le 3 -and $consent.IsChecked -eq $true)
     }
     $site.add_TextChanged($validate); $regional.add_TextChanged($validate); $school.add_TextChanged($validate)
     $workshop.add_TextChanged($validate); $class.add_TextChanged($validate); $activity.add_TextChanged($validate)
@@ -882,7 +882,7 @@ function Show-WpfSessionSetup {
         $script:WorkshopCode = $workshop.Text.Trim()
         $script:ClassCode = $class.Text.Trim()
         $script:ActivityId = $activity.Text.Trim()
-        [int]$script:GroupSize = [Math]::Max(1, [int]$groupSizeTxt.Text.Trim())
+        [int]$script:GroupSize = [Math]::Max(1, [Math]::Min(3, [int]$groupSizeTxt.Text.Trim()))
         Save-InstallationProfile
         $window.DialogResult = $true
         $window.Close()
@@ -891,22 +891,22 @@ function Show-WpfSessionSetup {
 }
 
 function Show-WpfGroupSizeSelection {
+    $script:GroupSize = [Math]::Max(1, [Math]::Min(3, $script:GroupSize))
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Quantidade de alunos"
-        Width="500" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        Width="500" Height="320" WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,15">
         <TextBlock Text="INTEGRANTES NO COMPUTADOR" Foreground="#57E0D5" FontSize="20" FontWeight="Bold"/>
-        <TextBlock Text="Quantos alunos estão trabalhando neste computador nesta aula?" Foreground="#D2CCDF" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"/>
+        <TextBlock Text="Quantos alunos estão trabalhando neste computador nesta aula? (Máximo 3)" Foreground="#D2CCDF" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"/>
       </StackPanel>
       <StackPanel Grid.Row="1" VerticalAlignment="Center">
         <RadioButton Name="Rad1" GroupName="SizeGroup" Content="1 Aluno (Trabalho Solo)" Foreground="White" FontSize="15" Margin="0,6"/>
         <RadioButton Name="Rad2" GroupName="SizeGroup" Content="2 Alunos (Dupla)" Foreground="White" FontSize="15" Margin="0,6" IsChecked="True"/>
         <RadioButton Name="Rad3" GroupName="SizeGroup" Content="3 Alunos (Trio)" Foreground="White" FontSize="15" Margin="0,6"/>
-        <RadioButton Name="Rad4" GroupName="SizeGroup" Content="4 Alunos (Grupo)" Foreground="White" FontSize="15" Margin="0,6"/>
       </StackPanel>
       <Button Name="BtnConfirm" Grid.Row="2" Content="Confirmar e continuar" Height="46" Background="#00A7A0" Foreground="White" FontSize="16" FontWeight="Bold"/>
     </Grid>
@@ -914,16 +914,14 @@ function Show-WpfGroupSizeSelection {
 </Window>
 "@
     $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
-    $r1 = $window.FindName("Rad1"); $r2 = $window.FindName("Rad2"); $r3 = $window.FindName("Rad3"); $r4 = $window.FindName("Rad4")
+    $r1 = $window.FindName("Rad1"); $r2 = $window.FindName("Rad2"); $r3 = $window.FindName("Rad3")
     if ($script:GroupSize -eq 1) { $r1.IsChecked = $true }
     elseif ($script:GroupSize -eq 3) { $r3.IsChecked = $true }
-    elseif ($script:GroupSize -eq 4) { $r4.IsChecked = $true }
     else { $r2.IsChecked = $true }
 
     $window.FindName("BtnConfirm").add_Click({
         if ($r1.IsChecked) { $script:GroupSize = 1 }
         elseif ($r3.IsChecked) { $script:GroupSize = 3 }
-        elseif ($r4.IsChecked) { $script:GroupSize = 4 }
         else { $script:GroupSize = 2 }
         Save-InstallationProfile
         $window.DialogResult = $true
@@ -934,12 +932,13 @@ function Show-WpfGroupSizeSelection {
 
 function Get-ParticipantList {
     $list = @()
-    $letters = @("A", "B", "C", "D")
-    $roles = @("computer", "assembly", "member_3", "member_4")
-    if ($script:GroupSize -eq 1) {
+    $size = [Math]::Max(1, [Math]::Min(3, [int]$script:GroupSize))
+    $letters = @("A", "B", "C")
+    $roles = @("computer", "assembly", "member_3")
+    if ($size -eq 1) {
         $roles = @("individual")
     }
-    for ($i = 0; $i -lt $script:GroupSize; $i++) {
+    for ($i = 0; $i -lt $size; $i++) {
         $shortId = $script:SessionId.Substring(0, 8).ToUpperInvariant()
         $letter = $letters[$i]
         $role = $roles[$i]
@@ -992,10 +991,19 @@ function Show-WpfAssent {
 }
 
 function Show-WpfPreSurvey {
-    param([string]$RoleLabel)
+    param([string]$RoleLabel, [bool]$IsLastParticipant = $true, [string]$NextLabel = "")
     $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
     $priorRoboticsXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.prior_robotics)
     $selfEfficacyXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.self_efficacy)
+
+    $subtext = if ($script:GroupSize -le 1) {
+        "Responda sozinho. Sua resposta é individual."
+    } elseif (-not $IsLastParticipant -and -not [string]::IsNullOrWhiteSpace($NextLabel)) {
+        "Sua vez ($RoleLabel). Após responder, passe o computador para o $NextLabel."
+    } else {
+        "Sua vez ($RoleLabel). Esta é a última resposta do grupo antes de começar."
+    }
+    $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
         Width="630" Height="560" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -1006,7 +1014,7 @@ function Show-WpfPreSurvey {
       <StackPanel Grid.Row="0" Margin="0,0,0,15">
         <TextBlock Text="ANTES DE COMEÇAR" Foreground="#57E0D5" FontSize="23" FontWeight="Bold"/>
         <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="Responda sozinho. Sua resposta é individual." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+        <TextBlock Text="$subtextXaml" Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
         <StackPanel>
@@ -1064,13 +1072,20 @@ function Show-WpfPreSurvey {
 }
 
 function Show-WpfCheckpoint {
-    param([string]$RoleLabel, [int]$IntervalMark, [bool]$AskCollaboration)
+    param([string]$RoleLabel, [int]$IntervalMark, [bool]$AskCollaboration, [bool]$IsLastParticipant = $true, [string]$NextLabel = "")
     $collabVisibility = if ($AskCollaboration) { "Visible" } else { "Collapsed" }
     $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
     $mentalEffortXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.mental_effort)
     $progressStateXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.progress_state)
     $collaborationXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.collaboration)
-    $subtext = if ($script:GroupSize -eq 1) { "Responda à sua pergunta sobre a atividade." } else { "Responda sozinho. Depois, passe o computador para o colega." }
+
+    $subtext = if ($script:GroupSize -le 1) {
+        "Responda à sua pergunta sobre a atividade."
+    } elseif (-not $IsLastParticipant -and -not [string]::IsNullOrWhiteSpace($NextLabel)) {
+        "Sua vez ($RoleLabel). Após responder, passe o computador para o $NextLabel."
+    } else {
+        "Sua vez ($RoleLabel). Esta é a última resposta do grupo neste checkpoint."
+    }
     $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Checkpoint"
@@ -1256,11 +1271,20 @@ function Show-WpfInstructorRubric {
 }
 
 function Show-WpfPostSurvey {
-    param([string]$RoleLabel)
+    param([string]$RoleLabel, [bool]$IsLastParticipant = $true, [string]$NextLabel = "")
     $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
     $postUnderstandingXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.post_understanding)
     $postAffectXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.post_affect)
     $postReturnXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.post_return)
+
+    $subtext = if ($script:GroupSize -le 1) {
+        "Responda sozinho. Não existem respostas certas ou erradas."
+    } elseif (-not $IsLastParticipant -and -not [string]::IsNullOrWhiteSpace($NextLabel)) {
+        "Sua vez ($RoleLabel). Após responder, passe o computador para o $NextLabel."
+    } else {
+        "Sua vez ($RoleLabel). Esta é a última resposta do grupo no encerramento."
+    }
+    $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Encerramento"
         Width="660" Height="710" WindowStartupLocation="CenterScreen" WindowStyle="None"
@@ -1271,7 +1295,7 @@ function Show-WpfPostSurvey {
       <StackPanel Grid.Row="0" Margin="0,0,0,14">
         <TextBlock Text="ENCERRAMENTO" Foreground="#B9A0FF" FontSize="23" FontWeight="Bold"/>
         <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="Responda sozinho. Não existem respostas certas ou erradas." Foreground="#BDB8D0" FontSize="12"/>
+        <TextBlock Text="$subtextXaml" Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
         <StackPanel>
@@ -1431,8 +1455,11 @@ function Dispose-TrayIcon {
 }
 
 function Save-PreSurvey {
-    param([string]$ParticipantId, [string]$Role, [string]$Label)
-    $result = Show-WpfPreSurvey $Label
+    param(
+        [string]$ParticipantId, [string]$Role, [string]$Label,
+        [bool]$IsLastParticipant = $true, [string]$NextLabel = ""
+    )
+    $result = Show-WpfPreSurvey $Label $IsLastParticipant $NextLabel
     $event = New-ResearchEvent $ParticipantId $Role "pre" $null
     $event["response_latency_ms"] = [int]$result.LatencyMs
     if ($result.Status) {
@@ -1451,13 +1478,14 @@ function Save-CheckpointSurvey {
         [bool]$AskCollaboration, [hashtable]$Telemetry, [decimal]$FileSize,
         [string]$ScreenshotPath, [string]$LocalScreenshotPath,
         [DateTimeOffset]$ScheduledAt, [DateTimeOffset]$CapturedAt,
-        [string]$ActivityStage
+        [string]$ActivityStage,
+        [bool]$IsLastParticipant = $true, [string]$NextLabel = ""
     )
 
     $promptedAt = [DateTimeOffset]::Now
     $elapsedAtPrompt = if ($script:ActivityStopwatch) { [long]$script:ActivityStopwatch.ElapsedMilliseconds } else { 0L }
     $latenessMs = [Math]::Max(0, [int][Math]::Round(($promptedAt - $ScheduledAt).TotalMilliseconds))
-    $result = Show-WpfCheckpoint $Label $Mark $AskCollaboration
+    $result = Show-WpfCheckpoint $Label $Mark $AskCollaboration $IsLastParticipant $NextLabel
     $event = New-ResearchEvent $ParticipantId $Role "checkpoint" $Mark
     $event["telemetry_window_title"] = $null
     $event["telemetry_foreground_app"] = $Telemetry.ForegroundApp
@@ -1493,8 +1521,11 @@ function Save-CheckpointSurvey {
 }
 
 function Save-PostSurvey {
-    param([string]$ParticipantId, [string]$Role, [string]$Label)
-    $result = Show-WpfPostSurvey $Label
+    param(
+        [string]$ParticipantId, [string]$Role, [string]$Label,
+        [bool]$IsLastParticipant = $true, [string]$NextLabel = ""
+    )
+    $result = Show-WpfPostSurvey $Label $IsLastParticipant $NextLabel
     $event = New-ResearchEvent $ParticipantId $Role "post" $null
     $event["response_latency_ms"] = [int]$result.LatencyMs
     if ($script:ActivityStopwatch) { $event["elapsed_ms"] = [long]$script:ActivityStopwatch.ElapsedMilliseconds }
@@ -1666,9 +1697,11 @@ function Start-ResearchLoop {
         $askCollaboration = ($script:GroupSize -gt 1 -and [int[]]$script:Config.collaboration_marks_minutes -contains $mark)
         $participants = Get-ParticipantList
         $checkpointStatuses = @{}
-        foreach ($p in $participants) {
-            $pLabel = "$($p.Label)"
-            $st = Save-CheckpointSurvey $p.Id $p.Role $pLabel $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot $scheduledAt $capturedAt $activityStage
+        for ($i = 0; $i -lt $participants.Count; $i++) {
+            $p = $participants[$i]
+            $isLast = ($i -eq $participants.Count - 1)
+            $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
+            $st = Save-CheckpointSurvey $p.Id $p.Role $p.Label $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot $scheduledAt $capturedAt $activityStage $isLast $nextLabel
             $checkpointStatuses["participant_$($p.Letter.ToLower())_status"] = $st
         }
         Restore-SpikeFocus $script:SpikeHandle
@@ -1693,9 +1726,11 @@ function Start-ResearchLoop {
     }
 
     $postStatuses = @{ phase = "post" }
-    foreach ($p in $participants) {
-        $postLabel = "$($p.Label)"
-        $st = Save-PostSurvey $p.Id $p.Role $postLabel
+    for ($i = 0; $i -lt $participants.Count; $i++) {
+        $p = $participants[$i]
+        $isLast = ($i -eq $participants.Count - 1)
+        $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
+        $st = Save-PostSurvey $p.Id $p.Role $p.Label $isLast $nextLabel
         $postStatuses["participant_$($p.Letter.ToLower())_status"] = $st
     }
     Submit-SessionEvent "phase_completed" "info" $null $null $null "post" ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null $postStatuses
@@ -1757,8 +1792,11 @@ try {
     }
 
     $preStatuses = @{ phase = "pre" }
-    foreach ($p in $participants) {
-        $st = Save-PreSurvey $p.Id $p.Role $p.Label
+    for ($i = 0; $i -lt $participants.Count; $i++) {
+        $p = $participants[$i]
+        $isLast = ($i -eq $participants.Count - 1)
+        $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
+        $st = Save-PreSurvey $p.Id $p.Role $p.Label $isLast $nextLabel
         $preStatuses["participant_$($p.Letter.ToLower())_status"] = $st
     }
     Submit-SessionEvent "phase_completed" "info" $null $null $null "pre" 0L $null $preStatuses
