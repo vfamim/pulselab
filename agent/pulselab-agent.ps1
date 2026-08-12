@@ -88,7 +88,6 @@ $script:ParticipantAssembly = $null
 $script:SchoolCode = ""
 $script:WorkshopCode = ""
 $script:ClassCode = ""
-$script:GradeBand = ""
 $script:ActivityId = ""
 $script:SupabaseUrl = $null
 $script:SupabaseKey = $null
@@ -654,7 +653,6 @@ function New-ResearchEvent {
         school_code = $script:SchoolCode
         workshop_code = $script:WorkshopCode
         class_code = $script:ClassCode
-        grade_band = $script:GradeBand
         activity_id = $script:ActivityId
         computer_id = $script:ComputerId
         protocol_version = [string]$script:Config.protocol_version
@@ -713,7 +711,6 @@ function New-SessionEvent {
         school_code = $script:SchoolCode
         workshop_code = $script:WorkshopCode
         class_code = $script:ClassCode
-        grade_band = $script:GradeBand
         activity_id = $script:ActivityId
         computer_id = $script:ComputerId
         protocol_version = [string]$script:Config.protocol_version
@@ -775,26 +772,13 @@ function Get-SetupDisplayValue {
 }
 
 function Show-WpfSessionSetup {
-    param([switch]$ForcePrompt)
-
-    $valuesCheck = @(
-        $script:SiteId, $script:RegionalHub, $script:SchoolCode,
-        $script:WorkshopCode, $script:ClassCode, $script:ActivityId
-    )
-    $hasMissing = (($valuesCheck | Where-Object { Test-NeedsSetupValue $_ }).Count -gt 0)
-
-    if (-not $ForcePrompt -and -not $hasMissing) {
-        Write-PulseLog "INFO" "All setup parameters pre-filled from installation profile. Bypassing setup window."
-        return $true
-    }
-
     $installationSummary = "Sede/cidade: $(Get-SetupDisplayValue $script:SiteId)  •  Escola: $(Get-SetupDisplayValue $script:SchoolCode)  •  Regional: $(Get-SetupDisplayValue $script:RegionalHub)"
     $sessionSummary = "Oficina: $(Get-SetupDisplayValue $script:WorkshopCode)  •  Turma: $(Get-SetupDisplayValue $script:ClassCode)  •  Atividade: $(Get-SetupDisplayValue $script:ActivityId)"
     $installationSummaryXaml = [Security.SecurityElement]::Escape($installationSummary)
     $sessionSummaryXaml = [Security.SecurityElement]::Escape($sessionSummary)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Contexto da oficina"
-        Width="540" Height="460" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        Width="540" Height="680" WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
   <Border CornerRadius="22" Background="#171128" BorderBrush="#6D5BD0" BorderThickness="3" Padding="24">
     <Grid>
@@ -811,7 +795,7 @@ function Show-WpfSessionSetup {
               <TextBlock Text="$sessionSummaryXaml" Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="12" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
-          <TextBlock Name="TxtMissingIntro" Text="Complete somente os dados abaixo:" Foreground="#A99AF5" FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
+          <TextBlock Name="TxtMissingIntro" Text="Revise os dados abaixo. O PulseLab reutilizará estes valores na próxima execução:" Foreground="#A99AF5" FontSize="12" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
           <StackPanel Name="PnlSite">
             <TextBlock Text="Sede / cidade" Foreground="White" FontWeight="Bold"/>
             <TextBox Name="TxtSite" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
@@ -872,28 +856,9 @@ function Show-WpfSessionSetup {
     $activity.Text = $script:ActivityId
     $groupSizeTxt.Text = [string]$script:GroupSize
 
-    $setupFields = @(
-        @{ Panel = $window.FindName("PnlSite"); TextBox = $site },
-        @{ Panel = $window.FindName("PnlRegional"); TextBox = $regional },
-        @{ Panel = $window.FindName("PnlSchool"); TextBox = $school },
-        @{ Panel = $window.FindName("PnlWorkshop"); TextBox = $workshop },
-        @{ Panel = $window.FindName("PnlClass"); TextBox = $class },
-        @{ Panel = $window.FindName("PnlActivity"); TextBox = $activity }
-    )
-    $missingFieldCount = 0
-    foreach ($field in $setupFields) {
-        if ($ForcePrompt -or (Test-NeedsSetupValue $field.TextBox.Text)) {
-            $field.Panel.Visibility = [Windows.Visibility]::Visible
-            if (Test-NeedsSetupValue $field.TextBox.Text) { $field.TextBox.Clear() }
-            $missingFieldCount++
-        } else {
-            $field.Panel.Visibility = [Windows.Visibility]::Collapsed
-        }
+    foreach ($field in @($site, $regional, $school, $workshop, $class, $activity)) {
+        if (Test-NeedsSetupValue $field.Text) { $field.Clear() }
     }
-    if (-not $ForcePrompt -and $missingFieldCount -eq 0) {
-        $window.FindName("TxtMissingIntro").Visibility = [Windows.Visibility]::Collapsed
-    }
-    $window.Height = [Math]::Min(680, 385 + (62 * $missingFieldCount))
 
     $validate = {
         $values = @(
@@ -916,7 +881,6 @@ function Show-WpfSessionSetup {
         $script:SchoolCode = $school.Text.Trim()
         $script:WorkshopCode = $workshop.Text.Trim()
         $script:ClassCode = $class.Text.Trim()
-        $script:GradeBand = [string]$script:Config.grade_band
         $script:ActivityId = $activity.Text.Trim()
         [int]$script:GroupSize = [Math]::Max(1, [int]$groupSizeTxt.Text.Trim())
         Save-InstallationProfile
@@ -961,6 +925,7 @@ function Show-WpfGroupSizeSelection {
         elseif ($r3.IsChecked) { $script:GroupSize = 3 }
         elseif ($r4.IsChecked) { $script:GroupSize = 4 }
         else { $script:GroupSize = 2 }
+        Save-InstallationProfile
         $window.DialogResult = $true
         $window.Close()
     })
@@ -1033,7 +998,7 @@ function Show-WpfPreSurvey {
     $selfEfficacyXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.self_efficacy)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
-        Width="630" Height="660" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        Width="630" Height="560" WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
     <Grid>
@@ -1045,17 +1010,6 @@ function Show-WpfPreSurvey {
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
         <StackPanel>
-          <TextBlock Text="Qual a sua idade?" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <WrapPanel Margin="10,8,0,15">
-            <RadioButton Name="Age8" GroupName="Age" Content="8 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age9" GroupName="Age" Content="9 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age10" GroupName="Age" Content="10 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age11" GroupName="Age" Content="11 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age12" GroupName="Age" Content="12 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age13" GroupName="Age" Content="13 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age14" GroupName="Age" Content="14 anos" Foreground="White" Margin="0,4,12,4"/>
-            <RadioButton Name="Age15Plus" GroupName="Age" Content="15+ anos" Foreground="White" Margin="0,4,12,4"/>
-          </WrapPanel>
           <TextBlock Text="$priorRoboticsXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <StackPanel Margin="10,8,0,20">
             <RadioButton Name="Prior1" GroupName="Prior" Content="Nunca" Foreground="White" Margin="0,4"/>
@@ -1082,32 +1036,19 @@ function Show-WpfPreSurvey {
 </Window>
 "@
     $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
-    $ages = @(
-        @{ Control = $window.FindName("Age8"); Value = 8 },
-        @{ Control = $window.FindName("Age9"); Value = 9 },
-        @{ Control = $window.FindName("Age10"); Value = 10 },
-        @{ Control = $window.FindName("Age11"); Value = 11 },
-        @{ Control = $window.FindName("Age12"); Value = 12 },
-        @{ Control = $window.FindName("Age13"); Value = 13 },
-        @{ Control = $window.FindName("Age14"); Value = 14 },
-        @{ Control = $window.FindName("Age15Plus"); Value = 15 }
-    )
     $prior = 1..4 | ForEach-Object { $window.FindName("Prior$_") }
     $self = 1..4 | ForEach-Object { $window.FindName("Self$_") }
     $button = $window.FindName("BtnSave")
     $skip = $window.FindName("BtnSkip")
-    $result = @{ Status = $false; Declined = $false; StudentAge = $null; PriorRobotics = $null; SelfEfficacy = $null; LatencyMs = 0 }
+    $result = @{ Status = $false; Declined = $false; PriorRobotics = $null; SelfEfficacy = $null; LatencyMs = 0 }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $validate = {
-        $ageSelected = ($ages | Where-Object { $_.Control.IsChecked -eq $true }).Count -eq 1
         $priorSelected = ($prior | Where-Object { $_.IsChecked -eq $true }).Count -eq 1
         $selfSelected = ($self | Where-Object { $_.IsChecked -eq $true }).Count -eq 1
-        $button.IsEnabled = ($ageSelected -and $priorSelected -and $selfSelected)
+        $button.IsEnabled = ($priorSelected -and $selfSelected)
     }
-    @($ages | ForEach-Object { $_.Control }) + @($prior) + @($self) | ForEach-Object { $_.add_Checked($validate) }
+    @($prior) + @($self) | ForEach-Object { $_.add_Checked($validate) }
     $button.add_Click({
-        $selectedAge = $ages | Where-Object { $_.Control.IsChecked -eq $true } | Select-Object -First 1
-        if ($selectedAge) { $result.StudentAge = $selectedAge.Value }
         for ($i = 0; $i -lt 4; $i++) {
             if ($prior[$i].IsChecked) { $result.PriorRobotics = $i + 1 }
             if ($self[$i].IsChecked) { $result.SelfEfficacy = $i + 1 }
@@ -1455,7 +1396,7 @@ function Initialize-TrayIcon {
     $menu = New-Object Windows.Forms.ContextMenu
     $reconfig = New-Object Windows.Forms.MenuItem "Reconfigurar Contexto da Máquina"
     $reconfig.add_Click({
-        Show-WpfSessionSetup -ForcePrompt | Out-Null
+        Show-WpfSessionSetup | Out-Null
     })
     $finish = New-Object Windows.Forms.MenuItem "Concluir Oficina"
     $finish.add_Click({
@@ -1495,7 +1436,6 @@ function Save-PreSurvey {
     $event = New-ResearchEvent $ParticipantId $Role "pre" $null
     $event["response_latency_ms"] = [int]$result.LatencyMs
     if ($result.Status) {
-        if ($result.StudentAge) { $event["student_age"] = [int]$result.StudentAge }
         $event["prior_robotics"] = [int]$result.PriorRobotics
         $event["self_efficacy_pre"] = [int]$result.SelfEfficacy
     } else {

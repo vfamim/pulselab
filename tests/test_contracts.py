@@ -112,6 +112,11 @@ class SchemaContractTests(unittest.TestCase):
         self.assertIn("VALUES ('screenshots', 'screenshots', false)", self.schema)
         self.assertNotIn("FOR SELECT\n    TO anon", self.schema)
 
+    def test_legacy_age_column_remains_nullable_for_older_rows(self):
+        definition = re.search(r"^\s*student_age\s+([^\n]+)", self.schema, re.MULTILINE)
+        self.assertIsNotNone(definition)
+        self.assertNotIn("NOT NULL", definition.group(1))
+
 
 class AgentStaticTests(unittest.TestCase):
     @classmethod
@@ -175,20 +180,44 @@ class AgentStaticTests(unittest.TestCase):
         for fragment in required_fragments:
             self.assertIn(fragment, self.agent)
 
-    def test_session_setup_only_shows_values_that_still_need_configuration(self):
+    def test_session_setup_reuses_saved_values_and_requires_fresh_confirmation(self):
         self.assertIn("function Test-NeedsSetupValue", self.agent)
-        self.assertIn('Width="540" Height="460"', self.agent)
+        self.assertIn('Width="540" Height="680"', self.agent)
         self.assertIn('Name="PnlSite"', self.agent)
         self.assertIn('Name="PnlSchool"', self.agent)
         self.assertIn('Name="PnlWorkshop"', self.agent)
         self.assertIn(
-            "$field.Panel.Visibility = [Windows.Visibility]::Collapsed",
+            "O PulseLab reutilizará estes valores na próxima execução",
             self.agent,
         )
         self.assertIn(
-            "$window.Height = [Math]::Min(680, 385 + (62 * $missingFieldCount))",
+            'Name="ChkConsent"',
             self.agent,
         )
+        self.assertNotIn("Bypassing setup window", self.agent)
+        self.assertNotIn("$script:GradeBand", self.agent)
+
+    def test_installation_profile_keeps_all_operational_setup_values(self):
+        for field in (
+            "site_id",
+            "regional_hub",
+            "school_code",
+            "workshop_code",
+            "class_code",
+            "activity_id",
+            "group_size",
+        ):
+            self.assertRegex(
+                self.agent,
+                rf"(?m)^\s*{field}\s*=\s*\$script:",
+            )
+        self.assertNotIn("grade_band", self.config)
+
+    def test_pre_survey_does_not_collect_age(self):
+        self.assertNotIn("student_age_prompt", self.config)
+        self.assertNotIn("Qual a sua idade?", self.agent)
+        self.assertNotIn('event["student_age"]', self.agent)
+        self.assertNotIn("StudentAge", self.agent)
 
     def test_remote_protocol_update_preserves_installed_site_identity(self):
         self.assertIn(
@@ -252,10 +281,9 @@ class InstallerPackagingTests(unittest.TestCase):
                 base64.b64decode(agent_match.group(1)),
                 AGENT_PATH.read_bytes(),
             )
-            self.assertEqual(
-                base64.b64decode(config_match.group(1)),
-                CONFIG_PATH.read_bytes(),
-            )
+            packaged_config = json.loads(base64.b64decode(config_match.group(1)))
+            self.assertEqual(packaged_config["supabase_url"], "https://example.supabase.co")
+            self.assertEqual(packaged_config["supabase_key"], "test-anon-key")
 
     def test_python_installer_can_embed_an_identity_preset(self):
         source_config = CONFIG_PATH.read_bytes()
@@ -297,6 +325,36 @@ class InstallerPackagingTests(unittest.TestCase):
             )
             self.assertEqual(packaged_config["school_code"], "ESCOLA-01")
             self.assertEqual(CONFIG_PATH.read_bytes(), source_config)
+
+    def test_python_installer_can_generate_zip_package(self):
+        import zipfile
+        with tempfile.TemporaryDirectory(prefix="pulselab-zip-test-") as temp_dir:
+            output = Path(temp_dir) / "Install-Pulselab-ZipTest.zip"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(INSTALLER_PATH),
+                    "--url",
+                    "https://example.supabase.co",
+                    "--key",
+                    "test-anon-key",
+                    "--zip",
+                    "--output",
+                    str(output),
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertTrue(output.exists())
+            with zipfile.ZipFile(output, "r") as zf:
+                file_list = zf.namelist()
+                self.assertIn("INSTRUCOES.txt", file_list)
+                bat_files = [f for f in file_list if f.endswith(".bat")]
+                self.assertEqual(len(bat_files), 1)
+                bat_content = zf.read(bat_files[0]).decode("utf-8")
+                self.assertIn("test-anon-key", bat_content)
 
     def test_both_installers_accept_identity_presets(self):
         powershell_installer = read_text(POWERSHELL_INSTALLER_PATH)

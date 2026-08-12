@@ -6,7 +6,7 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ## Novidades da Versão 1.4.0
 
-- **Identidade persistente da instalação**: cada máquina recebe `installation_id`, sede, regional e escola.
+- **Preparação persistente da instalação**: cada máquina recebe `installation_id` e reaproveita sede, regional, escola, oficina, turma, atividade e tamanho do grupo.
 - **Linha do tempo append-only**: início, heartbeats, checkpoints, pedidos de ajuda, trocas de papel, problemas de qualidade e encerramento são registrados em `research_session_events`.
 - **Resumo protegido de qualidade**: `research_session_quality` classifica sessões completas, em andamento, abortadas ou que precisam de revisão.
 - **Checkpoints absolutos**: os minutos 20 e 40 são calculados a partir do início real da atividade; o tempo gasto no primeiro questionário não adia intencionalmente o segundo.
@@ -45,6 +45,7 @@ pulselab/
     ├── protocolo-pesquisa-v1.md # Protocolo acadêmico e decisões pendentes
     ├── parecer-roadmap-observacao-distribuida.md # Parecer e roadmap de longo prazo
     ├── arquitetura-evidencias-v1.4.md # Contrato técnico do primeiro incremento
+    ├── contexto-projeto-robotica-educativa.md # Contexto institucional público usado no front
     ├── validacao-simulador-web.md # Protocolo de validação do fluxo navegável
     ├── relatorio-metodologia-pulselab.html # Relatório navegável
     └── tcc-research-framework.md # Guia histórico do TCC
@@ -103,7 +104,7 @@ de avaliação está em
 1. Edite o arquivo `config/config.json`:
    - Defina `"site_id"` para a sede/cidade inicial ou informe-o ao gerar o instalador.
    - Insira o identificador regional em `"regional_hub"` (ex: `"Polo-Nordeste-01"`).
-   - Defina os códigos padrão de escola, oficina e turma. Valores que ainda começarem com `CONFIGURE_` serão os únicos solicitados na abertura da sessão.
+   - Defina os códigos padrão de escola, oficina e turma. Valores que ainda começarem com `CONFIGURE_` aparecerão vazios na primeira abertura.
    - Ajuste `activity_id` e as perguntas somente após aprovação da versão do protocolo.
    - Configure `"config_remote_url"` com a URL raw do seu repositório pessoal:
      ```
@@ -111,7 +112,7 @@ de avaliação está em
      ```
 2. Realize o commit e envie para a branch `main` ou de release ativa.
 
-Sede, regional e escola são persistidos em `%LOCALAPPDATA%\PulseLab\installation.json` após a primeira confirmação válida. Atualizações remotas do protocolo não substituem essa identidade local. Depois disso, a tela inicial mostra esses valores apenas em um resumo compacto.
+Sede, regional, escola, oficina, turma, atividade e tamanho do grupo são persistidos em `%LOCALAPPDATA%\PulseLab\installation.json` após a primeira confirmação válida. Na próxima execução, a preparação reaparece preenchida para conferência e edição. A confirmação das autorizações nunca é reutilizada: precisa ser marcada em cada oficina. Atualizações remotas do protocolo não substituem a identidade local da instalação.
 
 ---
 
@@ -147,31 +148,33 @@ Você pode gerar o instalador a partir de qualquer ambiente:
 
 - **No Linux/macOS (usando Python)**:
   ```bash
+  # Gerar arquivo .bat solto ou arquivo .zip empacotado (--zip)
   python3 installer/build-installer.py \
       --site-id "JUAZEIRO-BA" \
       --regional-hub "POLO-VALE-SAO-FRANCISCO" \
       --school-code "ESCOLA-01" \
-      --output "Install-Pulselab-Juazeiro-BA.bat"
+      --zip \
+      --output "Install-Pulselab-Juazeiro-BA.zip"
   ```
 
 - **No Windows (usando PowerShell)**:
   ```powershell
+  # Gerar arquivo .bat solto ou pacote .zip empacotado (-ZipPackage)
   .\installer\build-installer.ps1 `
       -SiteId "JUAZEIRO-BA" `
       -RegionalHub "POLO-VALE-SAO-FRANCISCO" `
       -SchoolCode "ESCOLA-01" `
-      -OutputPath ".\Install-Pulselab-Juazeiro-BA.bat"
+      -ZipPackage `
+      -OutputPath ".\Install-Pulselab-Juazeiro-BA.zip"
   ```
 
-Os dois scripts leem automaticamente `PULSELAB_URL` e `PULSELAB_KEY` do `.env`. Também é possível fornecer as credenciais diretamente, mas isso deixa a chave no histórico do terminal.
+Os dois scripts leem automaticamente `PULSELAB_URL` e `PULSELAB_KEY` do `.env`. A chave `PULSELAB_KEY` é a **chave pública (`anon`)** do Supabase. Graças ao RLS (Row Level Security) configurado no banco de dados, esta chave possui **permissão de acesso mínimo necessário (INSERT-only)**: ela permite que as máquinas registrem telemetria e enviem evidências, mas impede qualquer leitura, alteração ou exclusão dos dados coletados por outras máquinas.
 
-Os parâmetros de identidade alteram somente a cópia da configuração embutida no instalador; o `config/config.json` do projeto não é modificado. Assim, você pode gerar um arquivo para cada sede e enviar ao respectivo responsável. Se algum valor continuar como `CONFIGURE_...`, somente esse valor será solicitado ao iniciar a oficina.
-
-Isso criará um arquivo `.bat` na raiz do projeto. Ele é ignorado pelo Git.
+Os parâmetros de identidade alteram somente a cópia da configuração embutida no instalador; o `config/config.json` do projeto não é modificado. Ao utilizar a opção `--zip` / `-ZipPackage`, um arquivo `.zip` contendo o instalador `.bat` e o arquivo `INSTRUCOES.txt` será gerado, pronto para ser enviado às escolas via Google Drive, e-mail ou WhatsApp.
 
 #### 3. Executar na máquina do aluno
-1. Copie somente o instalador correspondente à sede para um pendrive ou rede escolar.
-2. Na máquina do aluno, execute o arquivo clicando **duas vezes** nele (sem necessidade de privilégios de Administrador).
+1. Envie ou copie o pacote ZIP (`Install-Pulselab-*.zip`) ou o `.bat` para os responsáveis ou para um pendrive.
+2. Na máquina do aluno, extraia o ZIP e execute o arquivo `.bat` clicando **duas vezes** nele (sem necessidade de privilégios de Administrador).
 3. O instalador copiará os arquivos necessários de forma transparente para `C:\Users\Public\Pulselab\`, configurará as chaves no ambiente do usuário e criará o atalho na Área de Trabalho.
 4. Feche a janela do instalador após a mensagem de conclusão.
 
@@ -200,7 +203,7 @@ $u="https://SEU_PROJECT_REF.supabase.co"; $k="SUA_ANON_KEY"; iex (irm "https://r
 
 ## Como Usar na Oficina (Fluxo do Usuário)
 
-1. O instrutor abre o atalho, confere o resumo e preenche somente os itens que não foram pré-configurados, sem nomes de estudantes.
+1. O instrutor abre o atalho, revisa os dados operacionais pré-preenchidos e corrige o que mudou, sem nomes de estudantes.
 2. O instrutor confirma que verificou as autorizações e o consentimento aplicáveis.
 3. Cada criança recebe o convite de assentimento. Se qualquer uma recusar, o coletor encerra e a dupla continua normalmente na oficina.
 4. As crianças respondem, separadamente, experiência prévia e autoeficácia.

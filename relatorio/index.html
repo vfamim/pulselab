@@ -721,7 +721,7 @@
 <p>A literatura sobre robótica educacional identifica resultados promissores, mas também ressalta que a presença do recurso tecnológico não garante, por si só, melhoria da aprendizagem e que o método de avaliação precisa ser cuidadosamente definido (BENITTI, 2012). No campo de <em>learning analytics</em>, o objetivo não é apenas acumular registros digitais, mas coletar, analisar, interpretar e comunicar dados de modo teoricamente relevante e acionável para melhorar ensino e aprendizagem (SoLAR, 2025). A abordagem multimodal é particularmente pertinente a tarefas abertas, como construir um robô ou um programa, nas quais processo e produto não ficam inteiramente representados em uma única prova ou em cliques de uma plataforma (BLIKSTEIN, 2013).</p>
 <p>O PulseLab responde a esse problema ao combinar quatro camadas:</p>
 <ol>
-<li><strong>contexto:</strong> escola, oficina, turma, atividade, idade/faixa escolar, experiência prévia e papel;</li>
+<li><strong>contexto:</strong> escola, oficina, turma, atividade, experiência prévia e papel;</li>
 <li><strong>processo percebido:</strong> esforço mental, estado de progresso, necessidade de ajuda e colaboração;</li>
 <li><strong>resultado imediato:</strong> compreensão percebida, afetos, intenção de retorno e, após a integração pendente, desempenho da missão e conhecimento específico;</li>
 <li><strong>qualidade da evidência:</strong> linha do tempo, completude, atrasos, recusas, timeouts, sincronização, versão do protocolo e alertas técnicos.</li>
@@ -782,7 +782,7 @@
 <tr>
 <td>Pré-oficina</td>
 <td>Cada participante responde individualmente</td>
-<td>idade, experiência prévia e autoeficácia</td>
+<td>experiência prévia e autoeficácia</td>
 <td>perfil inicial e variáveis de ajuste</td>
 </tr>
 <tr>
@@ -879,14 +879,8 @@
 <td>ordinal 1–4</td>
 <td>perfil inicial e moderador</td>
 </tr>
-<tr>
-<td>Idade/faixa escolar</td>
-<td>idade informada e faixa configurada</td>
-<td><code>student_age</code>, <code>grade_band</code></td>
-<td>razão/categoria</td>
-<td>descrição e estratificação</td>
-</tr>
 </tbody></table>
+<p><strong>Limite de caracterização:</strong> para reduzir o tempo do instrumento, o PulseLab não solicita mais a idade individual. Assim, os dados do aplicativo não permitem comparações ou ajustes estatísticos por idade. A faixa etária do público continua sendo definida institucionalmente no protocolo da oficina, e não inferida a partir dos eventos coletados. A coluna histórica <code>student_age</code> permanece nullable no schema apenas para compatibilidade com registros anteriores.</p>
 <p><strong>Leitura correta:</strong> “142 participantes com eventos de pesquisa registrados” é tecnicamente mais preciso que “142 estudantes impactados”. O aplicativo mede participação na coleta; “impacto” exige um desfecho e um desenho capazes de demonstrar mudança atribuível ao programa.</p>
 <h3 id="sec-4-2-processo-de-aprendizagem-e-colaboracao">4.2 Processo de aprendizagem e colaboração</h3>
 <table>
@@ -1217,7 +1211,7 @@
 <h3 id="sec-6-2-analise-descritiva">6.2 Análise descritiva</h3>
 <ul>
 <li>contagens de escolas, oficinas, sessões, duplas e participantes;</li>
-<li>distribuição por idade/faixa, experiência e autoeficácia;</li>
+<li>distribuição por experiência prévia e autoeficácia;</li>
 <li>frequências e intervalos de confiança de esforço, progresso, ajuda, colaboração e resultados finais;</li>
 <li>matrizes de transição entre minutos 20 e 40;</li>
 <li>medianas e intervalos interquartis para latência e atraso;</li>
@@ -1226,16 +1220,16 @@
 </ul>
 <p>Escalas de quatro categorias não devem ser apresentadas somente por média. A média “2,4/4” pressupõe distâncias iguais entre categorias e, isoladamente, esconde a distribuição. Barras de proporção, medianas, probabilidades previstas e modelos ordinais são mais defensáveis.</p>
 <h3 id="sec-6-3-modelos-recomendados">6.3 Modelos recomendados</h3>
-<p><strong>H1 — esforço mental:</strong> modelo ordinal de ligação cumulativa, com momento, papel, experiência prévia, faixa etária e atividade como efeitos fixos. Incluir interceptos aleatórios para participante e dupla; oficina/escola entram como níveis adicionais quando o número de agrupamentos permitir.</p>
+<p><strong>H1 — esforço mental:</strong> modelo ordinal de ligação cumulativa, com momento, papel, experiência prévia e atividade como efeitos fixos. Incluir interceptos aleatórios para participante e dupla; oficina/escola entram como níveis adicionais quando o número de agrupamentos permitir.</p>
 <p><strong>H2 — ajuda e mediação:</strong> modelar a probabilidade ou intensidade de intervenção em função do estado de progresso/pedido de ajuda, ajustando por momento, experiência e atividade. Como a intervenção é medida no nível da dupla, não duplicar a rubrica nas duas linhas pós.</p>
-<p><strong>H3 — colaboração e desempenho:</strong> modelar a rubrica 0–3 como desfecho ordinal. A associação deve ser ajustada por experiência prévia, faixa escolar, atividade e intervenções. O resultado será associação, não efeito causal.</p>
+<p><strong>H3 — colaboração e desempenho:</strong> modelar a rubrica 0–3 como desfecho ordinal. A associação deve ser ajustada por experiência prévia, atividade e intervenções. O resultado será associação, não efeito causal.</p>
 <p><strong>H4 — conhecimento:</strong> construir itens equivalentes alinhados aos objetivos de cada <code>activity_id</code>. Avaliar respostas por item e escore, emparelhar pré/pós e relatar mudança com intervalo de confiança. Sem comparador, usar “ganho imediato observado”, e não “impacto causado”.</p>
 <p><strong>H5 — viabilidade:</strong> estimar proporções de sessões concluídas, completas e revisadas, além de atraso e sincronização. Comparar escolas ou instalações somente quando houver volume suficiente e quando a interpretação não permitir reidentificação ou ranqueamento injustificado.</p>
 <h3 id="sec-6-4-dados-ausentes-e-sensibilidade">6.4 Dados ausentes e sensibilidade</h3>
 <ul>
 <li>relatar recusas e timeouts separadamente;</li>
 <li>não imputar automaticamente respostas recusadas;</li>
-<li>verificar se a ausência se concentra por idade, escola, momento ou papel;</li>
+<li>verificar se a ausência se concentra por escola, momento ou papel;</li>
 <li>repetir análises principais em conjunto completo e em cenários de sensibilidade, quando justificável;</li>
 <li>não excluir uma sessão apenas porque contém alerta técnico; aplicar regras definidas antes de observar o resultado.</li>
 </ul>
@@ -1322,7 +1316,7 @@
 </tr>
 </thead>
 <tbody><tr>
-<td>Pré: idade, experiência e autoeficácia</td>
+<td>Pré: experiência e autoeficácia</td>
 <td>implementado no agente e no schema</td>
 <td>disponível para piloto</td>
 </tr>

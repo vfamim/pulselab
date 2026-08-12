@@ -45,8 +45,9 @@ O instrutor informa:
 - código da escola;
 - código da oficina;
 - código da turma;
-- faixa ou ano escolar;
 - confirmação de que as autorizações e o consentimento aplicáveis foram verificados.
+
+Os códigos operacionais são reapresentados com os últimos valores salvos na máquina. O instrutor pode corrigi-los antes de iniciar. A confirmação das autorizações não é persistida e deve ser renovada em cada oficina.
 
 O sistema gera códigos temporários para os dois participantes. Nomes não são solicitados.
 
@@ -55,6 +56,10 @@ Cada criança recebe um convite de assentimento em linguagem simples. Se qualque
 O professor Jadsonlee é, neste momento, a referência pedagógica informada para a definição das atividades e da rubrica. Isso não o torna automaticamente controlador dos dados ou responsável ético pelo estudo; essas funções precisam ser formalmente definidas pela instituição.
 
 ### 5.2 Pré-oficina
+
+A idade individual não é solicitada pelo PulseLab. A faixa etária atendida deve
+ser definida no protocolo e nos critérios institucionais da oficina, sem criar
+uma etapa adicional de resposta para cada participante.
 
 Cada participante responde individualmente:
 
@@ -179,7 +184,7 @@ Para transformar a pesquisa em avaliação individual, acrescentar uma explicaç
 
 - Esforço aos 20/40 minutos: modelo ordinal de efeitos mistos.
 - Bloqueio e ajuda: regressão logística multinível.
-- Desempenho: modelo ajustado por experiência prévia, papel, faixa escolar e atividade.
+- Desempenho: modelo ajustado por experiência prévia, papel e atividade.
 - Pré/pós de conhecimento: modelo misto ou análise pareada, sem alegação causal na ausência de comparador.
 - Respostas ausentes: descrever separadamente `declined` e `timeout`.
 - Escola, oficina e dupla: tratar como níveis de agrupamento quando a amostra permitir.

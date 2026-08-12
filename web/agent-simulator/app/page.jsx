@@ -10,6 +10,11 @@ import {
   qualityLabel,
   roleLabel
 } from "../lib/contracts.js";
+import {
+  STORED_CONTEXT_KEY,
+  createStoredContext,
+  sanitizeStoredContext
+} from "../lib/context-storage.js";
 
 const DEFAULT_CONTEXT = {
   site_id: "Juazeiro-BA",
@@ -17,14 +22,12 @@ const DEFAULT_CONTEXT = {
   school_code: "ESCOLA-DEMO-01",
   workshop_code: "OFICINA-DEMO-001",
   class_code: "TURMA-DEMO-A",
-  grade_band: "8º e 9º ano",
   group_size: 2,
   activity_id: "atividade-01-spike",
   authorization_verified: false
 };
 
 const PRE_DEFAULT = {
-  student_age: null,
   prior_robotics: null,
   self_efficacy_pre: null
 };
@@ -233,6 +236,7 @@ export default function AgentSimulatorPage() {
   const [savedRubric, setSavedRubric] = useState(RUBRIC_DEFAULT);
   const [assentA, setAssentA] = useState(false);
   const [toast, setToast] = useState("");
+  const [contextStorageReady, setContextStorageReady] = useState(false);
   const toastTimer = useRef(null);
   const sequence = useRef(0);
 
@@ -248,15 +252,29 @@ export default function AgentSimulatorPage() {
     setDyadId(createUuid());
     setStartedAt(Date.now());
 
-    const storedContextKey = "pulselab_stored_context";
-    const storedContextRaw = window.localStorage.getItem(storedContextKey);
+    const storedContextRaw = window.localStorage.getItem(STORED_CONTEXT_KEY);
     if (storedContextRaw) {
       try {
         const parsed = JSON.parse(storedContextRaw);
-        setContext((current) => ({ ...current, ...parsed }));
+        setContext((current) => ({
+          ...current,
+          ...sanitizeStoredContext(parsed),
+          authorization_verified: false
+        }));
       } catch (e) {}
     }
+    setContextStorageReady(true);
   }, []);
+
+  useEffect(() => {
+    if (!contextStorageReady) return;
+    try {
+      window.localStorage.setItem(
+        STORED_CONTEXT_KEY,
+        JSON.stringify(createStoredContext(context))
+      );
+    } catch (e) {}
+  }, [context, contextStorageReady]);
 
   useEffect(() => {
     return () => {
@@ -325,7 +343,6 @@ export default function AgentSimulatorPage() {
       school_code: context.school_code,
       workshop_code: context.workshop_code,
       class_code: context.class_code,
-      grade_band: context.grade_band,
       activity_id: context.activity_id,
       computer_id: "SIMULADOR-WEB",
       protocol_version: "protocolo-pesquisa-v1",
@@ -395,9 +412,6 @@ export default function AgentSimulatorPage() {
       flash("Preencha os códigos e confirme a verificação das autorizações.");
       return;
     }
-    try {
-      window.localStorage.setItem("pulselab_stored_context", JSON.stringify(context));
-    } catch (e) {}
     setScreen("assent_a");
   }
 
@@ -432,9 +446,9 @@ export default function AgentSimulatorPage() {
     const participant = participantKey;
     if (
       responseStatus === "completed" &&
-      (!preAnswers.prior_robotics || !preAnswers.self_efficacy_pre || !preAnswers.student_age)
+      (!preAnswers.prior_robotics || !preAnswers.self_efficacy_pre)
     ) {
-      flash("Escolha uma opção em cada pergunta (incluindo sua idade).");
+      flash("Escolha uma opção em cada pergunta.");
       return;
     }
     emitResponse(
@@ -891,6 +905,10 @@ export default function AgentSimulatorPage() {
     setSavedRubric(RUBRIC_DEFAULT);
     setAssentA(false);
     setOnline(true);
+    setContext((current) => ({
+      ...current,
+      authorization_verified: false
+    }));
     flash("Nova sessão de validação preparada.");
   }
 
@@ -931,7 +949,7 @@ export default function AgentSimulatorPage() {
         footer={
           <ActionRow>
             <span className="footer-hint">
-              Os dados ficam somente neste navegador até a exportação.
+              Os dados operacionais são pré-salvos neste navegador. Confirme as autorizações em cada oficina.
             </span>
             <button className="button button--primary" onClick={beginSession}>
               Confirmar e iniciar
@@ -987,15 +1005,6 @@ export default function AgentSimulatorPage() {
               value={context.class_code}
               onChange={(event) =>
                 setContext({ ...context, class_code: event.target.value })
-              }
-            />
-          </label>
-          <label>
-            <span>Ano ou faixa escolar</span>
-            <input
-              value={context.grade_band}
-              onChange={(event) =>
-                setContext({ ...context, grade_band: event.target.value })
               }
             />
           </label>
@@ -1104,27 +1113,6 @@ export default function AgentSimulatorPage() {
         }
       >
         <ParticipantBadge participantKey={participant} />
-        <ScaleQuestion
-          title="Qual a sua idade?"
-          value={preAnswers.student_age}
-          onChange={(value) =>
-            setPreAnswers((current) => ({
-              ...current,
-              student_age: value
-            }))
-          }
-          labels={[
-            "8 anos",
-            "9 anos",
-            "10 anos",
-            "11 anos",
-            "12 anos",
-            "13 anos",
-            "14 anos",
-            "15+ anos"
-          ]}
-          values={[8, 9, 10, 11, 12, 13, 14, 15]}
-        />
         <ScaleQuestion
           title="Antes de hoje, você já tinha montado ou programado um robô?"
           value={preAnswers.prior_robotics}

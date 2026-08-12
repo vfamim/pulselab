@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     activity_stage             text,
 
     -- Pré-oficina
+    -- Campo legado nullable: preservado para consultar coletas anteriores.
+    -- Novas versões do agente não solicitam nem enviam a idade individual.
     student_age                integer      CHECK (student_age IS NULL OR (student_age BETWEEN 5 AND 25)),
     prior_robotics             smallint     CHECK (prior_robotics BETWEEN 1 AND 4),
     self_efficacy_pre          smallint     CHECK (self_efficacy_pre BETWEEN 1 AND 4),
@@ -475,5 +477,4 @@ COMMENT ON TABLE public.authorized_instructors IS
 INSERT INTO public.authorized_instructors (email, full_name, role_description, is_active)
 VALUES ('vfamim@gmail.com', 'Vinicius Famim', 'Coordenador / Administrador PulseLab', true)
 ON CONFLICT (email) DO UPDATE SET is_active = true;
-
 

@@ -16,7 +16,9 @@ param(
     [string]$RegionalHub = $null,
 
     [Parameter(Mandatory = $false)]
-    [string]$SchoolCode = $null
+    [string]$SchoolCode = $null,
+
+    [switch]$ZipPackage
 )
 
 Set-StrictMode -Version Latest
@@ -113,6 +115,8 @@ $identityOverrides = @{
     site_id = $SiteId
     regional_hub = $RegionalHub
     school_code = $SchoolCode
+    supabase_url = $SupabaseUrl
+    supabase_key = $SupabaseKey
 }
 $selectedOverrides = @{}
 foreach ($field in $identityOverrides.Keys) {
@@ -241,9 +245,50 @@ Write-InstallerLog "INFO" "----------------------------------------"
 Read-Host "Pressione Enter para finalizar..."
 "@
 
-Write-Host "Escrevendo instalador standalone em: $OutputPath"
-# Escrever como UTF-8 com BOM para garantir compatibilidade com Windows/CMD
-$utf8NoBOM = New-Object System.Text.UTF8Encoding($true)
-[System.IO.File]::WriteAllText($OutputPath, $batchTemplate, $utf8NoBOM)
+$isZip = $ZipPackage -or ($OutputPath -and $OutputPath.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase))
+if ($isZip) {
+    if ($OutputPath -and $OutputPath.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $zipPath = $OutputPath
+        $batPath = $OutputPath.Substring(0, $OutputPath.Length - 4) + ".bat"
+    } else {
+        $batPath = $OutputPath
+        $zipPath = [System.IO.Path]::ChangeExtension($OutputPath, ".zip")
+    }
 
-Write-Host "Instalador gerado com sucesso!"
+    Write-Host "Escrevendo instalador standalone em: $batPath"
+    $utf8Encoding = New-Object System.Text.UTF8Encoding($true)
+    [System.IO.File]::WriteAllText($batPath, $batchTemplate, $utf8Encoding)
+
+    $instructions = @"
+====================================================================
+               PULSELAB - INSTALADOR DA OFICINA
+====================================================================
+
+Este arquivo contem o instalador autonomo do PulseLab para esta sede.
+
+COMO INSTALAR NAS MAQUINAS DAS ESCOLAS:
+1. Extraia o conteudo deste arquivo ZIP em uma pasta ou pendrive.
+2. Na maquina do aluno/oficina, de DOIS CLIQUES no arquivo .bat (ex: Install-Pulselab-*.bat).
+3. Aguarde a mensagem de conclusao. Nao sao necessarios privilegios de Administrador.
+4. Um atalho chamado 'Iniciar Pulselab - Oficina de Robotica' sera criado na Area de Trabalho.
+
+====================================================================
+"@
+    $instructionsPath = Join-Path (Split-Path -Parent $batPath) "INSTRUCOES.txt"
+    [System.IO.File]::WriteAllText($instructionsPath, $instructions, $utf8Encoding)
+
+    Write-Host "Criando pacote .zip em: $zipPath"
+    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
+    Compress-Archive -Path $batPath, $instructionsPath -DestinationPath $zipPath -Force
+
+    Remove-Item $instructionsPath -Force -ErrorAction SilentlyContinue
+    if ($OutputPath -and $OutputPath.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
+        Remove-Item $batPath -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Pacote .zip gerado com sucesso!"
+} else {
+    Write-Host "Escrevendo instalador standalone em: $OutputPath"
+    $utf8NoBOM = New-Object System.Text.UTF8Encoding($true)
+    [System.IO.File]::WriteAllText($OutputPath, $batchTemplate, $utf8NoBOM)
+    Write-Host "Instalador gerado com sucesso!"
+}

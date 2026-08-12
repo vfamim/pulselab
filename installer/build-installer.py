@@ -29,6 +29,7 @@ def main():
     parser.add_argument("--site-id", help="Sede/cidade que ficara vinculada a instalacao")
     parser.add_argument("--regional-hub", help="Polo ou regional da instalacao")
     parser.add_argument("--school-code", help="Codigo da escola da instalacao")
+    parser.add_argument("--zip", action="store_true", help="Gerar pacote .zip pronto para envio com o instalador .bat e instrucoes")
     args = parser.parse_args()
 
     # Resolver diretorios do projeto
@@ -82,6 +83,8 @@ def main():
         "site_id": args.site_id,
         "regional_hub": args.regional_hub,
         "school_code": args.school_code,
+        "supabase_url": url,
+        "supabase_key": key,
     }
     selected_overrides = {
         field: value.strip()
@@ -213,11 +216,48 @@ Write-InstallerLog "INFO" "----------------------------------------"
 Read-Host "Pressione Enter para finalizar..."
 """
 
-    print(f"Escrevendo instalador standalone em: {output_path}")
-    with open(output_path, "w", encoding="utf-8", newline="\r\n") as f:
-        f.write(batch_template)
-    
-    print("Instalador gerado com sucesso!")
+    if args.zip or output_path.lower().endswith(".zip"):
+        import zipfile
+        if output_path.lower().endswith(".zip"):
+            zip_path = output_path
+            bat_path = output_path[:-4] + ".bat"
+        else:
+            bat_path = output_path
+            zip_path = os.path.splitext(output_path)[0] + ".zip"
+
+        print(f"Escrevendo instalador standalone em: {bat_path}")
+        with open(bat_path, "w", encoding="utf-8", newline="\r\n") as f:
+            f.write(batch_template)
+
+        instructions_content = (
+            "====================================================================\r\n"
+            "               PULSELAB - INSTALADOR DA OFICINA\r\n"
+            "====================================================================\r\n\r\n"
+            "Este arquivo contem o instalador autonomo do PulseLab para esta sede.\r\n\r\n"
+            "COMO INSTALAR NAS MAQUINAS DAS ESCOLAS:\r\n"
+            "1. Extraia o conteudo deste arquivo ZIP em uma pasta ou pendrive.\r\n"
+            "2. Na maquina do aluno/oficina, de DOIS CLIQUES no arquivo .bat (ex: Install-Pulselab-*.bat).\r\n"
+            "3. Aguarde a mensagem de conclusao. Nao sao necessarios privilegios de Administrador.\r\n"
+            "4. Um atalho chamado 'Iniciar Pulselab - Oficina de Robotica' sera criado na Area de Trabalho.\r\n\r\n"
+            "====================================================================\r\n"
+        )
+
+        bat_filename = os.path.basename(bat_path)
+        print(f"Criando pacote .zip pronto para envio em: {zip_path}")
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(bat_path, arcname=bat_filename)
+            zf.writestr("INSTRUCOES.txt", instructions_content)
+
+        # Se o usuario pediu .zip diretamente como output, podemos remover o .bat solto temporario
+        if output_path.lower().endswith(".zip") and os.path.exists(bat_path):
+            os.remove(bat_path)
+
+        print("Pacote .zip gerado com sucesso!")
+    else:
+        print(f"Escrevendo instalador standalone em: {output_path}")
+        with open(output_path, "w", encoding="utf-8", newline="\r\n") as f:
+            f.write(batch_template)
+        print("Instalador gerado com sucesso!")
 
 if __name__ == "__main__":
     main()

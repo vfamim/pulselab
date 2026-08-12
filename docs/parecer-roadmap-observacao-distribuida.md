@@ -353,7 +353,6 @@ Selecionar ou receber de uma agenda central:
 
 - `workshop_id`;
 - `class_code`;
-- `grade_band`;
 - `activity_id`;
 - instrutor responsável;
 - protocolo aplicável;

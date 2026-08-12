@@ -73,7 +73,7 @@ flowchart LR
 | `workshop_code` | Informado pelo instrutor | Agrupar sessões da mesma oficina |
 | `activity_id` | Configuração/sessão | Identificar a proposta pedagógica aplicada |
 
-O arquivo `%LOCALAPPDATA%\PulseLab\installation.json` guarda somente identidade operacional da instalação: UUID, sede, regional e escola. Ele não deve conter nomes de estudantes.
+O arquivo `%LOCALAPPDATA%\PulseLab\installation.json` guarda somente o contexto operacional da instalação: UUID, sede, regional, escola, oficina, turma, atividade e tamanho do grupo. Esses valores reaparecem preenchidos para revisão na execução seguinte. A confirmação das autorizações é deliberadamente excluída do perfil e precisa ser renovada em cada oficina. O arquivo não deve conter nomes de estudantes.
 
 ## 4. Contratos de dados
 

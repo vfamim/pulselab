@@ -3,289 +3,638 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PulseLab | Coleta de Evidências em Robótica Educacional</title>
-    <meta name="description" content="Fundação de observação distribuída, autorrelato pseudonimizado e controle de qualidade para oficinas de robótica LEGO SPIKE.">
+    <meta name="theme-color" content="#0067b1">
+    <title>PulseLab | Pesquisa no Projeto Robótica Educativa</title>
+    <meta name="description" content="O PulseLab é a camada de pesquisa e acompanhamento ético das oficinas do projeto Robótica Educativa da UNIVASF.">
+    <link rel="icon" href="https://robotica-educativa-univasf.vercel.app/icons/favicon-32x32.png" sizes="32x32" type="image/png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://robotica-educativa-univasf.vercel.app">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
-            --color-canvas: #f2f0f7;
-            --color-canvas-soft: #f8f7fb;
-            --color-surface: #ffffff;
-            --color-surface-hover: #f7f4fc;
-            --color-border: #ded9e8;
-            --color-border-bright: #c9c0d8;
-            --color-text-main: #171329;
-            --color-text-muted: #6e687d;
-            --color-coral: #f37c7f;
-            --color-aqua: #49d9ce;
-            --color-aqua-dark: #087e78;
-            --color-blue: #6547a8;
-            --color-purple: #8064c8;
-            --color-yellow: #f1c75b;
-            --color-emerald: #16856d;
-            --radius-lg: 16px;
-            --radius-xl: 24px;
-            --radius-full: 9999px;
-            --shadow-card: 0 22px 70px rgba(31, 20, 58, 0.12);
-            --shadow-glow-coral: 0 0 40px rgba(243, 124, 127, 0.14);
-            --shadow-glow-blue: 0 0 40px rgba(101, 71, 168, 0.14);
+            --background: #ffffff;
+            --foreground: #01060f;
+            --surface: #f3f7fc;
+            --surface-strong: #eaf3fc;
+            --card: #ffffff;
+            --primary: #0067b1;
+            --primary-dark: #00457c;
+            --primary-soft: #dceeff;
+            --accent: #e79800;
+            --accent-dark: #b27000;
+            --muted: #5b646f;
+            --border: #d9dfe4;
+            --success: #16705a;
+            --radius-sm: 12px;
+            --radius-md: 18px;
+            --radius-lg: 28px;
+            --radius-full: 999px;
+            --shadow-sm: 0 8px 24px rgba(0, 69, 124, 0.08);
+            --shadow-lg: 0 28px 80px rgba(0, 69, 124, 0.14);
         }
+
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: radial-gradient(circle at 12% 5%, rgba(128, 100, 200, 0.15), transparent 26rem), linear-gradient(135deg, var(--color-canvas-soft), var(--color-canvas)); color: var(--color-text-main); line-height: 1.6; overflow-x: hidden; }
-        .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
-        header.nav-header { position: sticky; top: 0; z-index: 50; background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--color-border); box-shadow: 0 8px 30px rgba(31, 20, 58, 0.06); }
-        .nav-header__inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
-        .brand { display: flex; align-items: center; gap: 12px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.25rem; color: #30204f; text-decoration: none; }
-        .brand-badge { background: linear-gradient(135deg, var(--color-aqua), var(--color-purple)); color: #171027; font-size: 0.65rem; padding: 2px 8px; border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.05em; }
-        .nav-links { display: flex; align-items: center; gap: 24px; list-style: none; }
-        .nav-links a { color: var(--color-text-muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .nav-links a:hover { color: var(--color-blue); }
-        .button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: var(--radius-full); font-weight: 600; font-size: 0.9rem; text-decoration: none; transition: all 0.2s; border: 1px solid transparent; }
-        .button--primary { background: var(--color-blue); color: #fff; box-shadow: 0 10px 26px rgba(101, 71, 168, 0.20); }
-        .button--primary:hover { background: #563b92; transform: translateY(-1px); box-shadow: 0 14px 30px rgba(101, 71, 168, 0.26); }
-        .nav-links .button--primary,
-        .nav-links .button--primary:hover { color: #fff; }
-        .button--secondary { background: rgba(255, 255, 255, 0.78); color: var(--color-blue); border-color: var(--color-border-bright); }
-        .button--secondary:hover { background: var(--color-surface); border-color: var(--color-purple); transform: translateY(-1px); }
-        .hero { padding: 96px 0 72px; text-align: center; position: relative; }
-        .hero::before { content: ""; position: absolute; width: 240px; height: 240px; left: -100px; top: 40px; border-radius: 50%; background: rgba(73, 217, 206, 0.14); filter: blur(2px); pointer-events: none; }
-        .hero-kicker { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: var(--radius-full); background: rgba(73, 217, 206, 0.16); border: 1px solid rgba(8, 126, 120, 0.22); color: var(--color-aqua-dark); font-size: 0.85rem; font-weight: 700; margin-bottom: 24px; }
-        .hero h1 { font-family: 'Outfit', sans-serif; font-size: 3.5rem; font-weight: 800; line-height: 1.15; max-width: 800px; margin: 0 auto 24px; letter-spacing: -0.02em; }
-        .hero-lead { font-size: 1.2rem; color: var(--color-text-muted); max-width: 680px; margin: 0 auto 36px; }
-        .hero-actions { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 48px; }
-        .section-heading { margin-bottom: 48px; }
-        .section-heading--split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: flex-end; }
-        .section-kicker { color: var(--color-aqua-dark); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; display: block; }
-        .section-heading h2 { font-family: 'Outfit', sans-serif; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.01em; }
-        .project-story { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 96px; }
-        .challenge-card, .answer-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-card); }
-        .card-label { display: inline-block; padding: 4px 12px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px; }
-        .card-label--coral { background: rgba(243, 124, 127, 0.14); color: #a33f47; }
-        .card-label--blue { background: var(--violet-100, #eee8ff); color: var(--color-blue); }
-        .challenge-list { list-style: none; margin-top: 24px; }
-        .challenge-list li { display: flex; gap: 16px; margin-bottom: 20px; }
-        .challenge-list span { font-family: 'Outfit', sans-serif; font-weight: 800; color: var(--color-coral); font-size: 1.2rem; }
-        .answer-flow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 28px 0; background: #f5f1fb; border: 1px solid var(--color-border); padding: 20px; border-radius: var(--radius-lg); }
-        .answer-flow__number { width: 28px; height: 28px; border-radius: 50%; background: var(--color-blue); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; }
-        .privacy-note { display: flex; align-items: center; gap: 12px; background: #eaf7f3; border: 1px solid #bde5db; padding: 12px 16px; border-radius: var(--radius-lg); font-size: 0.85rem; color: #0f6a56; margin-top: 24px; }
-        .privacy-note svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; flex-shrink: 0; }
-        .experience-section { padding: 96px 0; border-top: 1px solid var(--color-border); }
-        .experience-chapter { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-bottom: 80px; }
+        html { scroll-behavior: smooth; }
+        body {
+            color: var(--foreground);
+            background: var(--background);
+            font-family: 'Inter', sans-serif;
+            line-height: 1.65;
+            overflow-x: hidden;
+        }
+        img { max-width: 100%; }
+        a { color: inherit; }
+        .container { width: min(1200px, calc(100% - 48px)); margin: 0 auto; }
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            color: var(--primary);
+            font-size: 0.76rem;
+            font-weight: 800;
+            letter-spacing: 0.11em;
+            text-transform: uppercase;
+        }
+        .eyebrow::before {
+            content: "";
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent);
+            box-shadow: 0 0 0 5px rgba(231, 152, 0, 0.12);
+        }
+        .section-heading { max-width: 760px; margin-bottom: 44px; }
+        .section-heading--center { text-align: center; margin-left: auto; margin-right: auto; }
+        .section-heading h2 {
+            margin-top: 12px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: clamp(2rem, 4vw, 3rem);
+            line-height: 1.16;
+            letter-spacing: -0.035em;
+        }
+        .section-heading p { margin-top: 16px; color: var(--muted); font-size: 1.03rem; }
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            min-height: 46px;
+            padding: 11px 20px;
+            border: 2px solid transparent;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 0.88rem;
+            text-decoration: none;
+            transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease, border-color 180ms ease;
+        }
+        .button:hover { transform: translateY(-2px); }
+        .button--primary { background: var(--primary); color: #fff; box-shadow: 0 10px 24px rgba(0, 103, 177, 0.22); }
+        .button--primary:hover { background: var(--primary-dark); box-shadow: 0 14px 30px rgba(0, 69, 124, 0.25); }
+        .button--secondary { background: #fff; color: var(--foreground); border-color: var(--border); }
+        .button--secondary:hover { color: var(--primary); border-color: var(--primary); box-shadow: var(--shadow-sm); }
+
+        .nav-header {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(255, 255, 255, 0.92);
+            border-bottom: 1px solid rgba(217, 223, 228, 0.88);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+        .nav-header__inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+        .brand { display: inline-flex; align-items: center; gap: 13px; text-decoration: none; min-width: max-content; }
+        .brand img { width: 58px; height: 58px; object-fit: contain; }
+        .brand__divider { width: 1px; height: 32px; background: var(--border); }
+        .brand__copy { display: grid; line-height: 1.05; }
+        .brand__copy strong { color: var(--primary-dark); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.12rem; }
+        .brand__copy small { margin-top: 5px; color: var(--muted); font-size: 0.64rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+        .nav-links { display: flex; align-items: center; gap: 4px; list-style: none; }
+        .nav-links a:not(.button) { display: inline-flex; padding: 9px 11px; border-radius: 9px; color: #424a54; font-size: 0.83rem; font-weight: 600; text-decoration: none; }
+        .nav-links a:not(.button):hover { color: var(--primary); background: var(--surface-strong); }
+        .nav-actions { display: flex; align-items: center; gap: 9px; }
+        .nav-actions .button { min-height: 40px; padding: 8px 14px; }
+
+        .hero {
+            position: relative;
+            min-height: 760px;
+            display: flex;
+            align-items: center;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 78% 34%, rgba(231, 152, 0, 0.12), transparent 25rem),
+                radial-gradient(circle at 18% 56%, rgba(0, 103, 177, 0.08), transparent 30rem),
+                radial-gradient(rgba(0, 103, 177, 0.16) 1px, transparent 1px);
+            background-size: auto, auto, 32px 32px;
+        }
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(90deg, rgba(255,255,255,0.25), rgba(255,255,255,0.66));
+        }
+        .hero__grid { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(420px, 0.95fr); gap: 72px; align-items: center; padding: 88px 0; }
+        .hero__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 9px;
+            padding: 7px 14px;
+            border: 1px solid rgba(0, 103, 177, 0.22);
+            border-radius: var(--radius-full);
+            color: var(--primary);
+            background: rgba(234, 243, 252, 0.82);
+            font-size: 0.74rem;
+            font-weight: 800;
+            letter-spacing: 0.09em;
+            text-transform: uppercase;
+        }
+        .hero__badge span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+        .hero h1 {
+            max-width: 710px;
+            margin: 24px 0 20px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-size: clamp(3rem, 5.7vw, 5rem);
+            font-weight: 800;
+            line-height: 1.04;
+            letter-spacing: -0.055em;
+        }
+        .hero h1 em { color: var(--primary); font-style: normal; }
+        .hero__lead { max-width: 650px; color: var(--muted); font-size: clamp(1rem, 1.8vw, 1.18rem); }
+        .hero__actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; }
+        .hero__tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 28px; }
+        .tag { padding: 6px 11px; border-radius: var(--radius-full); font-size: 0.72rem; font-weight: 700; }
+        .tag--blue { background: var(--primary); color: #fff; }
+        .tag--yellow { background: var(--accent); color: #17120a; }
+        .tag--dark { background: var(--foreground); color: #fff; }
+        .hero__visual { position: relative; min-height: 480px; display: grid; place-items: center; }
+        .hero__orbit, .hero__orbit::before {
+            position: absolute;
+            border: 1px dashed rgba(0, 103, 177, 0.18);
+            border-radius: 50%;
+            content: "";
+        }
+        .hero__orbit { width: 440px; height: 440px; }
+        .hero__orbit::before { inset: 22px; border-color: rgba(231, 152, 0, 0.25); }
+        .logo-stage {
+            position: relative;
+            z-index: 2;
+            width: 342px;
+            height: 342px;
+            display: grid;
+            place-items: center;
+            border: 1px solid rgba(217, 223, 228, 0.72);
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: var(--shadow-lg);
+        }
+        .logo-stage img { width: 270px; height: 270px; object-fit: contain; }
+        .metric-float {
+            position: absolute;
+            z-index: 3;
+            min-width: 104px;
+            padding: 12px 16px;
+            border-radius: 17px;
+            text-align: center;
+            box-shadow: 0 14px 30px rgba(0, 69, 124, 0.18);
+        }
+        .metric-float strong { display: block; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.45rem; line-height: 1; }
+        .metric-float small { display: block; margin-top: 4px; font-size: 0.69rem; font-weight: 600; }
+        .metric-float--students { top: 86px; right: 0; background: var(--primary); color: #fff; }
+        .metric-float--workshops { left: 10px; bottom: 91px; background: var(--accent); color: #17120a; }
+        .hero__source { position: absolute; bottom: 18px; right: 0; color: var(--muted); font-size: 0.68rem; }
+        .hero__source a { color: var(--primary); font-weight: 700; }
+
+        .context-section { padding: 104px 0; background: var(--surface); }
+        .context-intro { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 72px; align-items: start; }
+        .context-copy h2 { margin: 14px 0 20px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(2.2rem, 4vw, 3.25rem); line-height: 1.14; letter-spacing: -0.04em; }
+        .context-copy p { color: var(--muted); font-size: 1.05rem; }
+        .context-copy .source-link { display: inline-flex; margin-top: 22px; color: var(--primary); font-weight: 700; text-decoration: none; }
+        .context-copy .source-link:hover { color: var(--primary-dark); text-decoration: underline; }
+        .pillars-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .pillar-card { min-height: 180px; padding: 23px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; box-shadow: var(--shadow-sm); }
+        .pillar-card__icon { width: 43px; height: 43px; display: grid; place-items: center; margin-bottom: 16px; border-radius: 13px; background: var(--primary-soft); color: var(--primary); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.82rem; font-weight: 800; }
+        .pillar-card:nth-child(even) .pillar-card__icon { color: var(--accent-dark); background: #fff2cf; }
+        .pillar-card h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; }
+        .pillar-card p { margin-top: 7px; color: var(--muted); font-size: 0.84rem; line-height: 1.55; }
+        .institutional-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            margin-top: 48px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+        }
+        .institutional-row__label { min-width: 176px; }
+        .institutional-row__label strong { display: block; color: var(--primary-dark); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.9rem; }
+        .institutional-row__label small { color: var(--muted); font-size: 0.72rem; }
+        .partner-list { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; list-style: none; }
+        .partner-list li { padding: 7px 11px; border: 1px solid var(--border); border-radius: var(--radius-full); color: #414a54; background: #fff; font-size: 0.72rem; font-weight: 700; }
+
+        .audience-strip { padding: 28px 0; background: var(--primary-dark); color: #fff; }
+        .audience-strip__grid { display: grid; grid-template-columns: 1.15fr repeat(4, 1fr); align-items: stretch; }
+        .audience-strip article { padding: 14px 28px; border-left: 1px solid rgba(255,255,255,0.16); }
+        .audience-strip article:first-child { padding-left: 0; border-left: 0; }
+        .audience-strip strong { display: block; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1rem; line-height: 1.3; }
+        .audience-strip small { display: block; margin-top: 5px; color: rgba(255,255,255,0.69); font-size: 0.74rem; line-height: 1.45; }
+
+        .method-section { padding: 104px 0; }
+        .method-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+        .method-card { position: relative; padding: 26px 20px 24px; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease; }
+        .method-card:hover { transform: translateY(-4px); border-color: rgba(0,103,177,0.34); box-shadow: var(--shadow-sm); }
+        .method-card__number { color: rgba(0,103,177,0.18); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 2rem; font-weight: 800; line-height: 1; }
+        .method-card h3 { margin-top: 18px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 0.96rem; line-height: 1.35; }
+        .method-card p { margin-top: 9px; color: var(--muted); font-size: 0.8rem; line-height: 1.55; }
+
+        .experience-section { padding: 104px 0; background: var(--surface); }
+        .experience-chapter { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; margin-top: 72px; }
         .experience-chapter--reverse { direction: rtl; }
         .experience-chapter--reverse > * { direction: ltr; }
-        .chapter-number { font-family: 'Outfit', sans-serif; font-size: 3rem; font-weight: 800; color: rgba(101, 71, 168, 0.16); display: block; line-height: 1; margin-bottom: 8px; }
-        .chapter-kicker { color: var(--color-aqua-dark); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px; }
-        .chapter-copy h3 { font-family: 'Outfit', sans-serif; font-size: 1.75rem; font-weight: 700; margin-bottom: 16px; }
-        .chapter-points { list-style: none; margin-top: 20px; }
-        .chapter-points li { position: relative; padding-left: 24px; margin-bottom: 8px; color: var(--color-text-muted); font-size: 0.95rem; }
-        .chapter-points li::before { content: "✓"; position: absolute; left: 0; color: var(--color-emerald); font-weight: 700; }
-        .screen-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
-        .screen-card img { width: 100%; height: auto; display: block; }
-        .screen-card figcaption { padding: 12px; background: #fbfafc; border-top: 1px solid var(--color-border); text-align: center; font-size: 0.8rem; color: var(--color-text-muted); }
-        .architecture-section { padding: 96px 0; background: linear-gradient(180deg, #efecf6, #f7f5fb); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
-        .architecture-flow { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 48px; background: rgba(255, 255, 255, 0.90); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 32px; overflow-x: auto; box-shadow: var(--shadow-card); }
-        .architecture-flow article { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 120px; }
-        .architecture-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+        .chapter-number { display: block; color: rgba(0, 103, 177, 0.18); font-family: 'Plus Jakarta Sans', sans-serif; font-size: 3rem; font-weight: 800; line-height: 1; }
+        .chapter-kicker { display: block; margin-top: 8px; color: var(--primary); font-size: 0.76rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+        .chapter-copy h3 { margin: 9px 0 14px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.65rem; line-height: 1.25; }
+        .chapter-copy > p { color: var(--muted); }
+        .chapter-points { margin-top: 20px; list-style: none; }
+        .chapter-points li { position: relative; margin-top: 8px; padding-left: 25px; color: var(--muted); font-size: 0.91rem; }
+        .chapter-points li::before { content: "✓"; position: absolute; left: 0; color: var(--success); font-weight: 800; }
+        .screen-card { overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-md); background: #fff; box-shadow: var(--shadow-lg); }
+        .screen-card img { display: block; width: 100%; height: auto; }
+        .screen-card figcaption { padding: 12px 16px; border-top: 1px solid var(--border); color: var(--muted); background: #fff; text-align: center; font-size: 0.76rem; }
+
+        .architecture-section { padding: 104px 0; }
+        .architecture-flow { display: flex; align-items: center; gap: 16px; padding: 34px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow-sm); }
+        .architecture-flow article { display: flex; min-width: 142px; flex-direction: column; align-items: center; text-align: center; }
+        .architecture-icon { width: 58px; height: 58px; display: grid; place-items: center; margin-bottom: 13px; border-radius: 17px; color: var(--primary); background: var(--primary-soft); }
+        .architecture-icon--yellow { color: var(--accent-dark); background: #fff2cf; }
         .architecture-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; }
-        .architecture-icon--coral { background: rgba(243, 124, 127, 0.14); color: #b44952; }
-        .architecture-icon--blue { background: rgba(128, 100, 200, 0.14); color: var(--color-blue); }
-        .flow-connector { flex: 1; height: 2px; background: var(--color-border-bright); position: relative; min-width: 30px; }
-        .research-section { padding: 96px 0; border-top: 1px solid var(--color-border); }
-        .research-card { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr); gap: 48px; align-items: center; padding: 44px; background: linear-gradient(135deg, rgba(128, 100, 200, 0.15), rgba(73, 217, 206, 0.12)); border: 1px solid var(--color-border-bright); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); }
-        .research-card h2 { margin-bottom: 16px; font-family: 'Outfit', sans-serif; font-size: 2.25rem; line-height: 1.2; }
-        .research-card p { color: var(--color-text-muted); }
-        .research-card__meta { display: grid; gap: 10px; margin-top: 24px; color: var(--color-text-muted); font-size: 0.9rem; }
-        .research-card__meta span { display: flex; gap: 10px; align-items: flex-start; }
-        .research-card__meta strong { min-width: 82px; color: #30204f; }
-        .research-card__actions { display: grid; gap: 12px; padding: 26px; background: rgba(255, 255, 255, 0.82); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
-        .research-card__actions .button { justify-content: center; }
-        .research-card__actions small { color: var(--color-text-muted); text-align: center; }
-        footer { border-top: 1px solid var(--color-border); padding: 48px 0; text-align: center; color: var(--color-text-muted); font-size: 0.85rem; }
-        @media (max-width: 900px) {
-            .nav-links li:not(.nav-report):not(:last-child) { display: none; }
-            .hero h1 { font-size: clamp(2.4rem, 10vw, 3.5rem); }
-            .hero-actions { flex-wrap: wrap; }
-            .experience-chapter, .section-heading--split, .research-card { grid-template-columns: 1fr; }
-            .experience-chapter--reverse { direction: ltr; }
-            .research-card { padding: 30px; }
+        .architecture-flow strong { font-size: 0.9rem; }
+        .architecture-flow small { margin-top: 4px; color: var(--muted); font-size: 0.72rem; }
+        .flow-connector { position: relative; min-width: 34px; height: 2px; flex: 1; background: var(--border); }
+        .flow-connector::after { content: ""; position: absolute; top: -4px; right: -1px; width: 8px; height: 8px; border-top: 2px solid var(--primary); border-right: 2px solid var(--primary); transform: rotate(45deg); }
+
+        .research-section { padding: 0 0 104px; }
+        .research-card { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr); gap: 48px; align-items: center; padding: 52px; overflow: hidden; border: 1px solid rgba(0, 103, 177, 0.20); border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; box-shadow: var(--shadow-lg); }
+        .research-card h2 { margin: 13px 0 16px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1.18; letter-spacing: -0.035em; }
+        .research-card p { color: rgba(255,255,255,0.74); }
+        .research-card .eyebrow { color: #fff; }
+        .research-card__meta { display: grid; gap: 8px; margin-top: 24px; font-size: 0.84rem; }
+        .research-card__meta span { display: flex; gap: 10px; color: rgba(255,255,255,0.72); }
+        .research-card__meta strong { min-width: 78px; color: #fff; }
+        .research-card__actions { display: grid; gap: 12px; padding: 28px; border: 1px solid rgba(255,255,255,0.18); border-radius: var(--radius-md); background: rgba(255,255,255,0.10); backdrop-filter: blur(12px); }
+        .research-card__actions .button { width: 100%; }
+        .research-card__actions .button--primary { background: var(--accent); color: #17120a; }
+        .research-card__actions .button--primary:hover { background: #f3ad26; }
+        .research-card__actions .button--secondary { color: #fff; border-color: rgba(255,255,255,0.34); background: rgba(255,255,255,0.06); }
+        .research-card__actions small { color: rgba(255,255,255,0.66); text-align: center; font-size: 0.72rem; }
+
+        footer { padding: 48px 0; border-top: 1px solid var(--border); background: var(--surface); }
+        .footer__inner { display: flex; align-items: center; justify-content: space-between; gap: 32px; }
+        .footer__brand { display: flex; align-items: center; gap: 14px; }
+        .footer__brand img { width: 64px; height: 64px; object-fit: contain; }
+        .footer__brand strong { display: block; color: var(--primary-dark); font-family: 'Plus Jakarta Sans', sans-serif; }
+        .footer__brand p, .footer__meta { color: var(--muted); font-size: 0.76rem; }
+        .footer__meta { text-align: right; }
+        .footer__meta a { color: var(--primary); font-weight: 700; text-decoration: none; }
+
+        @media (max-width: 1080px) {
+            .nav-links { display: none; }
+            .hero__grid { grid-template-columns: 1fr 0.82fr; gap: 32px; }
+            .hero__orbit { width: 360px; height: 360px; }
+            .logo-stage { width: 290px; height: 290px; }
+            .logo-stage img { width: 230px; height: 230px; }
+            .method-grid { grid-template-columns: repeat(3, 1fr); }
+            .method-card:nth-child(4), .method-card:nth-child(5) { grid-column: span 1; }
         }
-        @media (max-width: 560px) {
-            .container { padding: 0 16px; }
-            .nav-links { gap: 10px; }
-            .nav-links a { font-size: 0.8rem; }
-            .nav-links .button { padding: 8px 12px; }
-            .brand-badge { display: none; }
-            .hero { padding-top: 64px; }
-            .hero-actions { display: grid; }
-            .architecture-flow { align-items: stretch; }
+        @media (max-width: 820px) {
+            .container { width: min(100% - 32px, 680px); }
+            .nav-actions .button--secondary { display: none; }
+            .hero { min-height: auto; }
+            .hero__grid { grid-template-columns: 1fr; padding: 72px 0; text-align: center; }
+            .hero__copy { display: flex; flex-direction: column; align-items: center; }
+            .hero__visual { min-height: 410px; }
+            .hero__source { position: static; margin-top: 18px; }
+            .context-intro, .experience-chapter, .research-card { grid-template-columns: 1fr; }
+            .context-intro { gap: 44px; }
+            .institutional-row { align-items: flex-start; flex-direction: column; }
+            .partner-list { justify-content: flex-start; }
+            .audience-strip__grid { grid-template-columns: 1fr 1fr; }
+            .audience-strip article { border-left: 0; border-top: 1px solid rgba(255,255,255,0.16); padding: 18px 14px; }
+            .audience-strip article:first-child { grid-column: 1 / -1; padding: 0 14px 18px; border-top: 0; text-align: center; }
+            .experience-chapter--reverse { direction: ltr; }
+            .method-grid { grid-template-columns: 1fr 1fr; }
+            .research-card { padding: 36px; }
+            .footer__inner { align-items: flex-start; flex-direction: column; }
+            .footer__meta { text-align: left; }
+        }
+        @media (max-width: 540px) {
+            .container { width: min(100% - 28px, 480px); }
+            .brand img { width: 48px; height: 48px; }
+            .brand__copy small, .brand__divider { display: none; }
+            .nav-actions .button { padding: 8px 11px; font-size: 0.78rem; }
+            .hero h1 { font-size: clamp(2.7rem, 14vw, 4rem); }
+            .hero__actions { display: grid; width: 100%; }
+            .hero__visual { min-height: 360px; }
+            .hero__orbit { width: 310px; height: 310px; }
+            .logo-stage { width: 252px; height: 252px; }
+            .logo-stage img { width: 200px; height: 200px; }
+            .metric-float { min-width: 92px; padding: 10px 12px; }
+            .metric-float--students { top: 60px; right: -2px; }
+            .metric-float--workshops { left: -2px; bottom: 68px; }
+            .pillars-grid, .method-grid { grid-template-columns: 1fr; }
+            .pillar-card { min-height: auto; }
+            .audience-strip__grid { grid-template-columns: 1fr; }
+            .audience-strip article:first-child { grid-column: auto; }
+            .architecture-flow { align-items: stretch; padding: 24px; }
+            .research-card { padding: 28px 22px; }
+            .research-card__meta span { display: grid; gap: 1px; }
+            .footer__brand { align-items: flex-start; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            *, *::before, *::after { transition-duration: 0.01ms !important; }
         }
     </style>
 </head>
 <body>
-
     <header class="nav-header">
         <div class="container nav-header__inner">
-            <a href="#" class="brand">
-                PulseLab
-                <span class="brand-badge">Pesquisa v1.4</span>
+            <a href="#inicio" class="brand" aria-label="PulseLab, início">
+                <img src="https://robotica-educativa-univasf.vercel.app/logo.png" alt="Logomarca Robótica Educativa">
+                <span class="brand__divider" aria-hidden="true"></span>
+                <span class="brand__copy">
+                    <strong>PulseLab</strong>
+                    <small>Pesquisa aplicada</small>
+                </span>
             </a>
-            <ul class="nav-links">
-                <li><a href="#projeto">O Projeto</a></li>
-                <li><a href="#experiencia">Experiência</a></li>
-                <li><a href="#arquitetura">Arquitetura</a></li>
-                <li class="nav-report"><a href="/relatorio/">Relatório Acadêmico</a></li>
-                <li><a href="https://pulselab-robotica-edu.web.app/instrutor/" target="_blank">Portal do Instrutor</a></li>
-                <li><a href="https://pulselab-robotica-edu.web.app/simulador/" class="button button--primary" target="_blank">Simulador Web</a></li>
-            </ul>
+            <nav aria-label="Navegação principal">
+                <ul class="nav-links">
+                    <li><a href="#projeto">Projeto-mãe</a></li>
+                    <li><a href="#metodologia">Metodologia</a></li>
+                    <li><a href="#experiencia">PulseLab</a></li>
+                    <li><a href="#arquitetura">Arquitetura</a></li>
+                    <li><a href="#pesquisa">Pesquisa</a></li>
+                </ul>
+            </nav>
+            <div class="nav-actions">
+                <a class="button button--secondary" href="https://pulselab-robotica-edu.web.app/instrutor/" target="_blank" rel="noopener noreferrer">Portal</a>
+                <a class="button button--primary" href="https://pulselab-robotica-edu.web.app/simulador/" target="_blank" rel="noopener noreferrer">Abrir simulador</a>
+            </div>
         </div>
     </header>
 
     <main>
-        <section class="hero" id="projeto">
-            <div class="container">
-                <div class="hero-kicker">
-                    <span>🔬 Robótica Educacional &amp; Evidências</span>
+        <section class="hero" id="inicio">
+            <div class="container hero__grid">
+                <div class="hero__copy">
+                    <div class="hero__badge"><span aria-hidden="true"></span>UNIVASF · Ensino, Pesquisa e Extensão</div>
+                    <h1>Acompanhar a oficina é <em>aprender com ela.</em></h1>
+                    <p class="hero__lead">
+                        O PulseLab integra o projeto Robótica Educativa da UNIVASF como uma camada de pesquisa ética: acompanha a jornada dos estudantes, organiza evidências e ajuda a compreender como a aprendizagem acontece nas oficinas.
+                    </p>
+                    <div class="hero__actions">
+                        <a class="button button--primary" href="https://pulselab-robotica-edu.web.app/simulador/" target="_blank" rel="noopener noreferrer">Explorar o simulador <span aria-hidden="true">→</span></a>
+                        <a class="button button--secondary" href="#projeto">Conhecer a integração</a>
+                        <a class="button button--secondary" href="/relatorio/">Relatório acadêmico</a>
+                    </div>
+                    <div class="hero__tags" aria-label="Áreas do projeto">
+                        <span class="tag tag--blue">Robótica</span>
+                        <span class="tag tag--yellow">Educação</span>
+                        <span class="tag tag--dark">Evidências</span>
+                    </div>
                 </div>
-                <h1>Uma visão ética da oficina de robótica.</h1>
-                <p class="hero-lead">
-                    O PulseLab acompanha a jornada do aluno na atividade de robótica
-                    com checkpoints curtos, autorrelato ilustrado, encerramento direto e um portal web dedicado
-                    para a rubrica móvel do instrutor.
-                </p>
-                <div class="hero-actions">
-                    <a class="button button--primary" href="https://pulselab-robotica-edu.web.app/simulador/" target="_blank">
-                        Explorar o simulador →
-                    </a>
-                    <a class="button button--secondary" href="https://pulselab-robotica-edu.web.app/instrutor/" target="_blank">
-                        Portal do Instrutor
-                    </a>
-                    <a class="button button--secondary" href="/relatorio/">
-                        Relatório acadêmico
-                    </a>
+                <div class="hero__visual" aria-label="Identidade do projeto Robótica Educativa e indicadores institucionais">
+                    <div class="hero__orbit" aria-hidden="true"></div>
+                    <div class="logo-stage">
+                        <img src="https://robotica-educativa-univasf.vercel.app/logo.png" alt="Robótica Educativa">
+                    </div>
+                    <div class="metric-float metric-float--students">
+                        <strong>500+</strong>
+                        <small>estudantes</small>
+                    </div>
+                    <div class="metric-float metric-float--workshops">
+                        <strong>30+</strong>
+                        <small>oficinas</small>
+                    </div>
+                    <p class="hero__source">Indicadores publicados pelo <a href="https://robotica-educativa-univasf.vercel.app/" target="_blank" rel="noopener noreferrer">site do projeto</a>.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="context-section" id="projeto">
+            <div class="container context-intro">
+                <div class="context-copy">
+                    <span class="eyebrow">Projeto-mãe</span>
+                    <h2>Robótica que aproxima universidade, escola e comunidade.</h2>
+                    <p>
+                        A Robótica Educativa da UNIVASF usa tecnologia como ferramenta de transformação social. Nas oficinas, crianças e adolescentes não aprendem apenas a montar robôs: exercitam planejamento, solução de problemas, criatividade e colaboração — competências que seguem com eles para além da sala de aula.
+                    </p>
+                    <a class="source-link" href="https://robotica-educativa-univasf.vercel.app/" target="_blank" rel="noopener noreferrer">Visitar o site da Robótica Educativa&nbsp; →</a>
+                </div>
+                <div class="pillars-grid" aria-label="Pilares do projeto Robótica Educativa">
+                    <article class="pillar-card">
+                        <div class="pillar-card__icon">01</div>
+                        <h3>Ensino</h3>
+                        <p>Robótica integrada à educação de modo lúdico e prático, tornando conceitos complexos mais acessíveis.</p>
+                    </article>
+                    <article class="pillar-card">
+                        <div class="pillar-card__icon">02</div>
+                        <h3>Pesquisa</h3>
+                        <p>Estudo de metodologias ativas e do uso da tecnologia na educação básica e fundamental.</p>
+                    </article>
+                    <article class="pillar-card">
+                        <div class="pillar-card__icon">03</div>
+                        <h3>Extensão</h3>
+                        <p>Conhecimento universitário levado a escolas e comunidades para criar pontes e transformar realidades.</p>
+                    </article>
+                    <article class="pillar-card">
+                        <div class="pillar-card__icon">04</div>
+                        <h3>Inovação</h3>
+                        <p>Cultura maker em que estudantes criam, testam, erram e evoluem por meio da experimentação.</p>
+                    </article>
+                </div>
+            </div>
+            <div class="container institutional-row">
+                <div class="institutional-row__label">
+                    <strong>Ecossistema institucional</strong>
+                    <small>Organizadores e parceiros publicados</small>
+                </div>
+                <ul class="partner-list" aria-label="Organizadores e parceiros do projeto">
+                    <li>UNIVASF</li>
+                    <li>Governo Federal</li>
+                    <li>Ministério das Comunicações</li>
+                    <li>PROEX</li>
+                    <li>FADEX</li>
+                    <li>Espaço Plural</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="audience-strip" aria-label="Públicos e alcance do projeto">
+            <div class="container audience-strip__grid">
+                <article>
+                    <strong>Tecnologia para todos</strong>
+                    <small>Inclusão tecnológica com atenção ao território.</small>
+                </article>
+                <article>
+                    <strong>6 a 14 anos</strong>
+                    <small>Estudantes do ensino fundamental.</small>
+                </article>
+                <article>
+                    <strong>Escolas públicas</strong>
+                    <small>Redes municipais e estaduais.</small>
+                </article>
+                <article>
+                    <strong>Comunidades</strong>
+                    <small>Espaços comunitários e inclusão social.</small>
+                </article>
+                <article>
+                    <strong>Semiárido</strong>
+                    <small>Interior do Nordeste e Vale do São Francisco.</small>
+                </article>
+            </div>
+        </section>
+
+        <section class="method-section" id="metodologia">
+            <div class="container">
+                <div class="section-heading section-heading--center">
+                    <span class="eyebrow">Metodologia das oficinas</span>
+                    <h2>Da curiosidade ao desafio prático.</h2>
+                    <p>O percurso institucional é progressivo e inclusivo. Cada etapa amplia a autonomia necessária para o estudante imaginar, construir e testar uma solução.</p>
+                </div>
+                <div class="method-grid">
+                    <article class="method-card">
+                        <span class="method-card__number">01</span>
+                        <h3>Apresentação dos conceitos</h3>
+                        <p>Robôs, sensores, atuadores e controladores apresentados de forma acessível.</p>
+                    </article>
+                    <article class="method-card">
+                        <span class="method-card__number">02</span>
+                        <h3>Oficinas formativas</h3>
+                        <p>Atividades práticas guiadas por bolsistas da UNIVASF e realizadas em equipe.</p>
+                    </article>
+                    <article class="method-card">
+                        <span class="method-card__number">03</span>
+                        <h3>Montagem e experimentação</h3>
+                        <p>Kits robóticos e circuitos conectam teoria, construção e descoberta.</p>
+                    </article>
+                    <article class="method-card">
+                        <span class="method-card__number">04</span>
+                        <h3>Programação</h3>
+                        <p>Lógica em blocos e textual para controlar robôs e automatizar tarefas.</p>
+                    </article>
+                    <article class="method-card">
+                        <span class="method-card__number">05</span>
+                        <h3>Desafios práticos</h3>
+                        <p>Gincanas amistosas estimulam criatividade, colaboração e aplicação do conhecimento.</p>
+                    </article>
                 </div>
             </div>
         </section>
 
         <section class="experience-section" id="experiencia">
             <div class="container">
-                <div class="section-heading section-heading--center" style="text-align: center;">
-                    <span class="section-kicker">O projeto em funcionamento</span>
+                <div class="section-heading section-heading--center">
+                    <span class="eyebrow">O papel do PulseLab</span>
                     <h2>Da preparação ao encerramento da sessão.</h2>
-                    <p style="color: var(--color-text-muted);">
-                        O simulador percorre a experiência de estudantes, instrutores e pesquisadores ao longo da atividade de robótica.
-                    </p>
+                    <p>Enquanto a oficina desenvolve habilidades, o PulseLab registra momentos-chave com instrumentos curtos, transparentes e pseudonimizados.</p>
                 </div>
 
-                <article class="experience-chapter" style="margin-top: 48px;">
+                <article class="experience-chapter">
                     <div class="chapter-copy">
                         <span class="chapter-number">01</span>
                         <span class="chapter-kicker">Antes da oficina</span>
-                        <h3>Preparar com clareza e consentimento.</h3>
-                        <p style="color: var(--color-text-muted);">
-                            O instrutor confirma o contexto e os alunos participantes no computador.
-                            Depois, cada participante recebe um convite individual e pode recusar sem prejuízo à atividade.
-                        </p>
+                        <h3>Preparar com clareza e assentimento.</h3>
+                        <p>O instrutor confirma o contexto no computador. Depois, cada participante recebe um convite individual e pode recusar sem prejuízo à atividade.</p>
                         <ul class="chapter-points">
                             <li>Sem coleta de nomes de estudantes</li>
                             <li>Decisão individual de participação respeitada</li>
-                            <li>Configuração flexível para os alunos na bancada</li>
+                            <li>Contexto de escola, turma e oficina preservado</li>
                         </ul>
                     </div>
-                    <div class="screen-card">
-                        <img src="assets/images/app-context.jpg" alt="Preparação no simulador" loading="lazy">
-                        <figcaption>Contexto e Assentimento da Oficina</figcaption>
-                    </div>
+                    <figure class="screen-card">
+                        <img src="assets/images/app-context.jpg" alt="Preparação da oficina no simulador PulseLab" loading="lazy">
+                        <figcaption>Contexto e assentimento da oficina</figcaption>
+                    </figure>
                 </article>
 
                 <article class="experience-chapter experience-chapter--reverse">
                     <div class="chapter-copy">
                         <span class="chapter-number">02</span>
                         <span class="chapter-kicker">Durante a atividade</span>
-                        <h3>Acompanhar com autorrelato fluido.</h3>
-                        <p style="color: var(--color-text-muted);">
-                            O agente fica em segundo plano e aparece apenas nos marcos previstos.
-                            Em cada checkpoint, o próprio aluno indica de forma ilustrada o que esteve fazendo.
-                        </p>
+                        <h3>Acompanhar sem quebrar o ritmo.</h3>
+                        <p>O agente fica em segundo plano e aparece apenas nos marcos previstos. Em cada checkpoint, o próprio estudante indica de forma ilustrada o que esteve fazendo.</p>
                         <ul class="chapter-points">
-                            <li>Checkpoints nos minutos 20 e 40</li>
+                            <li>Checkpoints absolutos nos minutos 20 e 40</li>
                             <li>Autorrelato visual e transparente</li>
-                            <li>Sem janelas intrusivas de troca de papéis</li>
+                            <li>Registro de colaboração, esforço e necessidade de ajuda</li>
                         </ul>
                     </div>
-                    <div class="screen-card">
-                        <img src="assets/images/app-workshop.jpg" alt="Atividade em andamento" loading="lazy">
-                        <figcaption>Atividade em Andamento</figcaption>
-                    </div>
+                    <figure class="screen-card">
+                        <img src="assets/images/app-workshop.jpg" alt="Atividade em andamento no PulseLab" loading="lazy">
+                        <figcaption>Atividade em andamento</figcaption>
+                    </figure>
                 </article>
 
                 <article class="experience-chapter">
                     <div class="chapter-copy">
                         <span class="chapter-number">03</span>
                         <span class="chapter-kicker">Depois da oficina</span>
-                        <h3>Portal do Instrutor e Encerramento.</h3>
-                        <p style="color: var(--color-text-muted);">
-                            O aluno encerra com uma mensagem final direta. O instrutor avalia o desempenho da turma de forma independente em seu próprio dispositivo no <strong>Portal do Instrutor (/instrutor/)</strong>.
-                        </p>
+                        <h3>Encerrar e organizar as evidências.</h3>
+                        <p>O estudante conclui com perguntas breves. Em seu próprio dispositivo, o instrutor registra uma rubrica independente sobre desempenho e intervenções.</p>
                         <ul class="chapter-points">
-                            <li>Encerramento com mensagem de agradecimento ao aluno</li>
+                            <li>Encerramento direto e adequado ao público</li>
                             <li>Portal do Instrutor via celular ou tablet</li>
-                            <li>Registro seguro e autenticado em JSON</li>
+                            <li>Linha do tempo auditável e tolerante a falhas de rede</li>
                         </ul>
                     </div>
-                    <div class="screen-card">
-                        <img src="assets/images/app-summary.jpg" alt="Portal do Instrutor" loading="lazy">
-                        <figcaption>Portal do Instrutor e Encerramento</figcaption>
-                    </div>
+                    <figure class="screen-card">
+                        <img src="assets/images/app-summary.jpg" alt="Portal do Instrutor do PulseLab" loading="lazy">
+                        <figcaption>Portal do Instrutor e encerramento</figcaption>
+                    </figure>
                 </article>
             </div>
         </section>
 
         <section class="architecture-section" id="arquitetura">
             <div class="container">
-                <div class="section-heading section-heading--split">
-                    <div>
-                        <span class="section-kicker">Da oficina ao dado confiável</span>
-                        <h2>Uma arquitetura leve, resiliente e auditável.</h2>
-                    </div>
-                    <p style="color: var(--color-text-muted);">
-                        Cada componente tem uma responsabilidade clara: acolher a resposta,
-                        preservar o contexto e manter a sessão íntegra mesmo quando a internet oscila.
-                    </p>
+                <div class="section-heading">
+                    <span class="eyebrow">Da oficina ao dado confiável</span>
+                    <h2>Uma arquitetura leve, resiliente e auditável.</h2>
+                    <p>Cada componente acolhe a resposta, preserva o contexto e mantém a sessão íntegra mesmo quando a internet da escola oscila.</p>
                 </div>
-
-                <div class="architecture-flow" role="img" aria-label="Fluxo da Arquitetura PulseLab">
+                <div class="architecture-flow" role="img" aria-label="Fluxo da arquitetura PulseLab: estudantes, agente local, fila offline e portal com banco de dados">
                     <article>
-                        <div class="architecture-icon architecture-icon--coral">
-                            <svg viewBox="0 0 32 32"><circle cx="11" cy="11" r="5"></circle><circle cx="22" cy="12" r="4"></circle><path d="M3 27c1-6 4-9 8-9s8 3 9 9M18 27c.5-4 2-7 5-7 3.5 0 5.5 3 6 7"></path></svg>
+                        <div class="architecture-icon architecture-icon--yellow">
+                            <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="11" cy="11" r="5"></circle><circle cx="22" cy="12" r="4"></circle><path d="M3 27c1-6 4-9 8-9s8 3 9 9M18 27c.5-4 2-7 5-7 3.5 0 5.5 3 6 7"></path></svg>
                         </div>
-                        <strong>Alunos na Bancada</strong>
-                        <small style="color: var(--color-text-muted);">Autorrelato individual</small>
+                        <strong>Estudantes</strong>
+                        <small>Autorrelato individual</small>
                     </article>
-                    <span class="flow-connector"></span>
+                    <span class="flow-connector" aria-hidden="true"></span>
                     <article>
-                        <div class="architecture-icon architecture-icon--blue">
-                            <svg viewBox="0 0 32 32"><rect x="4" y="5" width="24" height="18" rx="3"></rect><path d="M11 28h10M16 23v5M10 12h5l2-4 3 9 2-5h2"></path></svg>
+                        <div class="architecture-icon">
+                            <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="18" rx="3"></rect><path d="M11 28h10M16 23v5M10 12h5l2-4 3 9 2-5h2"></path></svg>
                         </div>
-                        <strong>Agente Local</strong>
-                        <small style="color: var(--color-text-muted);">Daemon PowerShell</small>
+                        <strong>Agente local</strong>
+                        <small>Coleta minimizada</small>
                     </article>
-                    <span class="flow-connector"></span>
+                    <span class="flow-connector" aria-hidden="true"></span>
                     <article>
-                        <div class="architecture-icon architecture-icon--coral">
-                            <svg viewBox="0 0 32 32"><path d="M4 16h24M16 4v24"></path></svg>
+                        <div class="architecture-icon architecture-icon--yellow">
+                            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 10h22v16H5zM9 6h14v4M10 17h12M10 21h8"></path></svg>
                         </div>
-                        <strong>Fila Offline</strong>
-                        <small style="color: var(--color-text-muted);">Entrega atômica</small>
+                        <strong>Fila offline</strong>
+                        <small>Entrega idempotente</small>
                     </article>
-                    <span class="flow-connector"></span>
+                    <span class="flow-connector" aria-hidden="true"></span>
                     <article>
-                        <div class="architecture-icon architecture-icon--blue">
-                            <svg viewBox="0 0 32 32"><path d="M12 21s7-3.8 7-10V5l-7-3-7 3v6c0 6.2 7 10 7 10Z"></path></svg>
+                        <div class="architecture-icon">
+                            <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29s10-5 10-14V6l-10-4L6 6v9c0 9 10 14 10 14Z"></path><path d="m11 16 3 3 7-8"></path></svg>
                         </div>
-                        <strong>Portal &amp; Supabase</strong>
-                        <small style="color: var(--color-text-muted);">RLS &amp; Auth</small>
+                        <strong>Portal e dados</strong>
+                        <small>Acesso protegido</small>
                     </article>
                 </div>
             </div>
@@ -295,22 +644,19 @@
             <div class="container">
                 <article class="research-card">
                     <div>
-                        <span class="section-kicker">Documentação científica</span>
+                        <span class="eyebrow">Documentação científica</span>
                         <h2>Métricas, validade e contribuição acadêmica do PulseLab.</h2>
-                        <p>
-                            Consulte o relatório que descreve o que o aplicativo mede, como cada indicador
-                            deve ser analisado e quais limites metodológicos precisam ser respeitados na
-                            apresentação à banca e na condução do estudo piloto.
-                        </p>
+                        <p>O relatório descreve o que o aplicativo mede, como cada indicador deve ser analisado e quais limites metodológicos precisam ser respeitados na condução do estudo piloto.</p>
                         <div class="research-card__meta">
                             <span><strong>Autor</strong> Vinicius Ferreira Amim</span>
                             <span><strong>Instituição</strong> Universidade Federal do Vale do São Francisco</span>
-                            <span><strong>Atuação</strong> Setor de Pesquisa da FADEX — Projeto Robótica Educacional</span>
+                            <span><strong>Atuação</strong> Setor de Pesquisa da FADEX · Robótica Educativa</span>
                         </div>
                     </div>
                     <div class="research-card__actions">
-                        <a class="button button--primary" href="/relatorio/">Ler relatório completo →</a>
-                        <small>Versão 1.4 · preparada para leitura, impressão e PDF</small>
+                        <a class="button button--primary" href="/relatorio/">Ler relatório completo <span aria-hidden="true">→</span></a>
+                        <a class="button button--secondary" href="https://pulselab-robotica-edu.web.app/instrutor/" target="_blank" rel="noopener noreferrer">Abrir Portal do Instrutor</a>
+                        <small>PulseLab v1.4 · pesquisa aplicada às oficinas</small>
                     </div>
                 </article>
             </div>
@@ -318,9 +664,18 @@
     </main>
 
     <footer>
-        <div class="container">
-            <p>PulseLab · Setor de Pesquisa da FADEX — Projeto Robótica Educacional</p>
-            <p>Vinicius Ferreira Amim · Universidade Federal do Vale do São Francisco</p>
+        <div class="container footer__inner">
+            <div class="footer__brand">
+                <img src="https://robotica-educativa-univasf.vercel.app/logo.png" alt="Robótica Educativa">
+                <div>
+                    <strong>Robótica Educativa + PulseLab</strong>
+                    <p>Educação, tecnologia e evidências no Vale do São Francisco.</p>
+                </div>
+            </div>
+            <div class="footer__meta">
+                <p>Vinicius Ferreira Amim · Universidade Federal do Vale do São Francisco</p>
+                <p><a href="https://robotica-educativa-univasf.vercel.app/" target="_blank" rel="noopener noreferrer">Site institucional</a> · Setor de Pesquisa da FADEX</p>
+            </div>
         </div>
     </footer>
 </body>

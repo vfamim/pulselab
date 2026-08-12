@@ -65,7 +65,7 @@ O facilitador não deve ensinar o caminho da interface. Qualquer ajuda necessár
 ## 5. Roteiro de uma sessão
 
 1. Abrir o simulador em tela cheia.
-2. Informar apenas códigos institucionais de teste.
+2. Informar apenas códigos institucionais de teste, recarregar a página e confirmar que eles reaparecem preenchidos.
 3. Solicitar que instrutor e dupla sigam o fluxo sem explicação adicional.
 4. Registrar cada dúvida, pausa, retorno de tela e ajuda do facilitador.
 5. Ao final, abrir as abas **Linha do tempo**, **Respostas** e **Tudo**.
@@ -73,6 +73,11 @@ O facilitador não deve ensinar o caminho da interface. Qualquer ajuda necessár
 7. Fazer uma entrevista curta, separando a percepção da dupla da percepção do
    instrutor.
 8. Não usar nomes, imagens ou informações reais de estudantes na simulação.
+
+Na repetição, a confirmação institucional deve reaparecer desmarcada. O simulador
+persiste somente sede, regional, escola, oficina, turma, atividade e quantidade
+de integrantes; a antiga faixa escolar e a confirmação de autorizações não
+fazem parte do contexto salvo.
 
 ## 6. Perguntas de debriefing
 

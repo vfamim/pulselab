@@ -33,7 +33,7 @@ A literatura sobre robótica educacional identifica resultados promissores, mas 
 
 O PulseLab responde a esse problema ao combinar quatro camadas:
 
-1. **contexto:** escola, oficina, turma, atividade, idade/faixa escolar, experiência prévia e papel;
+1. **contexto:** escola, oficina, turma, atividade, experiência prévia e papel;
 2. **processo percebido:** esforço mental, estado de progresso, necessidade de ajuda e colaboração;
 3. **resultado imediato:** compreensão percebida, afetos, intenção de retorno e, após a integração pendente, desempenho da missão e conhecimento específico;
 4. **qualidade da evidência:** linha do tempo, completude, atrasos, recusas, timeouts, sincronização, versão do protocolo e alertas técnicos.
@@ -91,7 +91,7 @@ O **evento** é a unidade de armazenamento; o **participante** é a unidade das 
 | Etapa | O que ocorre na oficina | Registro produzido | Informação que pode ser estimada |
 |---|---|---|---|
 | Entrada | Contexto e assentimento são conferidos | IDs pseudonimizados, escola, turma, atividade e versão | alcance, composição da amostra e rastreabilidade |
-| Pré-oficina | Cada participante responde individualmente | idade, experiência prévia e autoeficácia | perfil inicial e variáveis de ajuste |
+| Pré-oficina | Cada participante responde individualmente | experiência prévia e autoeficácia | perfil inicial e variáveis de ajuste |
 | Minuto 20 | Resposta individual e evidência técnica | esforço, progresso, ajuda, papel, latência e atraso | estado inicial do processo |
 | Troca de papéis | Participantes alternam funções | evento `role_swapped` ou alerta | adesão ao protocolo e exposição aos papéis |
 | Minuto 40 | Nova resposta individual | esforço, progresso, ajuda e colaboração | mudança intrassessão e colaboração percebida |
@@ -122,7 +122,13 @@ Essa separação é fundamental. Um valor digital só se torna uma medida educac
 | Cobertura territorial | escolas, sedes e polos distintos | `school_code`, `site_id`, `regional_hub` | contagem/categorias | diversidade de contextos |
 | Experiência prévia | nunca, uma vez, algumas, muitas | `prior_robotics` | ordinal 1–4 | caracterização e ajuste |
 | Autoeficácia inicial | discordo muito a concordo muito | `self_efficacy_pre` | ordinal 1–4 | perfil inicial e moderador |
-| Idade/faixa escolar | idade informada e faixa configurada | `student_age`, `grade_band` | razão/categoria | descrição e estratificação |
+
+**Limite de caracterização:** para reduzir o tempo do instrumento, o PulseLab
+não solicita mais a idade individual. Assim, os dados do aplicativo não permitem
+comparações ou ajustes estatísticos por idade. A faixa etária do público continua
+sendo definida institucionalmente no protocolo da oficina, e não inferida a
+partir dos eventos coletados. A coluna histórica `student_age` permanece nullable
+no schema apenas para compatibilidade com registros anteriores.
 
 **Leitura correta:** “142 participantes com eventos de pesquisa registrados” é tecnicamente mais preciso que “142 estudantes impactados”. O aplicativo mede participação na coleta; “impacto” exige um desfecho e um desenho capazes de demonstrar mudança atribuível ao programa.
 
@@ -234,7 +240,7 @@ O resultado de uma hipótese deve ser apresentado por estimativa, intervalo de c
 ### 6.2 Análise descritiva
 
 - contagens de escolas, oficinas, sessões, duplas e participantes;
-- distribuição por idade/faixa, experiência e autoeficácia;
+- distribuição por experiência prévia e autoeficácia;
 - frequências e intervalos de confiança de esforço, progresso, ajuda, colaboração e resultados finais;
 - matrizes de transição entre minutos 20 e 40;
 - medianas e intervalos interquartis para latência e atraso;
@@ -245,11 +251,11 @@ Escalas de quatro categorias não devem ser apresentadas somente por média. A m
 
 ### 6.3 Modelos recomendados
 
-**H1 — esforço mental:** modelo ordinal de ligação cumulativa, com momento, papel, experiência prévia, faixa etária e atividade como efeitos fixos. Incluir interceptos aleatórios para participante e dupla; oficina/escola entram como níveis adicionais quando o número de agrupamentos permitir.
+**H1 — esforço mental:** modelo ordinal de ligação cumulativa, com momento, papel, experiência prévia e atividade como efeitos fixos. Incluir interceptos aleatórios para participante e dupla; oficina/escola entram como níveis adicionais quando o número de agrupamentos permitir.
 
 **H2 — ajuda e mediação:** modelar a probabilidade ou intensidade de intervenção em função do estado de progresso/pedido de ajuda, ajustando por momento, experiência e atividade. Como a intervenção é medida no nível da dupla, não duplicar a rubrica nas duas linhas pós.
 
-**H3 — colaboração e desempenho:** modelar a rubrica 0–3 como desfecho ordinal. A associação deve ser ajustada por experiência prévia, faixa escolar, atividade e intervenções. O resultado será associação, não efeito causal.
+**H3 — colaboração e desempenho:** modelar a rubrica 0–3 como desfecho ordinal. A associação deve ser ajustada por experiência prévia, atividade e intervenções. O resultado será associação, não efeito causal.
 
 **H4 — conhecimento:** construir itens equivalentes alinhados aos objetivos de cada `activity_id`. Avaliar respostas por item e escore, emparelhar pré/pós e relatar mudança com intervalo de confiança. Sem comparador, usar “ganho imediato observado”, e não “impacto causado”.
 
@@ -259,7 +265,7 @@ Escalas de quatro categorias não devem ser apresentadas somente por média. A m
 
 - relatar recusas e timeouts separadamente;
 - não imputar automaticamente respostas recusadas;
-- verificar se a ausência se concentra por idade, escola, momento ou papel;
+- verificar se a ausência se concentra por escola, momento ou papel;
 - repetir análises principais em conjunto completo e em cenários de sensibilidade, quando justificável;
 - não excluir uma sessão apenas porque contém alerta técnico; aplicar regras definidas antes de observar o resultado.
 
@@ -322,7 +328,7 @@ Esta seção impede que a apresentação confunda intenção, protótipo e dado 
 
 | Componente | Estado verificado | Consequência para o relatório |
 |---|---|---|
-| Pré: idade, experiência e autoeficácia | implementado no agente e no schema | disponível para piloto |
+| Pré: experiência e autoeficácia | implementado no agente e no schema | disponível para piloto |
 | Checkpoints 20/40 | implementados com tempo absoluto | disponível para piloto |
 | Esforço, progresso, ajuda e colaboração | implementados | disponíveis como medidas experimentais |
 | Pós: compreensão, afetos e retorno | implementado | disponível para piloto |
