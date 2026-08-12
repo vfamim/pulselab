@@ -655,9 +655,10 @@ select:focus-visible {
 
 .question-block {
   min-width: 0;
-  margin: 0 0 27px;
+  margin: 0 0 20px;
   padding: 0;
   border: 0;
+  text-align: center;
 }
 
 .question-block:last-child {
@@ -666,59 +667,80 @@ select:focus-visible {
 
 .question-block legend {
   width: 100%;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   padding: 0;
   color: #2c2538;
-  font-size: 0.9rem;
-  font-weight: 780;
-  line-height: 1.4;
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
 }
 
 .question-block > p {
-  margin: 0 0 13px;
+  margin: 0 0 10px;
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  text-align: center;
 }
 
 .scale-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
+  width: 100%;
 }
 
 .scale-option {
-  min-height: 76px;
-  padding: 10px 7px;
+  width: 100%;
+  min-height: 56px;
+  padding: 6px 4px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 5px;
+  gap: 3px;
   color: #5e566a;
   background: #fbfafc;
   border: 1px solid #dfd9e5;
-  border-radius: 12px;
+  border-radius: 10px;
+  text-align: center;
+  transition: all 0.15s ease-in-out;
+  cursor: pointer;
 }
 
 .scale-option > span {
-  width: 27px;
-  height: 27px;
-  display: grid;
-  place-items: center;
+  width: auto;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #6c617a;
-  background: #ece8f1;
-  border-radius: 8px;
-  font-size: 0.72rem;
-  font-weight: 850;
+  background: transparent !important;
+  border-radius: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: color 0.15s ease-in-out, transform 0.15s ease-in-out;
+}
+
+.scale-option.is-selected > span {
+  color: var(--violet-700);
+  background: transparent !important;
+  transform: scale(1.1);
 }
 
 .scale-option small {
-  font-size: 0.66rem;
-  line-height: 1.2;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  font-weight: 600;
+  text-align: center;
+  word-break: break-word;
 }
 
 .scale-option:hover {
-  border-color: #ab9fc2;
+  border-color: var(--violet-500);
+  background: #fff;
 }
 
 .scale-option.is-selected {

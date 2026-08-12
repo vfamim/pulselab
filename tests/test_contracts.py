@@ -175,6 +175,32 @@ class AgentStaticTests(unittest.TestCase):
         for fragment in required_fragments:
             self.assertIn(fragment, self.agent)
 
+    def test_session_setup_only_shows_values_that_still_need_configuration(self):
+        self.assertIn("function Test-NeedsSetupValue", self.agent)
+        self.assertIn('Width="540" Height="460"', self.agent)
+        self.assertIn('Name="PnlSite"', self.agent)
+        self.assertIn('Name="PnlSchool"', self.agent)
+        self.assertIn('Name="PnlWorkshop"', self.agent)
+        self.assertIn(
+            "$field.Panel.Visibility = [Windows.Visibility]::Collapsed",
+            self.agent,
+        )
+        self.assertIn(
+            "$window.Height = [Math]::Min(680, 385 + (62 * $missingFieldCount))",
+            self.agent,
+        )
+
+    def test_remote_protocol_update_preserves_installed_site_identity(self):
+        self.assertIn(
+            'foreach ($identityField in @("site_id", "regional_hub", "school_code"))',
+            self.agent,
+        )
+        self.assertIn("$remote.$identityField = $identityValue", self.agent)
+        self.assertIn(
+            "$remoteRaw = $remote | ConvertTo-Json -Depth 10",
+            self.agent,
+        )
+
     def test_offline_queue_keeps_local_evidence_with_event(self):
         self.assertIn(
             "Preserve the database row and its visual evidence as one delivery unit.",
@@ -230,6 +256,54 @@ class InstallerPackagingTests(unittest.TestCase):
                 base64.b64decode(config_match.group(1)),
                 CONFIG_PATH.read_bytes(),
             )
+
+    def test_python_installer_can_embed_an_identity_preset(self):
+        source_config = CONFIG_PATH.read_bytes()
+        with tempfile.TemporaryDirectory(prefix="pulselab-preset-test-") as temp_dir:
+            output = Path(temp_dir) / "Install-Pulselab-Juazeiro.bat"
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(INSTALLER_PATH),
+                    "--url",
+                    "https://example.supabase.co",
+                    "--key",
+                    "test-anon-key",
+                    "--site-id",
+                    "JUAZEIRO-BA",
+                    "--regional-hub",
+                    "POLO-VALE-SAO-FRANCISCO",
+                    "--school-code",
+                    "ESCOLA-01",
+                    "--output",
+                    str(output),
+                ],
+                cwd=REPO_ROOT,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            content = output.read_text(encoding="utf-8")
+            config_match = re.search(
+                r'\$configB64 = "([A-Za-z0-9+/=]+)"',
+                content,
+            )
+            self.assertIsNotNone(config_match)
+            packaged_config = json.loads(base64.b64decode(config_match.group(1)))
+            self.assertEqual(packaged_config["site_id"], "JUAZEIRO-BA")
+            self.assertEqual(
+                packaged_config["regional_hub"],
+                "POLO-VALE-SAO-FRANCISCO",
+            )
+            self.assertEqual(packaged_config["school_code"], "ESCOLA-01")
+            self.assertEqual(CONFIG_PATH.read_bytes(), source_config)
+
+    def test_both_installers_accept_identity_presets(self):
+        powershell_installer = read_text(POWERSHELL_INSTALLER_PATH)
+        bootstrap_installer = read_text(BOOTSTRAP_PATH)
+        for parameter in ("$SiteId", "$RegionalHub", "$SchoolCode"):
+            self.assertIn(parameter, powershell_installer)
+            self.assertIn(parameter, bootstrap_installer)
 
 
 if __name__ == "__main__":

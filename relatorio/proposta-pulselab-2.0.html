@@ -1,0 +1,928 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Revisão estratégica do PulseLab, benchmark de soluções similares, proposta acadêmica e escopo do MVP de pesquisa.">
+  <meta name="theme-color" content="#24164f">
+  <title>PulseLab 2.0 — proposta reformulada e MVP de pesquisa</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202e;
+      --muted: #5e6878;
+      --paper: #f8f7f3;
+      --surface: #ffffff;
+      --surface-2: #f0eee8;
+      --line: #dedad1;
+      --violet-950: #24164f;
+      --violet-800: #3c257f;
+      --violet-650: #5d43bc;
+      --violet-100: #eee9ff;
+      --teal-700: #087783;
+      --teal-100: #e0f4f2;
+      --green-700: #28734f;
+      --green-100: #e4f3e9;
+      --amber-800: #8c5206;
+      --amber-100: #fff1d2;
+      --red-800: #9b3434;
+      --red-100: #fde8e8;
+      --shadow: 0 18px 56px rgba(36, 22, 79, 0.10);
+      --radius: 20px;
+      --max: 1240px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 28px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 7% 1%, rgba(93, 67, 188, 0.10), transparent 27rem),
+        radial-gradient(circle at 98% 17%, rgba(8, 119, 131, 0.08), transparent 25rem),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 1rem;
+      line-height: 1.68;
+      text-rendering: optimizeLegibility;
+    }
+
+    a { color: var(--violet-800); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    a:hover { color: var(--teal-700); }
+    button { font: inherit; }
+
+    .skip-link {
+      position: fixed;
+      z-index: 999;
+      top: 10px;
+      left: 10px;
+      padding: 10px 14px;
+      color: #fff;
+      background: var(--violet-950);
+      border-radius: 8px;
+      transform: translateY(-180%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .reading-progress {
+      position: fixed;
+      z-index: 100;
+      inset: 0 auto auto 0;
+      width: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #8c6ff1, #52d0c2);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      color: #fff;
+      background: linear-gradient(125deg, #1d123f 0%, #432788 58%, #08717c 125%);
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(255,255,255,0.13);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .hero::before { width: 32rem; height: 32rem; top: -18rem; right: -9rem; }
+    .hero::after { width: 19rem; height: 19rem; right: 15rem; bottom: -14rem; }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(270px, 0.75fr);
+      gap: clamp(30px, 6vw, 82px);
+      align-items: end;
+      width: min(calc(100% - 40px), var(--max));
+      margin: 0 auto;
+      padding: clamp(58px, 8vw, 104px) 0 64px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 18px;
+      padding: 7px 12px;
+      color: #e2dcff;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 800;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: #67e8d5;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(103, 232, 213, 0.13);
+    }
+
+    h1, h2, h3, h4 {
+      margin-top: 0;
+      font-family: "Aptos Display", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.16;
+      text-wrap: balance;
+    }
+
+    h1 {
+      max-width: 850px;
+      margin-bottom: 20px;
+      font-size: clamp(2.55rem, 6.2vw, 5.35rem);
+      letter-spacing: -0.055em;
+    }
+
+    .hero-lead {
+      max-width: 780px;
+      margin: 0;
+      color: #e9e6f4;
+      font-size: clamp(1.08rem, 2vw, 1.32rem);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 22px;
+      margin-top: 28px;
+      color: #d1cbe7;
+      font-size: 0.87rem;
+    }
+
+    .hero-meta strong { color: #fff; }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 10px 16px;
+      color: #fff;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.24);
+      border-radius: 11px;
+      cursor: pointer;
+      font-weight: 750;
+      text-decoration: none;
+    }
+
+    .button:hover { color: #fff; background: rgba(255,255,255,0.18); }
+    .button.primary { color: var(--violet-950); background: #fff; }
+    .button.primary:hover { color: var(--violet-650); background: #f3f0ff; }
+
+    .hero-question {
+      padding: 24px;
+      background: rgba(13, 8, 33, 0.28);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 48px rgba(0,0,0,0.13);
+    }
+
+    .hero-question small {
+      display: block;
+      margin-bottom: 10px;
+      color: #75e3d8;
+      font-weight: 800;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    .hero-question p { margin: 0; font-size: 1.04rem; line-height: 1.55; }
+
+    .quick-read {
+      width: min(calc(100% - 40px), var(--max));
+      margin: -28px auto 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    .quick-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      overflow: hidden;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .quick-item { padding: 21px 22px; }
+    .quick-item + .quick-item { border-left: 1px solid var(--line); }
+    .quick-item small { display: block; color: var(--violet-650); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
+    .quick-item strong { display: block; margin: 5px 0 3px; font-size: 1.02rem; }
+    .quick-item span { display: block; color: var(--muted); font-size: 0.84rem; line-height: 1.45; }
+
+    .mobile-toc {
+      display: none;
+      width: min(calc(100% - 26px), var(--max));
+      margin: 26px auto 0;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 13px;
+    }
+
+    .mobile-toc summary { padding: 14px 16px; cursor: pointer; font-weight: 800; }
+    .mobile-links { display: grid; padding: 0 12px 12px; }
+    .mobile-links a { padding: 8px 5px; text-decoration: none; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      gap: 48px;
+      width: min(calc(100% - 40px), var(--max));
+      margin: 0 auto;
+      padding: 58px 0 92px;
+    }
+
+    .toc {
+      position: sticky;
+      top: 24px;
+      align-self: start;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      padding: 18px;
+      background: rgba(255,255,255,0.80);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 10px 28px rgba(36, 22, 79, 0.06);
+      backdrop-filter: blur(14px);
+      scrollbar-width: thin;
+    }
+
+    .toc-title {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.74rem;
+      font-weight: 850;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .toc a {
+      display: grid;
+      grid-template-columns: 27px 1fr;
+      gap: 3px;
+      margin: 2px 0;
+      padding: 7px 8px;
+      color: var(--muted);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      line-height: 1.28;
+      text-decoration: none;
+    }
+
+    .toc a span { color: #958ca7; font-variant-numeric: tabular-nums; }
+    .toc a:hover, .toc a.active { color: var(--violet-800); background: var(--violet-100); }
+
+    main { min-width: 0; }
+
+    .document-note {
+      margin-bottom: 54px;
+      padding: 18px 20px;
+      color: var(--muted);
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: 13px;
+      font-size: 0.91rem;
+    }
+
+    .doc-section {
+      margin-bottom: 76px;
+      scroll-margin-top: 24px;
+    }
+
+    .section-kicker {
+      margin: 0 0 8px;
+      color: var(--violet-650);
+      font-size: 0.75rem;
+      font-weight: 850;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h2 {
+      margin-bottom: 20px;
+      color: var(--violet-950);
+      font-size: clamp(1.8rem, 3.1vw, 2.55rem);
+      letter-spacing: -0.038em;
+    }
+
+    h3 {
+      margin: 34px 0 12px;
+      color: var(--ink);
+      font-size: 1.24rem;
+      letter-spacing: -0.012em;
+    }
+
+    h4 { margin: 24px 0 8px; font-size: 1.03rem; }
+    p { margin: 0 0 17px; }
+    ul, ol { margin: 0 0 20px; padding-left: 1.35rem; }
+    li + li { margin-top: 7px; }
+    li::marker { color: var(--violet-650); font-weight: 800; }
+
+    blockquote {
+      margin: 24px 0;
+      padding: 24px 26px;
+      color: var(--violet-950);
+      background: var(--violet-100);
+      border: 1px solid #d6ccfa;
+      border-left: 5px solid var(--violet-650);
+      border-radius: 15px;
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1.06rem, 2vw, 1.24rem);
+      line-height: 1.53;
+    }
+
+    main > blockquote:first-child {
+      margin-top: 0;
+      color: var(--muted);
+      background: var(--surface-2);
+      border-color: var(--line);
+      border-left-color: var(--teal-700);
+      font-family: inherit;
+      font-size: 0.9rem;
+    }
+
+    blockquote p:last-child { margin-bottom: 0; }
+
+    code {
+      padding: 0.15em 0.38em;
+      color: #35256d;
+      background: #eeeaf8;
+      border: 1px solid #dfd8ef;
+      border-radius: 5px;
+      font: 0.88em/1.4 "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .code-wrap {
+      margin: 23px 0;
+      overflow-x: auto;
+      background: #17202e;
+      border: 1px solid #2b3748;
+      border-radius: 15px;
+      box-shadow: 0 12px 30px rgba(23, 32, 46, 0.10);
+    }
+
+    pre { margin: 0; padding: 23px; min-width: max-content; }
+    pre code { padding: 0; color: #e5eaf2; background: transparent; border: 0; font-size: 0.9rem; line-height: 1.65; overflow-wrap: normal; }
+
+    .table-wrap {
+      margin: 23px 0 28px;
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      box-shadow: 0 8px 22px rgba(36, 22, 79, 0.04);
+      outline: none;
+    }
+
+    .table-wrap:focus { box-shadow: 0 0 0 3px rgba(93, 67, 188, 0.20); }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.91rem; }
+    th, td { min-width: 135px; padding: 13px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--violet-950); background: var(--surface-2); font-size: 0.75rem; letter-spacing: 0.045em; text-transform: uppercase; }
+    tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #fbfaff; }
+    tr.priority-p0 td:first-child { color: var(--red-800); background: var(--red-100); font-weight: 900; }
+    tr.priority-p1 td:first-child { color: var(--amber-800); background: var(--amber-100); font-weight: 900; }
+    tr.priority-p2 td:first-child { color: var(--green-700); background: var(--green-100); font-weight: 900; }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      padding: 0;
+      list-style: none;
+    }
+
+    .checklist li {
+      display: grid;
+      grid-template-columns: 22px 1fr;
+      gap: 10px;
+      align-items: start;
+      margin: 0;
+      padding: 12px 14px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+
+    .checkmark {
+      display: grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      margin-top: 3px;
+      color: #fff;
+      background: var(--violet-100);
+      border: 1px solid #cbbff2;
+      border-radius: 5px;
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .back-top {
+      position: fixed;
+      z-index: 20;
+      right: 20px;
+      bottom: 20px;
+      display: grid;
+      place-items: center;
+      width: 44px;
+      height: 44px;
+      color: #fff;
+      background: var(--violet-800);
+      border: 0;
+      border-radius: 50%;
+      box-shadow: 0 10px 24px rgba(36, 22, 79, 0.22);
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 160ms ease, transform 160ms ease;
+      pointer-events: none;
+    }
+
+    .back-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+
+    footer {
+      padding: 32px 20px 48px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      text-align: center;
+      font-size: 0.86rem;
+    }
+
+    footer strong { color: var(--violet-800); }
+
+    @media (max-width: 1020px) {
+      .hero-inner { grid-template-columns: 1fr; }
+      .hero-question { max-width: 700px; }
+      .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .quick-item:nth-child(3) { border-left: 0; border-top: 1px solid var(--line); }
+      .quick-item:nth-child(4) { border-top: 1px solid var(--line); }
+      .layout { display: block; }
+      .toc { display: none; }
+      .mobile-toc { display: block; }
+    }
+
+    @media (max-width: 680px) {
+      .hero-inner { width: min(calc(100% - 28px), var(--max)); padding: 52px 0 54px; }
+      .quick-read { width: min(calc(100% - 26px), var(--max)); }
+      .quick-grid { grid-template-columns: 1fr; }
+      .quick-item + .quick-item { border-top: 1px solid var(--line); border-left: 0; }
+      .layout { width: min(calc(100% - 26px), var(--max)); padding-top: 40px; }
+      .doc-section { margin-bottom: 58px; }
+      .checklist { grid-template-columns: 1fr; }
+      blockquote { padding: 20px; }
+      th, td { padding: 12px; }
+      .back-top { right: 13px; bottom: 13px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .back-top { transition: none; }
+    }
+
+    @media print {
+      @page { margin: 1.6cm; }
+      :root { --paper: #fff; --surface: #fff; }
+      body { background: #fff; font-size: 10pt; }
+      .reading-progress, .actions, .quick-read, .mobile-toc, .toc, .back-top { display: none !important; }
+      .hero { color: #111; background: #fff; border-bottom: 2px solid var(--violet-950); }
+      .hero::before, .hero::after, .hero-question { display: none; }
+      .hero-inner { display: block; width: 100%; padding: 20px 0 26px; }
+      .hero h1 { color: var(--violet-950); font-size: 30pt; }
+      .hero-lead, .hero-meta { color: #444; }
+      .eyebrow { color: var(--violet-950); background: var(--violet-100); border-color: #d6ccfa; }
+      .layout { display: block; width: 100%; padding: 28px 0; }
+      .doc-section { margin-bottom: 34px; }
+      h2, h3 { break-after: avoid; }
+      blockquote, .table-wrap, .code-wrap, .checklist li { break-inside: avoid; box-shadow: none; }
+      .table-wrap { overflow: visible; }
+      table { font-size: 8.4pt; }
+      th, td { min-width: 0; padding: 7px; }
+      a { color: inherit; }
+      footer { padding-bottom: 0; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
+  <div class="reading-progress" id="readingProgress" aria-hidden="true"></div>
+
+  <header class="hero" id="topo">
+    <div class="hero-inner">
+      <div>
+        <p class="eyebrow">Revisão estratégica · Agosto de 2026</p>
+        <h1>PulseLab 2.0</h1>
+        <p class="hero-lead">Proposta reformulada, arquitetura de pesquisa e MVP para produzir evidências distribuídas, comparáveis e auditáveis em oficinas de robótica educacional.</p>
+        <div class="hero-meta">
+          <span><strong>Base examinada:</strong> agente e contratos 1.4.0</span>
+          <span><strong>Escopo:</strong> produto, método, métricas e governança</span>
+          <span><strong>Status:</strong> documento de decisão</span>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="#1-sintese-executiva">Começar a leitura</a>
+          <a class="button" href="#7-escopo-do-mvp">Ir ao MVP</a>
+          <button class="button" type="button" id="printButton">Imprimir ou salvar em PDF</button>
+        </div>
+      </div>
+      <aside class="hero-question" aria-label="Pergunta central do MVP">
+        <small>Pergunta central do MVP</small>
+        <p>É viável executar um protocolo multicêntrico de coleta em oficinas de robótica com completude, fidelidade, segurança, baixo ônus e qualidade suficientes para um estudo substantivo posterior?</p>
+      </aside>
+    </div>
+  </header>
+
+  <section class="quick-read" aria-label="Resumo em quatro pontos">
+    <div class="quick-grid">
+      <div class="quick-item"><small>Posicionamento</small><strong>Infraestrutura de pesquisa</strong><span>Não um medidor automático de aprendizagem.</span></div>
+      <div class="quick-item"><small>Primeiro teste</small><strong>Viabilidade multicêntrica</strong><span>Qualidade, fidelidade, segurança e ônus.</span></div>
+      <div class="quick-item"><small>MVP</small><strong>Duplas, uma atividade</strong><span>Pré, dois checkpoints, rubrica e pós.</span></div>
+      <div class="quick-item"><small>Saída</small><strong>Relatório de viabilidade</strong><span>Decisão verde, amarela ou vermelha.</span></div>
+    </div>
+  </section>
+
+  <details class="mobile-toc">
+    <summary>Navegar pelas 16 seções</summary>
+    <nav class="mobile-links" aria-label="Sumário móvel"><a href="#1-sintese-executiva"><span>01</span>Síntese executiva</a>
+<a href="#2-diagnostico-do-estado-atual"><span>02</span>Diagnóstico do estado atual</a>
+<a href="#3-risco-estrategico-o-produto-nao-pode-depender-do-spike"><span>03</span>Risco estratégico: o produto não pode depender do SPIKE</a>
+<a href="#4-o-que-solucoes-similares-ensinam"><span>04</span>O que soluções similares ensinam</a>
+<a href="#5-proposta-reformulada"><span>05</span>Proposta reformulada</a>
+<a href="#6-teoria-de-mudanca-e-programa-de-pesquisa"><span>06</span>Teoria de mudança e programa de pesquisa</a>
+<a href="#7-escopo-do-mvp"><span>07</span>Escopo do MVP</a>
+<a href="#8-metricas-recomendadas"><span>08</span>Métricas recomendadas</a>
+<a href="#9-arquitetura-tecnica-recomendada"><span>09</span>Arquitetura técnica recomendada</a>
+<a href="#10-plano-de-validade-e-analise"><span>10</span>Plano de validade e análise</a>
+<a href="#11-etica-privacidade-e-governanca"><span>11</span>Ética, privacidade e governança</a>
+<a href="#12-backlog-de-implementacao"><span>12</span>Backlog de implementação</a>
+<a href="#13-cronograma-orientado-por-gates"><span>13</span>Cronograma orientado por gates</a>
+<a href="#14-criterios-de-aceite-do-mvp"><span>14</span>Critérios de aceite do MVP</a>
+<a href="#15-contribuicao-academica-reformulada"><span>15</span>Contribuição acadêmica reformulada</a>
+<a href="#16-referencias-e-fontes-consultadas"><span>16</span>Referências e fontes consultadas</a></nav>
+  </details>
+
+  <div class="layout">
+    <aside class="toc" aria-label="Sumário do documento">
+      <p class="toc-title">Neste documento</p>
+      <nav id="tocNav"><a href="#1-sintese-executiva"><span>01</span>Síntese executiva</a>
+<a href="#2-diagnostico-do-estado-atual"><span>02</span>Diagnóstico do estado atual</a>
+<a href="#3-risco-estrategico-o-produto-nao-pode-depender-do-spike"><span>03</span>Risco estratégico: o produto não pode depender do SPIKE</a>
+<a href="#4-o-que-solucoes-similares-ensinam"><span>04</span>O que soluções similares ensinam</a>
+<a href="#5-proposta-reformulada"><span>05</span>Proposta reformulada</a>
+<a href="#6-teoria-de-mudanca-e-programa-de-pesquisa"><span>06</span>Teoria de mudança e programa de pesquisa</a>
+<a href="#7-escopo-do-mvp"><span>07</span>Escopo do MVP</a>
+<a href="#8-metricas-recomendadas"><span>08</span>Métricas recomendadas</a>
+<a href="#9-arquitetura-tecnica-recomendada"><span>09</span>Arquitetura técnica recomendada</a>
+<a href="#10-plano-de-validade-e-analise"><span>10</span>Plano de validade e análise</a>
+<a href="#11-etica-privacidade-e-governanca"><span>11</span>Ética, privacidade e governança</a>
+<a href="#12-backlog-de-implementacao"><span>12</span>Backlog de implementação</a>
+<a href="#13-cronograma-orientado-por-gates"><span>13</span>Cronograma orientado por gates</a>
+<a href="#14-criterios-de-aceite-do-mvp"><span>14</span>Critérios de aceite do MVP</a>
+<a href="#15-contribuicao-academica-reformulada"><span>15</span>Contribuição acadêmica reformulada</a>
+<a href="#16-referencias-e-fontes-consultadas"><span>16</span>Referências e fontes consultadas</a></nav>
+    </aside>
+
+    <main id="conteudo" tabindex="-1">
+<blockquote><p><strong>Data da revisão:</strong> 7 de agosto de 2026   <strong>Escopo:</strong> auditoria do repositório, comparação com soluções e propostas similares e reformulação do produto e do programa de pesquisa.   <strong>Status:</strong> documento de decisão. Não substitui protocolo aprovado, parecer ético, plano estatístico, política de privacidade ou aconselhamento jurídico.   <strong>Versão examinada:</strong> agente e contratos 1.4.0, incluindo as alterações locais existentes na data da revisão.</p></blockquote>
+<section class="doc-section" id="1-sintese-executiva">
+<p class="section-kicker">01 · Documento completo</p>
+<h2>Síntese executiva</h2>
+<p>O PulseLab tem uma contribuição promissora, mas ela precisa ser formulada com precisão:</p>
+<blockquote><p><strong>O PulseLab é uma infraestrutura independente de plataforma para coleta distribuída, pseudonimizada, versionada e auditável de evidências sobre processo, implementação e resultados imediatos em oficinas de robótica educacional.</strong></p></blockquote>
+<p>O produto não deve ser apresentado, neste estágio, como medidor automático de aprendizagem, carga cognitiva, engajamento ou colaboração. Sua primeira entrega científica defensável é provar que oficinas realizadas em várias sedes podem produzir dados completos, comparáveis, autênticos e de baixo ônus sem um pesquisador presencial permanente.</p>
+<p>A revisão indica quatro mudanças de direção:</p>
+<ol><li><strong>De coletor para infraestrutura de pesquisa:</strong> protocolo, atividade, instrumento, rubrica, versão, qualidade e proveniência precisam ser parte do produto.</li><li><strong>De SPIKE para arquitetura independente de fornecedor:</strong> o parque SPIKE pode sustentar o piloto, mas o portfólio foi retirado de venda em 30 de junho de 2026; o núcleo deve aceitar adaptadores para outras plataformas.</li><li><strong>De telemetria ampla para mensuração orientada por construto:</strong> só coletar um dado quando houver pergunta científica, interpretação prevista e regra de descarte.</li><li><strong>De demonstração para MVP verificável:</strong> autenticação real, resultado objetivo, qualidade de dados, separação entre ambientes e protocolo ético são requisitos de entrada, não melhorias futuras.</li></ol>
+<p>O MVP recomendado não tenta responder se a oficina “funciona”. Ele responde primeiro:</p>
+<blockquote><p><strong>É viável executar um protocolo multicêntrico de coleta em oficinas de robótica, com completude, fidelidade, segurança, baixo ônus e qualidade suficientes para um estudo substantivo posterior?</strong></p></blockquote>
+<p>Aprendizagem imediata, colaboração e mediação entram como desfechos exploratórios no piloto e se tornam confirmatórios somente após validação dos instrumentos e cálculo amostral.</p>
+</section>
+<section class="doc-section" id="2-diagnostico-do-estado-atual">
+<p class="section-kicker">02 · Documento completo</p>
+<h2>Diagnóstico do estado atual</h2>
+<h3 id="2-1-pontos-fortes-que-devem-ser-preservados">2.1 Pontos fortes que devem ser preservados</h3>
+<ul><li>modelo append-only com <code>event_id</code> idempotente;</li><li>linha do tempo de sessão separada das respostas individuais;</li><li>tempo absoluto baseado em relógio monotônico;</li><li><code>protocol_version</code>, <code>config_version</code> e <code>config_hash</code> em cada evento;</li><li>pseudônimos por sessão em vez de nomes de estudantes;</li><li>distinção entre resposta concluída, recusada e expirada;</li><li>classificação local de aplicativo, sem envio do título bruto da janela;</li><li>bucket privado e ausência de leitura anônima declarada;</li><li>tentativa de manter evento e screenshot como uma unidade no reenvio offline;</li><li>simulador navegável e exportação de sessão para inspeção;</li><li>testes de contrato que cobrem versões, esquema, telemetria minimizada e empacotamento.</li></ul>
+<p>Na revisão, os <strong>20 testes Python</strong> e o teste de contratos JavaScript passaram. O build Vite também foi produzido com sucesso em diretório temporário.</p>
+<h3 id="2-2-lacunas-criticas-encontradas">2.2 Lacunas críticas encontradas</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Prioridade</th><th scope="col" data-column="1">Evidência no projeto</th><th scope="col" data-column="2">Risco</th><th scope="col" data-column="3">Decisão recomendada</th></tr></thead><tbody><tr class="priority-p0"><td>P0</td><td>A tela de contexto é ignorada quando tudo está pré-configurado, mas <code>authorization_verified = true</code> é registrado incondicionalmente</td><td>uma sessão pode declarar autorização sem confirmação atual do instrutor</td><td>confirmação de autorização deve ocorrer em toda sessão e produzir evento próprio, sem atalho</td></tr><tr class="priority-p0"><td>P0</td><td><code>anon</code> pode inserir qualquer linha válida em <code>research_events</code>, <code>research_session_events</code> e no bucket</td><td>fabricação de dados, spam, custo e perda de autenticidade científica</td><td>retirar escrita direta do cliente; usar gateway autenticado, credencial revogável por instalação e validação no servidor</td></tr><tr class="priority-p0"><td>P0</td><td>o portal do instrutor aceita qualquer e-mail, não autentica e apenas usa <code>console.log</code> e um modal de sucesso</td><td>falsa impressão de login e persistência</td><td>rotular como simulação ou implementar Auth, associação de instrutor e inserção real antes do uso</td></tr><tr class="priority-p0"><td>P0</td><td>a função de troca de papel existe, mas não é chamada; a lista de participantes recria papéis fixos</td><td>exposição aos papéis é registrada incorretamente</td><td>implementar transições de papel e registrar papel efetivo por participante e etapa</td></tr><tr class="priority-p0"><td>P0</td><td>a rubrica existe no agente Windows, mas não é chamada nem persistida</td><td>não há desfecho objetivo principal</td><td>persistir um único resultado de grupo, separado de ajuda e respostas individuais</td></tr><tr class="priority-p0"><td>P0</td><td><code>knowledge_questions</code> está vazio e o agente não aplica pré/pós de conhecimento</td><td>não há medida direta de aprendizagem</td><td>criar itens alinhados a objetivos por <code>activity_version</code> e validar antes de alegações de aprendizagem</td></tr><tr class="priority-p0"><td>P0</td><td>o app permite grupos de 1, 3 e 4, mas <code>New-ResearchEvent</code> aceita apenas os papéis <code>computer</code> e <code>assembly</code></td><td>execução falha fora de duplas</td><td>restringir o MVP a duplas ou completar e testar suporte de 1–4; o modelo de dados pode permanecer extensível</td></tr><tr class="priority-p0"><td>P0</td><td>screenshots estão ativos por padrão e o upload anônimo aceita qualquer caminho no bucket</td><td>risco desproporcional de privacidade e abuso</td><td>desligar por padrão; reintroduzir apenas em subestudo aprovado, com URL assinada, MIME, tamanho, caminho e retenção controlados</td></tr><tr class="priority-p1"><td>P1</td><td>a view de qualidade assume dois participantes e conta linhas mesmo quando <code>declined</code> ou <code>timeout</code></td><td>sessão pode parecer completa sem respostas analíticas válidas</td><td>calcular oportunidades esperadas por <code>participant_count</code> e separar presença, validade e recusa</td></tr><tr class="priority-p1"><td>P1</td><td>a rubrica atual mistura execução da missão e quantidade de ajuda</td><td>circularidade em análises entre ajuda e desempenho</td><td>pontuar correção/robustez da missão separadamente da intensidade de suporte</td></tr><tr class="priority-p1"><td>P1</td><td>há pedido de ajuda, mas não reconhecimento, início ou resolução</td><td>não é possível medir atendimento ou efeito da mediação</td><td>incluir <code>help_acknowledged</code>, <code>help_started</code> e <code>help_resolved</code></td></tr><tr class="priority-p1"><td>P1</td><td>configuração remota aponta para <code>main</code>, que é mutável</td><td>o hash prova conteúdo, mas não garante que a versão foi aprovada ou pode ser recuperada</td><td>publicar manifestos imutáveis e assinados por versão e arquivar a configuração usada</td></tr><tr class="priority-p1"><td>P1</td><td>fila local é JSON/JPG em claro, sem mutex e reescrita por inteiro</td><td>exposição local, corrupção em queda e conflito entre instâncias</td><td>usar outbox transacional, proteção DPAPI e bloqueio de instância</td></tr><tr class="priority-p1"><td>P1</td><td>tabelas aceitam contexto repetido sem vínculo a uma sessão registrada</td><td>eventos da mesma sessão podem contradizer escola, atividade ou protocolo</td><td>validar o envelope no gateway e manter entidade de sessão canônica</td></tr><tr class="priority-p1"><td>P1</td><td>ambientes de demonstração e pesquisa não estão claramente separados</td><td>dados fictícios podem contaminar análise e comunicação</td><td>projetos/bases/chaves distintos e <code>environment</code> obrigatório no envelope</td></tr><tr class="priority-p2"><td>P2</td><td>o README solicita <code>npm run check</code>, mas o script não existe</td><td>verificação documentada falha antes do build</td><td>corrigir o contrato de scripts e adicionar lint/typecheck real ou remover a instrução</td></tr></tbody></table></div>
+<h3 id="2-3-observacoes-adicionais-de-seguranca-do-banco">2.3 Observações adicionais de segurança do banco</h3>
+<ul><li><code>authorized_instructors</code> permite que qualquer usuário autenticado leia todas as linhas ativas; a autorização deve verificar a própria identidade ou uma função administrativa, não expor a lista completa.</li><li><code>instructor_evaluations</code> aceita inserção anônima e recebe <code>instructor_email</code> do cliente, permitindo falsificação.</li><li>avaliações do instrutor são ligadas apenas por códigos textuais de oficina e turma, sem <code>session_id</code>/<code>group_id</code> obrigatório.</li><li>a política de Storage limita apenas o bucket; não limita instalação, caminho, extensão, MIME ou tamanho.</li><li>o esquema usa RLS e privilégios mínimos de leitura, o que é positivo, mas <code>WITH CHECK (true)</code> garante formato, não origem, autorização nem coerência científica.</li><li>as chaves legadas <code>anon</code>/<code>service_role</code> estão anunciadas pelo Supabase para depreciação até o fim de 2026. Chaves publicáveis novas não são JWT e não devem ser enviadas como <code>Authorization: Bearer</code>, como o agente faz hoje.</li></ul>
+</section>
+<section class="doc-section" id="3-risco-estrategico-o-produto-nao-pode-depender-do-spike">
+<p class="section-kicker">03 · Documento completo</p>
+<h2>Risco estratégico: o produto não pode depender do SPIKE</h2>
+<p>A LEGO Education encerrou as vendas do SPIKE Prime e Essential em <strong>30 de junho de 2026</strong>. O aplicativo SPIKE continuará recebendo correções e suporte a sistemas operacionais até <strong>30 de junho de 2031</strong>, mas não receberá novas funcionalidades depois da retirada do produto. A nova linha Computer Science &amp; AI usa o Coding Canvas, trabalha com faixas K–2, 3–5 e 6–8 e propõe grupos de quatro; os projetos continuam locais e sem login do estudante.</p>
+<p>Isso não invalida o piloto com equipamentos já instalados. A implicação é arquitetural:</p>
+<div class="code-wrap"><pre><code class="language-text">Núcleo PulseLab
+├── protocolo, instrumentos e versões
+├── sessões, participantes e grupos
+├── eventos, qualidade e resultados
+├── autenticação, sincronização e auditoria
+└── adaptadores de plataforma
+    ├── SPIKE App (legado suportado até 2031)
+    ├── LEGO Coding Canvas
+    ├── Scratch/Blockly
+    ├── MakeCode ou outra plataforma
+    └── atividade sem computador</code></pre></div>
+<p><code>spike_window_detected</code> deve virar algo como <code>platform_adapter_status</code>; <code>.llsp</code> e <code>.spk</code> devem ser propriedades do adaptador, não do modelo científico central.</p>
+</section>
+<section class="doc-section" id="4-o-que-solucoes-similares-ensinam">
+<p class="section-kicker">04 · Documento completo</p>
+<h2>O que soluções similares ensinam</h2>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Solução/proposta</th><th scope="col" data-column="1">Como funciona</th><th scope="col" data-column="2">Aprendizado para o PulseLab</th><th scope="col" data-column="3">O que não copiar diretamente</th></tr></thead><tbody><tr><td><strong>PELARS</strong></td><td>combina logs da IDE, sensores, imagens/vídeo, autorregistro e codificação humana em tarefas abertas de computação física</td><td>alinhar modalidades ao desenho da atividade; cruzar processo, produto e observação; envolver professor no desenho do painel</td><td>infraestrutura sensorial intrusiva e cara; os primeiros estudos não justificam transferência automática para crianças ou escala multicêntrica</td></tr><tr><td><strong>Dr. Scratch</strong></td><td>recebe projeto/URL do Scratch e produz dimensões de pensamento computacional; possui análise em lote</td><td>extrair características semânticas do artefato e permitir processamento em lote</td><td>transformar escore de estrutura de código em “aprendizagem” sem validade para a atividade e a população</td></tr><tr><td><strong>Code.org Teacher Dashboard</strong></td><td>mostra progresso, tempo, última atividade, código, avaliações e itens para revisão</td><td>painel orientado à decisão; visão por turma e etapa; exportação; separar trabalho concluído de trabalho correto</td><td>usar tempo ou bolha concluída como prova de domínio; a própria Code.org alerta que várias tarefas não são autoavaliadas por correção</td></tr><tr><td><strong>Raspberry Pi Code Classroom</strong></td><td>integra editor em blocos/Python/web, turmas, submissão para revisão e feedback docente</td><td>incorporar fluxo explícito “pronto para revisão → avaliado → feedback”, em vez de apenas coletar dados</td><td>exigir contas nominais de estudantes no MVP de pesquisa</td></tr><tr><td><strong>LEGO Education</strong></td><td>fornece planos, checklist observacional, autoavaliação e avaliação por pares; a nova linha associa tarefa física e Coding Canvas</td><td>alinhar rubrica à lição e permitir observação docente curta; preparar grupos de quatro no modelo futuro</td><td>acoplar o protocolo científico ao ciclo de vida de um único fornecedor</td></tr><tr><td><strong>Caliper/xAPI</strong></td><td>padroniza envelopes e vocabulários de eventos que podem ser enviados a um repositório de aprendizagem</td><td>manter evento canônico versionado e oferecer exportação compatível</td><td>implementar toda a especificação antes de estabilizar o vocabulário de domínio</td></tr><tr><td><strong>SnapClass</strong> (proposta emergente/preprint)</td><td>combina gestão de sala em programação por blocos, ajuda levantada e sinais como ociosidade</td><td>reforça a utilidade de fila de ajuda e painel de orquestração</td><td>inferir engajamento ou dificuldade de ociosidade/IA antes de validação independente</td></tr></tbody></table></div>
+<p>O diferencial defensável do PulseLab é a combinação de <strong>baixo custo, operação offline, pesquisa multicêntrica, pseudonimização, reconstrução temporal e controle de qualidade</strong>. Ele não precisa competir com ambientes de programação; deve instrumentar atividades realizadas neles.</p>
+</section>
+<section class="doc-section" id="5-proposta-reformulada">
+<p class="section-kicker">05 · Documento completo</p>
+<h2>Proposta reformulada</h2>
+<h3 id="5-1-nome-conceitual">5.1 Nome conceitual</h3>
+<blockquote><p><strong>PulseLab 2.0 — infraestrutura de pesquisa e qualidade para aprendizagem prática em robótica e computação criativa.</strong></p></blockquote>
+<h3 id="5-2-problema">5.2 Problema</h3>
+<p>Oficinas distribuídas geram produtos e experiências relevantes, mas deixam pouca evidência comparável sobre:</p>
+<ul><li>quem foi alcançado;</li><li>qual atividade e versão foram aplicadas;</li><li>com que fidelidade a oficina ocorreu;</li><li>como esforço, progresso, papel e ajuda mudaram;</li><li>o que o grupo conseguiu executar;</li><li>o que cada participante conseguiu explicar ou responder;</li><li>qual foi a completude, autenticidade e qualidade dos dados;</li><li>quais mudanças pedagógicas decorreram dos achados.</li></ul>
+<h3 id="5-3-publico-e-decisoes-apoiadas">5.3 Público e decisões apoiadas</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Usuário</th><th scope="col" data-column="1">Decisão apoiada</th></tr></thead><tbody><tr><td>instrutor local</td><td>quem pediu ajuda, qual etapa falta e como encerrar corretamente</td></tr><tr><td>coordenação pedagógica</td><td>qual atividade ou etapa concentra dificuldade e qual formação precisa ser revista</td></tr><tr><td>pesquisador</td><td>quais sessões são utilizáveis, quais precisam de auditoria e quais hipóteses podem ser testadas</td></tr><tr><td>gestor do programa</td><td>alcance, adoção, custo operacional, fidelidade e sustentabilidade por sede</td></tr><tr><td>comunidade escolar</td><td>devolutiva agregada, compreensível e não estigmatizante</td></tr></tbody></table></div>
+<h3 id="5-4-limites-de-alegacao">5.4 Limites de alegação</h3>
+<p>O produto pode informar <strong>processo, implementação, resultado imediato e qualidade da evidência</strong>. Não deve gerar diagnóstico individual, ranking de criança/instrutor/escola, decisão punitiva, rótulo de engajamento ou inferência emocional automática.</p>
+</section>
+<section class="doc-section" id="6-teoria-de-mudanca-e-programa-de-pesquisa">
+<p class="section-kicker">06 · Documento completo</p>
+<h2>Teoria de mudança e programa de pesquisa</h2>
+<div class="code-wrap"><pre><code class="language-text">Recursos e desenho
+atividade versionada + formação + kits + protocolo
+        │
+        ▼
+Implementação
+alcance + adesão + fidelidade + suporte + qualidade técnica
+        │
+        ▼
+Processos de aprendizagem
+tentativas + depuração + esforço + papéis + colaboração + ajuda
+        │
+        ▼
+Produtos imediatos
+missão + artefato + explicação individual + conhecimento pós
+        │
+        ▼
+Resultados posteriores
+retenção + autoeficácia + retorno + continuidade em computação</code></pre></div>
+<p>Essa cadeia impede que um sinal técnico seja confundido com resultado educacional. <code>idle_seconds</code>, por exemplo, pertence à evidência contextual; ele não salta diretamente para “desengajamento”.</p>
+<h3 id="6-1-estudos-previstos">6.1 Estudos previstos</h3>
+<ol><li><strong>Estudo 0 — desenvolvimento e validade de conteúdo/processo de resposta</strong>  </li></ol>
+<p>Co-desenho com instrutores, especialistas e crianças; entrevistas cognitivas; refinamento da atividade, dos itens e da rubrica.</p>
+<ol><li><strong>Estudo 1 — piloto multicêntrico de viabilidade</strong>  </li></ol>
+<p>Desfecho primário: completude e fidelidade da coleta. Secundários: ônus, aceitabilidade, falhas, pedidos de ajuda e distribuição das medidas.</p>
+<ol><li><strong>Estudo 2 — validade e processo</strong>  </li></ol>
+<p>Comparação entre PulseLab e observação estruturada em amostra; concordância da rubrica; relações entre esforço, progresso, ajuda, artefato e resultado.</p>
+<ol><li><strong>Estudo 3 — efetividade</strong>  </li></ol>
+<p>Somente após validação: desenho por conglomerados, lista de espera, implementação escalonada ou quase-experimento, conforme viabilidade institucional.</p>
+<ol><li><strong>Estudo 4 — retenção, equidade e sustentabilidade</strong>  </li></ol>
+<p>Seguimento, manutenção da oferta, adoção por sedes, custo e distribuição dos resultados entre grupos definidos previamente.</p>
+<p>O MVP entrega o Estudo 1 e prepara o Estudo 2. Ele não promete o Estudo 3.</p>
+<h3 id="6-2-pergunta-primaria-do-mvp">6.2 Pergunta primária do MVP</h3>
+<blockquote><p>Em oficinas pontuais realizadas em mais de uma sede, o PulseLab consegue obter o conjunto mínimo de dados válidos por sessão, com fidelidade temporal, origem autenticada, baixo ônus para o instrutor e proteção adequada dos participantes?</p></blockquote>
+<h3 id="6-3-hipoteses-exploratorias-reformuladas">6.3 Hipóteses exploratórias reformuladas</h3>
+<ul><li><strong>H1:</strong> a distribuição do esforço mental percebido varia por etapa, papel efetivamente exercido e experiência prévia.</li><li><strong>H2:</strong> menor latência entre pedido e início de ajuda se associa a maior probabilidade de transição de bloqueio para progresso no checkpoint seguinte.</li><li><strong>H3:</strong> exposição equilibrada aos papéis e participação percebida se associam ao desempenho do grupo e à explicação individual, sem incluir ajuda dentro do escore de desempenho.</li><li><strong>H4:</strong> o desempenho pós-oficina em itens alinhados à atividade é superior ao pré, com incerteza e agrupamento explicitados; no estudo observacional, isso é mudança imediata, não efeito causal.</li><li><strong>H5 futura:</strong> após introduzir comparador adequado, estudantes expostos à oficina apresentam resultado superior ao grupo comparador no desfecho primário pré-especificado.</li></ul>
+</section>
+<section class="doc-section" id="7-escopo-do-mvp">
+<p class="section-kicker">07 · Documento completo</p>
+<h2>Escopo do MVP</h2>
+<h3 id="7-1-dentro-do-mvp">7.1 Dentro do MVP</h3>
+<ul><li>duplas como única composição operacional validada;</li><li>uma atividade principal, com versão e objetivos de aprendizagem congelados;</li><li>confirmação de autorização por sessão e assentimento individual;</li><li>pré-teste curto, dois checkpoints ligados a etapas e pós-teste curto;</li><li>troca de papéis registrada e papel efetivamente exercido;</li><li>pedido, reconhecimento, início e resolução de ajuda;</li><li>rubrica de grupo registrada uma vez;</li><li>explicação individual curta ou item de aplicação;</li><li>ingestão autenticada por instalação;</li><li>outbox offline transacional e protegida;</li><li>painel real de qualidade, operação e auditoria;</li><li>exportação de dados de pesquisa com dicionário e versões;</li><li>ambiente de homologação separado do ambiente de pesquisa;</li><li>trilha de auditoria e política de retenção implementada.</li></ul>
+<h3 id="7-2-fora-do-mvp">7.2 Fora do MVP</h3>
+<ul><li>câmera, áudio, biometria, eye tracking ou sensores corporais;</li><li>screenshots por padrão;</li><li>IA para inferir emoção, carga, engajamento ou risco;</li><li>ranking de estudantes, instrutores, turmas ou escolas;</li><li>suporte operacional a trios e quartetos antes de validação própria;</li><li>identificação longitudinal de estudantes;</li><li>causalidade ou promessa de aumento de aprendizagem;</li><li>processamento integral de Caliper/xAPI; apenas envelope compatível e exportador.</li></ul>
+<h3 id="7-3-fluxo-minimo">7.3 Fluxo mínimo</h3>
+<ol><li>Coordenador publica <code>activity_version</code> e <code>protocol_version</code> imutáveis.</li><li>Instalação autenticada baixa apenas versões autorizadas para sua sede.</li><li>Instrutor inicia sessão, confirma autorização atual e recebe código de sessão.</li><li>Participantes recebem assentimento individual; recusa encerra somente a coleta.</li><li>Pré-teste mede perfil mínimo e conhecimento alinhado.</li><li>A atividade inicia e registra etapas, não apenas relógio corrido.</li><li>Checkpoint A registra papel, esforço e progresso; troca de papel é confirmada.</li><li>Pedido de ajuda entra em fila local e recebe tempos de atendimento.</li><li>Checkpoint B repete processo e inclui participação percebida.</li><li>Instrutor registra a rubrica de grupo, sem incluir quantidade de ajuda no escore.</li><li>Cada participante responde pós-teste e explicação individual.</li><li>O sistema exibe o que foi sincronizado e o que continua pendente.</li><li>O painel classifica a sessão por completude, validade e desvios.</li></ol>
+<h3 id="7-4-checkpoints-por-etapa-com-fallback-temporal">7.4 Checkpoints por etapa, com fallback temporal</h3>
+<p>Os minutos 20 e 40 não representam a mesma situação em oficinas diferentes. Recomenda-se:</p>
+<ul><li>gatilho principal por etapa, como <code>construcao_concluida</code> e <code>teste_integrado</code>;</li><li>janela temporal esperada por atividade;</li><li>fallback absoluto quando o instrutor não marcar a etapa;</li><li>registro de <code>stage_expected</code>, <code>stage_reported</code>, <code>scheduled_at</code>, <code>prompted_at</code>, <code>responded_at</code> e atraso.</li></ul>
+<p>Isso preserva comparação pedagógica e permite analisar desvio de duração.</p>
+</section>
+<section class="doc-section" id="8-metricas-recomendadas">
+<p class="section-kicker">08 · Documento completo</p>
+<h2>Métricas recomendadas</h2>
+<h3 id="8-1-nucleo-de-implementacao-e-escala">8.1 Núcleo de implementação e escala</h3>
+<p>Uma adaptação de RE-AIM organiza o programa sem transformar o MVP em estudo clínico:</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Dimensão</th><th scope="col" data-column="1">Métricas</th></tr></thead><tbody><tr><td>Alcance</td><td>oficinas/participantes elegíveis, convidados, autorizados e com coleta; perfil de não participação apenas no nível aprovado</td></tr><tr><td>Resultado imediato</td><td>conhecimento, missão, explicação individual, experiência e efeitos indesejados</td></tr><tr><td>Adoção</td><td>sedes e instrutores elegíveis que iniciam e repetem o protocolo</td></tr><tr><td>Implementação</td><td>fidelidade às etapas, versão correta, troca de papéis, ajuda atendida, tempo e custo operacional</td></tr><tr><td>Manutenção</td><td>sedes ainda ativas, retenção de instrutores, custo por sessão e uso após apoio intensivo</td></tr></tbody></table></div>
+<h3 id="8-2-catalogo-minimo-do-mvp">8.2 Catálogo mínimo do MVP</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Construto</th><th scope="col" data-column="1">Medida direta</th><th scope="col" data-column="2">Unidade</th><th scope="col" data-column="3">Observação</th></tr></thead><tbody><tr><td>experiência prévia</td><td>item ordinal 1–4</td><td>participante</td><td>variável de ajuste, não desfecho</td></tr><tr><td>conhecimento da atividade</td><td>3–5 itens pré/pós</td><td>participante/item</td><td>alinhamento explícito ao objetivo; forma paralela quando necessário</td></tr><tr><td>autoeficácia</td><td>1–3 itens curtos</td><td>participante</td><td>se for central, preferir mais de um item validado/adaptado</td></tr><tr><td>esforço mental percebido</td><td>item ordinal por etapa</td><td>participante/checkpoint</td><td>não chamar de carga cognitiva objetiva</td></tr><tr><td>progresso</td><td>quatro estados + recusa</td><td>participante/checkpoint</td><td>transições são mais informativas que média</td></tr><tr><td>papel exercido</td><td>autorrelato + transição de sistema</td><td>participante/etapa</td><td>comparar concordância entre fontes</td></tr><tr><td>participação percebida</td><td>item ordinal no segundo checkpoint</td><td>participante</td><td>não equivale a colaboração observada</td></tr><tr><td>ajuda</td><td>pedido, reconhecimento, início, fim e tipo</td><td>grupo/episódio</td><td>permite latência e dose de suporte</td></tr><tr><td>missão</td><td>rubrica analítica</td><td>grupo</td><td>uma linha por grupo; avaliador identificado por ID</td></tr><tr><td>explicação</td><td>rubrica curta 0–3</td><td>participante</td><td>ancora contribuição individual</td></tr><tr><td>artefato</td><td>hash e características locais</td><td>grupo/versão</td><td>sem arquivo bruto no MVP, salvo justificativa</td></tr><tr><td>aceitabilidade</td><td>retorno + instrumento curto do instrutor</td><td>participante/instrutor</td><td>separar aceitabilidade de aprendizagem</td></tr><tr><td>qualidade</td><td>oportunidades, válidos, recusas, atrasos, erros e sync</td><td>sessão/site</td><td>desfecho primário do piloto</td></tr></tbody></table></div>
+<h3 id="8-3-rubrica-de-grupo-proposta">8.3 Rubrica de grupo proposta</h3>
+<p>Quatro dimensões independentes, cada uma de 0 a 3:</p>
+<ol><li><strong>Cumprimento da missão:</strong> comportamento observável correto.</li><li><strong>Robustez:</strong> repete a missão ou responde a variação prevista.</li><li><strong>Conceito-alvo:</strong> o artefato contém a lógica/sensor/estrutura esperada.</li><li><strong>Teste e depuração:</strong> há evidência de testar, identificar e corrigir problema.</li></ol>
+<p>Registrar separadamente:</p>
+<ul><li>número e tipo de intervenções;</li><li>grau de orientação fornecida;</li><li>problema técnico externo;</li><li>principal dificuldade;</li><li>tempo até a conclusão.</li></ul>
+<p>Assim, ajuda pode explicar o resultado sem fazer parte dele.</p>
+<h3 id="8-4-indicadores-de-qualidade-e-formulas">8.4 Indicadores de qualidade e fórmulas</h3>
+<div class="code-wrap"><pre><code class="language-text">taxa_conclusao = sessões com session_completed / sessões iniciadas
+
+completude_core = oportunidades core com response_status=completed
+                  / oportunidades core esperadas
+
+taxa_recusa = oportunidades declined / oportunidades apresentadas
+
+taxa_timeout = oportunidades timeout / oportunidades apresentadas
+
+fidelidade_etapas = etapas obrigatórias registradas na ordem válida
+                    / etapas obrigatórias esperadas
+
+latencia_ajuda = help_started_at - help_requested_at
+
+latencia_sync = received_at - occurred_at
+
+recuperacao_offline = eventos enfileirados confirmados no servidor
+                      / eventos enfileirados</code></pre></div>
+<p>“Registro presente”, “resposta válida”, “recusa” e “falha técnica” devem aparecer separadamente.</p>
+<h3 id="8-5-criterios-de-progressao-do-piloto">8.5 Critérios de progressão do piloto</h3>
+<p>Os limites abaixo são metas operacionais a revisar com equipe e piloto, não verdades universais:</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Indicador</th><th scope="col" data-column="1">Verde</th><th scope="col" data-column="2">Amarelo</th><th scope="col" data-column="3">Vermelho</th></tr></thead><tbody><tr><td>sessões com conjunto core válido</td><td>≥ 85%</td><td>70–84%</td><td>&lt; 70%</td></tr><tr><td>eventos confirmados em até 24 h</td><td>≥ 95%</td><td>85–94%</td><td>&lt; 85%</td></tr><tr><td>sessões com versão/proveniência coerentes</td><td>≥ 98%</td><td>90–97%</td><td>&lt; 90%</td></tr><tr><td>rubricas de grupo concluídas</td><td>≥ 90%</td><td>75–89%</td><td>&lt; 75%</td></tr><tr><td>checkpoints com atraso acima da janela</td><td>≤ 10%</td><td>11–25%</td><td>&gt; 25%</td></tr><tr><td>falha fatal da aplicação</td><td>≤ 2%</td><td>3–5%</td><td>&gt; 5%</td></tr><tr><td>incidente material de privacidade</td><td>0</td><td>—</td><td>≥ 1: pausar e revisar</td></tr></tbody></table></div>
+<p>A decisão de avançar deve considerar os critérios em conjunto e incluir instrutores, coordenação, pesquisa e governança.</p>
+</section>
+<section class="doc-section" id="9-arquitetura-tecnica-recomendada">
+<p class="section-kicker">09 · Documento completo</p>
+<h2>Arquitetura técnica recomendada</h2>
+<div class="code-wrap"><pre><code class="language-text">Agente/Runner local
+├── UI do protocolo
+├── adaptador da plataforma
+├── máquina de estados da sessão
+├── outbox local transacional + DPAPI
+└── cliente de ingestão
+          │ lote assinado, idempotente, com sequência
+          ▼
+Gateway de ingestão
+├── autentica instalação
+├── valida versão, site, esquema e tamanho
+├── limita frequência
+├── rejeita contexto incoerente
+└── grava com credencial somente no servidor
+          ▼
+Postgres/Supabase
+├── private: eventos brutos, instrumentos, sessões e auditoria
+├── analytics: dados derivados versionados
+└── api: views mínimas para painéis autenticados
+          ▼
+Painel
+├── operação e ajuda
+├── qualidade e sincronização
+├── auditoria por exceção/amostra
+└── pesquisa agregada e exportação</code></pre></div>
+<h3 id="9-1-autenticacao-de-dispositivo">9.1 Autenticação de dispositivo</h3>
+<ul><li>cadastro prévio de instalação, sede e escola;</li><li>segredo de bootstrap usado uma única vez;</li><li>credencial de dispositivo armazenada com DPAPI;</li><li>troca por token de curta duração;</li><li>escopo limitado à instalação e às versões autorizadas;</li><li>rotação e revogação;</li><li>número sequencial por instalação/lote para detectar lacunas e replay;</li><li>nenhum <code>service_role</code> ou chave secreta no cliente.</li></ul>
+<p>No Supabase, uma Edge Function ou serviço equivalente pode atuar como gateway. Tabelas de pesquisa não precisam ficar graváveis diretamente pela Data API pública.</p>
+<h3 id="9-2-portal-do-instrutor">9.2 Portal do instrutor</h3>
+<ul><li>autenticação real por magic link, OTP ou OIDC institucional;</li><li>o servidor deriva <code>instructor_id</code>; não aceita e-mail autorrelatado como identidade;</li><li>associação explícita entre instrutor, sede e sessão;</li><li>política RLS baseada em <code>auth.uid()</code> e associação, não apenas <code>TO authenticated</code>;</li><li>avaliação com <code>session_id</code>/<code>group_id</code> e unicidade por avaliador/versão;</li><li>modo demonstração em projeto e URL separados.</li></ul>
+<h3 id="9-3-modelo-de-dados-minimo">9.3 Modelo de dados mínimo</h3>
+<ul><li><code>protocol_versions</code></li><li><code>instrument_versions</code> e <code>instrument_items</code></li><li><code>activity_versions</code> e <code>learning_objectives</code></li><li><code>sites</code>, <code>installations</code> e <code>instructor_assignments</code></li><li><code>sessions</code> e <code>session_participants</code></li><li><code>session_events</code></li><li><code>item_responses</code></li><li><code>help_episodes</code></li><li><code>group_outcomes</code> e <code>individual_explanations</code></li><li><code>artifact_features</code></li><li><code>ingestion_batches</code></li><li><code>quality_flags</code></li><li><code>withdrawal_requests</code></li></ul>
+<p>O evento continua append-only. Estado atual, qualidade e conjuntos analíticos são projeções reproduzíveis, não edições do registro bruto.</p>
+<h3 id="9-4-envelope-canonico">9.4 Envelope canônico</h3>
+<p>Campos comuns:</p>
+<ul><li><code>event_id</code>, <code>schema_version</code>, <code>event_type</code>;</li><li><code>session_id</code>, <code>group_id</code>, <code>participant_id</code> opcional;</li><li><code>site_id</code>, <code>installation_id</code> e sequência;</li><li><code>protocol_version</code>, <code>instrument_version</code>, <code>activity_version</code>;</li><li><code>occurred_at</code>, <code>elapsed_ms</code>, <code>received_at</code>;</li><li><code>actor_type</code>, <code>object_type</code>, <code>stage_id</code>;</li><li><code>payload</code> validado e minimizado;</li><li><code>environment = test | pilot | research</code>.</li></ul>
+<p>Manter mapeamento de verbos e objetos para Caliper/xAPI possibilita integração futura sem acoplar o núcleo a uma especificação externa.</p>
+<h3 id="9-5-artefato-em-vez-de-screenshot">9.5 Artefato em vez de screenshot</h3>
+<p>Preferir extração local de características alinhadas à atividade:</p>
+<ul><li>blocos/conceitos esperados presentes;</li><li>quantidade de versões/salvamentos;</li><li>alterações entre estados;</li><li>execução/teste registrado;</li><li>hash do arquivo final;</li><li>resultado da missão.</li></ul>
+<p>Enviar características, não conteúdo bruto. Se o formato não permitir extração confiável, usar rubrica humana e manter screenshot fora do core.</p>
+</section>
+<section class="doc-section" id="10-plano-de-validade-e-analise">
+<p class="section-kicker">10 · Documento completo</p>
+<h2>Plano de validade e análise</h2>
+<h3 id="10-1-evidencias-de-validade">10.1 Evidências de validade</h3>
+<ol><li><strong>Conteúdo:</strong> matriz objetivo → tarefa → item → rubrica, revisada por especialistas.</li><li><strong>Processo de resposta:</strong> entrevistas cognitivas por faixa etária e observação de uso.</li><li><strong>Estrutura interna:</strong> distribuição, piso/teto e funcionamento de itens; IRT/Rasch somente com tamanho adequado.</li><li><strong>Relações externas:</strong> comparação com observação estruturada, rubrica e instrumento de CT apropriado à idade.</li><li><strong>Confiabilidade:</strong> dupla avaliação de uma amostra; kappa ponderado/ICC com intervalo de confiança.</li><li><strong>Equidade:</strong> compreensão, dados ausentes e possível funcionamento diferencial por idade, série, sede e acessibilidade.</li><li><strong>Consequências:</strong> falsos alertas, interrupção, estigma, aumento de trabalho e uso indevido do painel.</li></ol>
+<p>Instrumentos como TechCheck/cCTt podem servir como âncora externa em faixas etárias compatíveis. Não devem ser recortados ou traduzidos informalmente sem autorização e nova evidência de validade.</p>
+<h3 id="10-2-plano-estatistico-inicial">10.2 Plano estatístico inicial</h3>
+<ul><li>relatório de fluxo com todos os denominadores;</li><li>descritivos e intervalos de confiança por sessão, oficina e sede;</li><li>modelos ordinais multinível para esforço, progresso e rubricas;</li><li>modelos item a item ou escore validado para conhecimento pré/pós;</li><li>efeitos aleatórios ou erros robustos para participante, grupo, oficina e sede, conforme amostra;</li><li>análise de transição para <code>progress_state</code>;</li><li>tempo até ajuda atendida apenas quando relógios e eventos estiverem validados;</li><li>análise principal e sensibilidades por qualidade, versão e atraso;</li><li><code>declined</code>, <code>timeout</code>, <code>technical_failure</code> e ausência estrutural separados;</li><li>hipóteses confirmatórias, exclusões, transformação de escores e multiplicidade pré-especificadas;</li><li>cálculo amostral do estudo substantivo por simulação após obter variâncias e ICCs do piloto.</li></ul>
+<p>Não calcular a amostra definitiva a partir de um efeito inflado do piloto. O tamanho do piloto deve ser guiado pela precisão desejada para as taxas de viabilidade e pelos critérios de progressão.</p>
+<h3 id="10-3-validacao-em-campo">10.3 Validação em campo</h3>
+<ul><li>entrevistas cognitivas iterativas em faixas etárias relevantes;</li><li>primeira aplicação acompanhada em uma sede;</li><li>amostra de sessões com observador e aplicativo em paralelo;</li><li>dupla pontuação independente de missões selecionadas;</li><li>teste online, offline, queda durante upload, relógio incorreto, app ausente e duplicidade;</li><li>segunda sede operando sem pesquisador local, com auditoria remota;</li><li>congelamento da versão antes do piloto multicêntrico.</li></ul>
+</section>
+<section class="doc-section" id="11-etica-privacidade-e-governanca">
+<p class="section-kicker">11 · Documento completo</p>
+<h2>Ética, privacidade e governança</h2>
+<p>O protocolo deve considerar conjuntamente:</p>
+<ul><li>LGPD, em especial melhor interesse, transparência, necessidade e direitos de crianças e adolescentes;</li><li>Enunciado CD/ANPD nº 1/2023;</li><li>Lei nº 14.874/2024 sobre pesquisa com seres humanos;</li><li>Decreto nº 12.651/2025, que regulamenta o Sistema Nacional de Ética em Pesquisa com Seres Humanos;</li><li>Resolução CNS nº 510/2016, que permanece indicada para Ciências Humanas e Sociais;</li><li>regras e orientações da instituição proponente e do CEP competente.</li></ul>
+<h3 id="11-1-condicoes-antes-de-qualquer-coleta-cientifica">11.1 Condições antes de qualquer coleta científica</h3>
+<ul><li>instituição proponente, pesquisador responsável, controlador, operadores e encarregado/canal definidos;</li><li>aprovação ética prévia e versão aprovada arquivada;</li><li>TCLE/processo de consentimento e assentimento compatível com idade e contexto;</li><li>confirmação verificável sem colocar identidade parental no banco analítico;</li><li>finalidade e base legal documentadas para cada classe de dado;</li><li>relatório de impacto/avaliação de risco quando indicado;</li><li>matriz de acesso e registro de auditoria;</li><li>prazos de retenção e descarte por modalidade;</li><li>procedimento de incidente, retirada e comunicação;</li><li>contrato e avaliação do fornecedor de nuvem;</li><li>plano de devolutiva para participantes e comunidades.</li></ul>
+<h3 id="11-2-retirada-e-direitos">11.2 Retirada e direitos</h3>
+<p>O fluxo atual permite recusar uma tela, mas não oferece retirada da pesquisa depois do início. O MVP deve:</p>
+<ul><li>permitir interromper a coleta em qualquer checkpoint;</li><li>diferenciar “não responder este item” de “retirar participação”;</li><li>fornecer código de retirada que não revele identidade ao pesquisador;</li><li>definir o que acontece com dados já coletados conforme protocolo e obrigação aplicável;</li><li>impedir nova captura após retirada;</li><li>preservar a participação pedagógica e o atendimento.</li></ul>
+<h3 id="11-3-minimizacao-por-modalidade">11.3 Minimização por modalidade</h3>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Modalidade</th><th scope="col" data-column="1">MVP</th><th scope="col" data-column="2">Regra</th></tr></thead><tbody><tr><td>respostas estruturadas</td><td>sim</td><td>somente itens aprovados e versão congelada</td></tr><tr><td>eventos técnicos</td><td>sim</td><td>categorias e qualidade; nunca título bruto ou texto livre</td></tr><tr><td>artefato derivado</td><td>sim</td><td>extrair localmente e enviar características/hash</td></tr><tr><td>screenshot</td><td>não por padrão</td><td>subestudo, necessidade demonstrada, acesso restrito e retenção curta aprovada</td></tr><tr><td>áudio/vídeo</td><td>não</td><td>somente protocolo próprio, infraestrutura e justificativa específica</td></tr><tr><td>IA/predição</td><td>não</td><td>exige finalidade, validação, avaliação de viés, transparência e supervisão humana</td></tr></tbody></table></div>
+<p>Revisões de MMLA encontram evidência ainda fraca de impacto no mundo real e tratamento insuficiente de ética. Mais modalidades não significam automaticamente melhor ciência.</p>
+<h3 id="11-4-publicacao-e-devolutiva">11.4 Publicação e devolutiva</h3>
+<ul><li>suprimir células pequenas conforme política pré-definida;</li><li>não publicar ranking de sedes ou instrutores;</li><li>separar painel operacional restrito de relatório público agregado;</li><li>produzir resumo acessível para estudantes e famílias;</li><li>registrar qual mudança curricular ou de formação foi feita a partir dos achados;</li><li>publicar dicionário, protocolo, código de análise e histórico de versões quando possível, nunca dados reidentificáveis.</li></ul>
+</section>
+<section class="doc-section" id="12-backlog-de-implementacao">
+<p class="section-kicker">12 · Documento completo</p>
+<h2>Backlog de implementação</h2>
+<h3 id="gate-0-protocolo-e-governanca">Gate 0 — protocolo e governança</h3>
+<ul class="checklist"><li><span class="checkmark" aria-hidden="true"></span>escolher uma atividade e definir objetivos observáveis;</li><li><span class="checkmark" aria-hidden="true"></span>decidir idade/série e manter duplas no MVP;</li><li><span class="checkmark" aria-hidden="true"></span>construir matriz de mensuração e rubrica;</li><li><span class="checkmark" aria-hidden="true"></span>atualizar documentos para Lei 14.874/2024 e Decreto 12.651/2025;</li><li><span class="checkmark" aria-hidden="true"></span>aprovar consentimento, assentimento, retirada e plano de dados;</li><li><span class="checkmark" aria-hidden="true"></span>desligar screenshots por padrão;</li><li><span class="checkmark" aria-hidden="true"></span>separar demonstração, homologação e pesquisa.</li></ul>
+<h3 id="sprint-1-integridade-funcional">Sprint 1 — integridade funcional</h3>
+<ul class="checklist"><li><span class="checkmark" aria-hidden="true"></span>exigir confirmação de autorização em toda sessão;</li><li><span class="checkmark" aria-hidden="true"></span>remover opções de grupo não suportadas ou completar suporte;</li><li><span class="checkmark" aria-hidden="true"></span>corrigir troca e papel por etapa;</li><li><span class="checkmark" aria-hidden="true"></span>chamar e persistir rubrica uma vez por grupo;</li><li><span class="checkmark" aria-hidden="true"></span>implementar itens pré/pós por <code>activity_version</code>;</li><li><span class="checkmark" aria-hidden="true"></span>implementar ajuda reconhecida/iniciada/resolvida;</li><li><span class="checkmark" aria-hidden="true"></span>implementar retirada durante a sessão.</li></ul>
+<h3 id="sprint-2-seguranca-e-ingestao">Sprint 2 — segurança e ingestão</h3>
+<ul class="checklist"><li><span class="checkmark" aria-hidden="true"></span>migrar de chaves legadas e remover escrita anônima direta;</li><li><span class="checkmark" aria-hidden="true"></span>cadastrar e autenticar instalações;</li><li><span class="checkmark" aria-hidden="true"></span>criar gateway com validação, rate limit, sequência e idempotência;</li><li><span class="checkmark" aria-hidden="true"></span>restringir Data API e Storage;</li><li><span class="checkmark" aria-hidden="true"></span>implementar outbox transacional, proteção local e mutex;</li><li><span class="checkmark" aria-hidden="true"></span>separar schemas privados e API mínima;</li></ul>
+<h3 id="sprint-3-qualidade-e-painel">Sprint 3 — qualidade e painel</h3>
+<ul class="checklist"><li><span class="checkmark" aria-hidden="true"></span>criar entidades canônicas de sessão, grupo e resultados;</li><li><span class="checkmark" aria-hidden="true"></span>corrigir oportunidades esperadas por participante e status;</li><li><span class="checkmark" aria-hidden="true"></span>painel de ajuda e sincronização;</li><li><span class="checkmark" aria-hidden="true"></span>painel de completude, desvios e versões;</li><li><span class="checkmark" aria-hidden="true"></span>auditoria por exceção e amostra aleatória;</li><li><span class="checkmark" aria-hidden="true"></span>exportação com dicionário, snapshot e proveniência.</li></ul>
+<h3 id="sprint-4-validacao">Sprint 4 — validação</h3>
+<ul class="checklist"><li><span class="checkmark" aria-hidden="true"></span>testes unitários, contrato, integração e end-to-end no Supabase de homologação;</li><li><span class="checkmark" aria-hidden="true"></span>teste real em Windows 10/11 e PowerShell 5.1;</li><li><span class="checkmark" aria-hidden="true"></span>caos offline, duplicidade, queda e relógio incorreto;</li><li><span class="checkmark" aria-hidden="true"></span>revisão de acessibilidade e entrevistas cognitivas;</li><li><span class="checkmark" aria-hidden="true"></span>concordância da rubrica e comparação com observação;</li><li><span class="checkmark" aria-hidden="true"></span>ensaio em segunda sede;</li><li><span class="checkmark" aria-hidden="true"></span>congelar release do piloto.</li></ul>
+</section>
+<section class="doc-section" id="13-cronograma-orientado-por-gates">
+<p class="section-kicker">13 · Documento completo</p>
+<h2>Cronograma orientado por gates</h2>
+<p>Prazos de aprovação ética e pactuação institucional não devem ser comprimidos artificialmente. Após Gate 0:</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Tabela com rolagem horizontal"><table><thead><tr><th scope="col" data-column="0">Período indicativo</th><th scope="col" data-column="1">Entrega</th></tr></thead><tbody><tr><td>semanas 1–2</td><td>contrato de atividade, instrumentos, eventos e dados</td></tr><tr><td>semanas 3–5</td><td>fluxo do agente, papéis, rubrica, ajuda e retirada</td></tr><tr><td>semanas 6–8</td><td>autenticação, gateway, outbox e banco</td></tr><tr><td>semanas 9–10</td><td>painel e exportação</td></tr><tr><td>semanas 11–12</td><td>integração, segurança e homologação Windows/offline</td></tr><tr><td>4–6 semanas seguintes</td><td>piloto acompanhado e segunda sede</td></tr><tr><td>após análise</td><td>decisão verde/amarela/vermelha e release seguinte</td></tr></tbody></table></div>
+<p>O MVP termina com um <strong>relatório de viabilidade</strong>, não apenas com software publicado.</p>
+</section>
+<section class="doc-section" id="14-criterios-de-aceite-do-mvp">
+<p class="section-kicker">14 · Documento completo</p>
+<h2>Critérios de aceite do MVP</h2>
+<p>O MVP está concluído quando:</p>
+<ul><li>nenhuma sessão declara autorização sem ação atual verificável;</li><li>a origem de cada lote pode ser atribuída a uma instalação autorizada e revogada;</li><li>não existe inserção anônima direta nas tabelas de pesquisa;</li><li>duplas percorrem o fluxo completo com papel correto antes/depois da troca;</li><li>rubrica, ajuda e conhecimento são persistidos nas unidades certas;</li><li>recusa, retirada, timeout e falha são distinguíveis;</li><li>sessão completa é calculada pelo protocolo e pelo número de participantes;</li><li>modo offline sobrevive a queda sem corromper ou expor a fila;</li><li>painel mostra apenas dados reais do ambiente selecionado e identifica proveniência;</li><li>cada métrica exibida possui definição, denominador, versão e limite interpretativo;</li><li>os testes incluem banco real de homologação e Windows, não apenas inspeção estática;</li><li>a equipe produz relatório de fluxo, qualidade, incidentes e decisão de progressão;</li><li>screenshots, IA, áudio e vídeo não fazem parte do core.</li></ul>
+</section>
+<section class="doc-section" id="15-contribuicao-academica-reformulada">
+<p class="section-kicker">15 · Documento completo</p>
+<h2>Contribuição acadêmica reformulada</h2>
+<p>A contribuição mais forte não é “usar screenshots e telemetria para medir aprendizagem”. É:</p>
+<blockquote><p><strong>Desenvolver e avaliar uma infraestrutura de pesquisa de baixo custo que torna observáveis, comparáveis e auditáveis oficinas práticas distribuídas, preservando a separação entre perfil, processo, implementação, resultado e qualidade da evidência.</strong></p></blockquote>
+<p>Possíveis produtos acadêmicos:</p>
+<ol><li>artigo de desenvolvimento e viabilidade do protocolo distribuído;</li><li>artigo de validade e confiabilidade do instrumento/rubrica;</li><li>estudo de processo sobre ajuda, papéis e transições de progresso;</li><li>estudo de efetividade com comparador após maturação;</li><li>conjunto aberto de contratos, dicionário, simulador e dados sintéticos;</li><li>guia de governança e operação multicêntrica para contextos escolares de baixa conectividade.</li></ol>
+<p>Essa formulação amplia o projeto além do LEGO SPIKE, aumenta sua vida útil e cria uma agenda científica cumulativa em vez de depender de uma única coleta ou de uma alegação excessiva.</p>
+</section>
+<section class="doc-section" id="16-referencias-e-fontes-consultadas">
+<p class="section-kicker">16 · Documento completo</p>
+<h2>Referências e fontes consultadas</h2>
+<h3 id="produtos-propostas-e-padroes">Produtos, propostas e padrões</h3>
+<ul><li>LEGO Education. <a href="https://education.lego.com/en-us/spike-update-2026/" target="_blank" rel="noopener noreferrer">SPIKE Portfolio Retirement — What Users Need to Know</a>.</li><li>LEGO Group. <a href="https://www.lego.com/en-us/aboutus/news/2026/january/lego-education-cs-ai" target="_blank" rel="noopener noreferrer">LEGO Education Announces Hands-on Computer Science &amp; AI Learning Solution</a>.</li><li>LEGO Education. <a href="https://education.lego.com/en-us/product-resources/spike-prime/troubleshooting/spike-prime-faqs/" target="_blank" rel="noopener noreferrer">SPIKE Prime FAQs — avaliação, faixa e organização</a>.</li><li>Cukurova et al. <a href="https://discovery.ucl.ac.uk/id/eprint/1561454/1/37-3.pdf" target="_blank" rel="noopener noreferrer">Using Multimodal Learning Analytics to Identify Aspects of Collaborative Problem Solving in Project-Based Learning</a>.</li><li>Dr. Scratch. <a href="https://www.drscratch.org/learn/Modes/BatchMode/" target="_blank" rel="noopener noreferrer">Batch Mode</a>.</li><li>Code.org. <a href="https://support.code.org/hc/en-us/articles/115000693231-Viewing-student-progress" target="_blank" rel="noopener noreferrer">Viewing student progress</a>.</li><li>Raspberry Pi Foundation. <a href="https://classroom.raspberrypi.org/en" target="_blank" rel="noopener noreferrer">Code Classroom</a>.</li><li>1EdTech. <a href="https://www.imsglobal.org/spec/caliper/v1p2/" target="_blank" rel="noopener noreferrer">Caliper Analytics 1.2 Specification</a>.</li><li>ADL. <a href="https://www.adlnet.gov/assets/uploads/xAPI_v1.0.1-2013-10-01.pdf" target="_blank" rel="noopener noreferrer">Experience API specification</a>.</li><li>Zhong et al. <a href="https://eric.ed.gov/?id=EJ1147017" target="_blank" rel="noopener noreferrer">Investigating the Period of Switching Roles in Pair Programming in a Primary School</a>.</li></ul>
+<h3 id="mensuracao-implementacao-e-etica-de-analytics">Mensuração, implementação e ética de analytics</h3>
+<ul><li>RE-AIM. <a href="https://re-aim.org/learn/what-is-re-aim/" target="_blank" rel="noopener noreferrer">What is RE-AIM?</a>.</li><li>Eldridge et al. <a href="https://www.bmj.com/content/355/bmj.i5239" target="_blank" rel="noopener noreferrer">CONSORT extension to randomised pilot and feasibility trials</a>.</li><li>Relkin, Johnson e Bers. <a href="https://eric.ed.gov/?id=EJ1389718" target="_blank" rel="noopener noreferrer">A Normative Analysis of the TechCheck Computational Thinking Assessment</a>.</li><li>El-Hamamsy et al. <a href="https://arxiv.org/abs/2203.05980" target="_blank" rel="noopener noreferrer">The competent Computational Thinking test</a>.</li><li>Frontiers in Education. <a href="https://www.frontiersin.org/journals/education/articles/10.3389/feduc.2024.1496242/full" target="_blank" rel="noopener noreferrer">Rubric development and validation for assessing educational robotics skills</a>.</li><li>Alwahaby et al. <a href="https://discovery.ucl.ac.uk/id/eprint/10143076/" target="_blank" rel="noopener noreferrer">The evidence of impact and ethical considerations of Multimodal Learning Analytics</a>.</li><li>Martinez-Maldonado et al. <a href="https://arxiv.org/abs/2303.09099" target="_blank" rel="noopener noreferrer">Lessons Learnt from a Multimodal Learning Analytics Deployment In-the-wild</a>.</li><li>UNICEF, UNESCO e Global Privacy Assembly. <a href="https://www.unicef.org/innocenti/reports/data-governance-edtech" target="_blank" rel="noopener noreferrer">Data Governance for EdTech</a>.</li></ul>
+<h3 id="marco-brasileiro">Marco brasileiro</h3>
+<ul><li>Brasil. <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm" target="_blank" rel="noopener noreferrer">Lei nº 13.709/2018 — LGPD</a>.</li><li>ANPD. <a href="https://www.gov.br/anpd/pt-br/assuntos/noticias/anpd-divulga-enunciado-sobre-o-tratamento-de-dados-pessoais-de-criancas-e-adolescentes" target="_blank" rel="noopener noreferrer">Enunciado CD/ANPD nº 1/2023 sobre crianças e adolescentes</a>.</li><li>Brasil. <a href="https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2024/lei/l14874.htm" target="_blank" rel="noopener noreferrer">Lei nº 14.874/2024 — pesquisa com seres humanos</a>.</li><li>Brasil. <a href="https://planalto.gov.br/ccivil_03/_ato2023-2026/2025/decreto/d12651.htm" target="_blank" rel="noopener noreferrer">Decreto nº 12.651/2025</a>.</li><li>Conselho Nacional de Saúde. <a href="https://www.gov.br/conselho-nacional-de-saude/pt-br/camaras-tecnicas-e-comissoes/conep/legislacao/resolucoes/resolucao-no-510-de-07-de-abril-de-2016" target="_blank" rel="noopener noreferrer">Resolução nº 510/2016</a>.</li></ul>
+<h3 id="supabase-e-seguranca">Supabase e segurança</h3>
+<ul><li>Supabase. <a href="https://supabase.com/docs/guides/api/securing-your-api" target="_blank" rel="noopener noreferrer">Securing your API</a>.</li><li>Supabase. <a href="https://supabase.com/docs/guides/functions/auth" target="_blank" rel="noopener noreferrer">Securing Edge Functions</a>.</li><li>Supabase. <a href="https://supabase.com/docs/guides/getting-started/api-keys" target="_blank" rel="noopener noreferrer">Understanding API keys</a>.</li><li>Supabase. <a href="https://supabase.com/docs/guides/database/postgres/row-level-security" target="_blank" rel="noopener noreferrer">Row Level Security</a>.</li><li>Supabase. <a href="https://supabase.com/changelog?tags=data+apis" target="_blank" rel="noopener noreferrer">2026 Data API breaking changes</a>.</li></ul>
+<h3 id="documentos-internos-relacionados">Documentos internos relacionados</h3>
+<ul><li><a href="../docs/protocolo-pesquisa-v1.md">Protocolo de pesquisa v1</a></li><li><a href="../docs/relatorio-academico-metricas-pulselab-v1.4.md">Relatório acadêmico de métricas 1.4</a></li><li><a href="../docs/arquitetura-evidencias-v1.4.md">Arquitetura de evidências 1.4</a></li><li><a href="../docs/parecer-roadmap-observacao-distribuida.md">Parecer e roadmap anterior</a></li><li><a href="../schema/supabase-schema.sql">Schema Supabase</a></li><li><a href="../agent/pulselab-agent.ps1">Agente Windows</a></li><li><a href="../web/agent-simulator/app/page.jsx">Simulador web</a></li></ul>
+</section>
+    </main>
+  </div>
+
+  <button class="back-top" id="backTop" type="button" aria-label="Voltar ao topo">↑</button>
+
+  <footer>
+    <strong>PulseLab 2.0</strong> · versão HTML gerada a partir do documento de decisão em Markdown.<br>
+    Este relatório não substitui protocolo aprovado, parecer ético, plano estatístico, política de privacidade ou aconselhamento jurídico.
+  </footer>
+
+  <script>
+    const progress = document.getElementById("readingProgress");
+    const backTop = document.getElementById("backTop");
+    const printButton = document.getElementById("printButton");
+    const tocLinks = [...document.querySelectorAll("#tocNav a")];
+    const sections = [...document.querySelectorAll(".doc-section")];
+
+    function updateScrollUI() {
+      const available = document.documentElement.scrollHeight - window.innerHeight;
+      const ratio = available > 0 ? Math.min(window.scrollY / available, 1) : 0;
+      progress.style.width = (ratio * 100) + "%";
+      backTop.classList.toggle("visible", window.scrollY > 700);
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (!visible) return;
+      tocLinks.forEach((link) => {
+        const active = link.getAttribute("href") === "#" + visible.target.id;
+        link.classList.toggle("active", active);
+        if (active) link.setAttribute("aria-current", "location");
+        else link.removeAttribute("aria-current");
+      });
+    }, { rootMargin: "-15% 0px -72% 0px" });
+
+    sections.forEach((section) => observer.observe(section));
+    window.addEventListener("scroll", updateScrollUI, { passive: true });
+    backTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+    printButton.addEventListener("click", () => window.print());
+    updateScrollUI();
+  </script>
+</body>
+</html>

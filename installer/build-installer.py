@@ -3,6 +3,7 @@ import os
 import sys
 import base64
 import argparse
+import json
 
 def load_env(env_path):
     env_vars = {}
@@ -25,6 +26,9 @@ def main():
     parser.add_argument("--url", help="URL do Supabase")
     parser.add_argument("--key", help="Anon Key do Supabase")
     parser.add_argument("--output", help="Caminho do arquivo .bat de saida")
+    parser.add_argument("--site-id", help="Sede/cidade que ficara vinculada a instalacao")
+    parser.add_argument("--regional-hub", help="Polo ou regional da instalacao")
+    parser.add_argument("--school-code", help="Codigo da escola da instalacao")
     args = parser.parse_args()
 
     # Resolver diretorios do projeto
@@ -73,6 +77,40 @@ def main():
 
     with open(config_path, "rb") as f:
         config_bytes = f.read()
+
+    identity_overrides = {
+        "site_id": args.site_id,
+        "regional_hub": args.regional_hub,
+        "school_code": args.school_code,
+    }
+    selected_overrides = {
+        field: value.strip()
+        for field, value in identity_overrides.items()
+        if value and value.strip()
+    }
+    if selected_overrides:
+        invalid_fields = [
+            field
+            for field, value in selected_overrides.items()
+            if value.upper().startswith("CONFIGURE_")
+        ]
+        if invalid_fields:
+            print(
+                "Erro: valores pre-configurados nao podem usar CONFIGURE_: "
+                + ", ".join(invalid_fields)
+            )
+            sys.exit(1)
+
+        packaged_config = json.loads(config_bytes.decode("utf-8-sig"))
+        packaged_config.update(selected_overrides)
+        config_bytes = (
+            json.dumps(packaged_config, ensure_ascii=False, indent=2) + "\n"
+        ).encode("utf-8")
+        print(
+            "Identidade pre-configurada no instalador: "
+            + ", ".join(f"{field}={value}" for field, value in selected_overrides.items())
+        )
+
     config_b64 = base64.b64encode(config_bytes).decode("ascii")
 
     # Definir saida padrao

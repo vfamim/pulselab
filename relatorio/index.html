@@ -1,0 +1,1567 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Relatório acadêmico sobre as métricas, a validade e a contribuição científica do PulseLab 1.4 para pesquisas em robótica educacional.">
+  <meta name="theme-color" content="#6547a8">
+  <title>PulseLab — Relatório Acadêmico de Métricas</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18212f;
+      --muted: #606b7a;
+      --paper: #fbfaf7;
+      --surface: #ffffff;
+      --surface-soft: #f3f0e9;
+      --line: #ddd8ce;
+      --violet: #5b3cc4;
+      --violet-deep: #332073;
+      --violet-soft: #eee9ff;
+      --cyan: #087f8c;
+      --cyan-soft: #e2f5f4;
+      --green: #287a52;
+      --green-soft: #e7f5ec;
+      --amber: #92550a;
+      --amber-soft: #fff2d6;
+      --shadow: 0 18px 55px rgba(39, 30, 73, 0.10);
+      --radius: 18px;
+      --content: 1240px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 28px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, rgba(91, 60, 196, 0.10), transparent 30rem),
+        radial-gradient(circle at 100% 22%, rgba(8, 127, 140, 0.08), transparent 29rem),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.7;
+      text-rendering: optimizeLegibility;
+    }
+
+    a {
+      color: var(--violet-deep);
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    a:hover { color: var(--cyan); }
+    button { font: inherit; }
+
+    .reading-progress {
+      position: fixed;
+      z-index: 100;
+      inset: 0 auto auto 0;
+      width: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #8b6fff, #58dfd2);
+      box-shadow: 0 1px 8px rgba(91, 60, 196, 0.24);
+    }
+
+    .hero {
+      position: relative;
+      overflow: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 88% 10%, rgba(73, 217, 206, 0.24), transparent 24rem),
+        radial-gradient(circle at 10% 90%, rgba(243, 124, 127, 0.15), transparent 20rem),
+        linear-gradient(125deg, #f8f7fb, #eee8ff 62%, #e2f5f4);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero::before,
+    .hero::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(101, 71, 168, 0.15);
+      border-radius: 50%;
+      pointer-events: none;
+    }
+
+    .hero::before {
+      width: 30rem;
+      height: 30rem;
+      right: -9rem;
+      top: -17rem;
+    }
+
+    .hero::after {
+      width: 18rem;
+      height: 18rem;
+      right: 12rem;
+      bottom: -13rem;
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+      padding: 68px 0 56px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 20px;
+      padding: 7px 12px;
+      color: var(--violet-deep);
+      background: rgba(255,255,255,0.68);
+      border: 1px solid rgba(101, 71, 168, 0.20);
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 760;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      background: #67e8d5;
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(103, 232, 213, 0.12);
+    }
+
+    .hero h1 {
+      max-width: 940px;
+      margin: 0 0 18px;
+      font-family: "Aptos Display", "Segoe UI", system-ui, sans-serif;
+      font-size: clamp(2.4rem, 5.8vw, 5rem);
+      line-height: 1.04;
+      letter-spacing: -0.052em;
+      text-wrap: balance;
+    }
+
+    .hero-lead {
+      max-width: 870px;
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(1.05rem, 2vw, 1.3rem);
+    }
+
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 24px;
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .hero-meta strong { color: var(--violet-deep); }
+
+    .action-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 30px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 10px 16px;
+      color: var(--violet-deep);
+      background: rgba(255,255,255,0.74);
+      border: 1px solid rgba(101, 71, 168, 0.24);
+      border-radius: 11px;
+      cursor: pointer;
+      font-weight: 730;
+      text-decoration: none;
+    }
+
+    .button:hover {
+      color: var(--violet-deep);
+      background: #fff;
+    }
+
+    .button.primary {
+      color: #fff;
+      background: var(--violet-600);
+      border-color: var(--violet-600);
+    }
+
+    .button.primary:hover {
+      color: #fff;
+      background: var(--violet-700);
+    }
+
+    .page-shell {
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      gap: 36px;
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+      padding: 42px 0 80px;
+      align-items: start;
+    }
+
+    .toc {
+      position: sticky;
+      top: 24px;
+      max-height: calc(100vh - 48px);
+      overflow: auto;
+      padding: 18px;
+      background: rgba(255,255,255,0.84);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 10px 35px rgba(39, 30, 73, 0.07);
+      backdrop-filter: blur(12px);
+      scrollbar-width: thin;
+    }
+
+    .toc-title {
+      display: block;
+      margin: 0 0 12px;
+      color: var(--violet-deep);
+      font-size: 0.74rem;
+      font-weight: 820;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .toc nav {
+      display: grid;
+      gap: 3px;
+    }
+
+    .toc a {
+      display: block;
+      padding: 7px 9px;
+      color: var(--muted);
+      border-left: 2px solid transparent;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.86rem;
+      line-height: 1.3;
+      text-decoration: none;
+      transition: 150ms ease;
+    }
+
+    .toc a:hover,
+    .toc a.is-active {
+      color: var(--violet-deep);
+      background: var(--violet-soft);
+      border-left-color: var(--violet);
+    }
+
+    .toc a[data-level="3"] {
+      padding-left: 20px;
+      font-size: 0.8rem;
+    }
+
+    .toc-note {
+      margin: 16px 0 0;
+      padding-top: 14px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .report {
+      min-width: 0;
+      padding: 44px clamp(24px, 5vw, 72px) 64px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .report > h1:first-child,
+    .report > h1:first-child + h2 {
+      display: none;
+    }
+
+    .report h1,
+    .report h2,
+    .report h3,
+    .report h4 {
+      color: var(--ink);
+      font-family: "Aptos Display", "Segoe UI", system-ui, sans-serif;
+      line-height: 1.18;
+      text-wrap: balance;
+    }
+
+    .report h2 {
+      margin: 64px 0 20px;
+      padding-top: 8px;
+      color: var(--violet-deep);
+      font-size: clamp(1.7rem, 3vw, 2.35rem);
+      letter-spacing: -0.025em;
+    }
+
+    .report h2:first-of-type { margin-top: 18px; }
+
+    .report h3 {
+      margin: 38px 0 14px;
+      color: #29344a;
+      font-size: clamp(1.22rem, 2vw, 1.52rem);
+      letter-spacing: -0.012em;
+    }
+
+    .report h4 {
+      margin: 28px 0 10px;
+      font-size: 1.08rem;
+    }
+
+    .report p { margin: 0 0 17px; }
+
+    .report > p:nth-of-type(-n+5) strong:first-child {
+      color: var(--violet-deep);
+    }
+
+    .report ul,
+    .report ol {
+      padding-left: 1.4rem;
+      margin: 0 0 22px;
+    }
+
+    .report li { margin: 7px 0; }
+    .report li::marker { color: var(--violet); font-weight: 700; }
+
+    .report blockquote {
+      position: relative;
+      margin: 28px 0;
+      padding: 22px 24px 22px 26px;
+      color: #28223d;
+      background: linear-gradient(135deg, var(--violet-soft), #f5f2ff);
+      border: 1px solid #d9d0ff;
+      border-left: 5px solid var(--violet);
+      border-radius: 13px;
+    }
+
+    .report blockquote::before {
+      content: "Destaque metodológico";
+      display: block;
+      margin-bottom: 8px;
+      color: var(--violet);
+      font-size: 0.72rem;
+      font-weight: 820;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .report blockquote p:last-child { margin-bottom: 0; }
+
+    .report hr {
+      height: 1px;
+      margin: 42px 0;
+      background: var(--line);
+      border: 0;
+    }
+
+    .report table {
+      width: 100%;
+      margin: 24px 0 32px;
+      border-collapse: separate;
+      border-spacing: 0;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      font-size: 0.86rem;
+      line-height: 1.48;
+      overflow: hidden;
+    }
+
+    .report thead th {
+      color: #fff;
+      background: var(--violet-deep);
+      font-weight: 750;
+      text-align: left;
+    }
+
+    .report th,
+    .report td {
+      padding: 12px 13px;
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    .report tr > *:last-child { border-right: 0; }
+    .report tbody tr:last-child > * { border-bottom: 0; }
+    .report tbody tr:nth-child(even) { background: #faf9f6; }
+    .report tbody tr:hover { background: var(--cyan-soft); }
+    .report .numeric { text-align: right; }
+
+    .report code {
+      padding: 0.14em 0.38em;
+      color: #5634b2;
+      background: #f0ecff;
+      border-radius: 5px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.88em;
+    }
+
+    .report pre {
+      overflow: auto;
+      margin: 22px 0 28px;
+      padding: 20px;
+      color: #e8e3f5;
+      background: #211938;
+      border: 1px solid #392c59;
+      border-radius: 12px;
+      line-height: 1.55;
+    }
+
+    .report pre code {
+      padding: 0;
+      color: inherit;
+      background: transparent;
+    }
+
+    .report em { color: #454e5d; }
+    .report strong { color: #202a3b; }
+
+    .report a[href^="http"]::after {
+      content: " ↗";
+      font-size: 0.76em;
+      text-decoration: none;
+    }
+
+    .back-to-top {
+      position: fixed;
+      z-index: 50;
+      right: 22px;
+      bottom: 22px;
+      display: grid;
+      width: 44px;
+      height: 44px;
+      place-items: center;
+      color: #fff;
+      background: var(--violet-deep);
+      border: 0;
+      border-radius: 50%;
+      box-shadow: 0 10px 28px rgba(51, 32, 115, 0.26);
+      cursor: pointer;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(10px);
+      transition: 180ms ease;
+    }
+
+    .back-to-top.is-visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .document-footer {
+      padding: 28px 20px 38px;
+      color: var(--muted);
+      text-align: center;
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 980px) {
+      .page-shell {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
+
+      .toc {
+        position: static;
+        max-height: none;
+      }
+
+      .toc nav {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .toc a[data-level="3"] { display: none; }
+    }
+
+    @media (max-width: 680px) {
+      .hero-inner,
+      .page-shell {
+        width: min(calc(100% - 24px), var(--content));
+      }
+
+      .hero-inner { padding: 48px 0 40px; }
+      .hero h1 { font-size: clamp(2.15rem, 12vw, 3.25rem); }
+      .hero-meta { display: grid; gap: 5px; }
+      .action-bar { display: grid; grid-template-columns: 1fr; }
+      .toc nav { grid-template-columns: 1fr; }
+      .report { padding: 30px 18px 46px; border-radius: 14px; }
+      .report h2 { margin-top: 48px; }
+
+      .report table {
+        display: block;
+        overflow-x: auto;
+        white-space: normal;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .report th,
+      .report td {
+        min-width: 150px;
+      }
+
+      .back-to-top {
+        right: 14px;
+        bottom: 14px;
+      }
+    }
+
+    @media print {
+      @page { size: A4; margin: 18mm 16mm; }
+
+      body {
+        color: #000;
+        background: #fff;
+        font-size: 10.5pt;
+      }
+
+      .reading-progress,
+      .toc,
+      .action-bar,
+      .back-to-top,
+      .document-footer {
+        display: none !important;
+      }
+
+      .hero {
+        color: #000;
+        background: #fff;
+        border: 0;
+      }
+
+      .hero::before,
+      .hero::after,
+      .eyebrow::before {
+        display: none;
+      }
+
+      .hero-inner {
+        width: 100%;
+        padding: 22mm 0 15mm;
+      }
+
+      .eyebrow {
+        color: #333;
+        background: transparent;
+        border-color: #999;
+      }
+
+      .hero h1 {
+        color: #000;
+        font-size: 28pt;
+      }
+
+      .hero-lead,
+      .hero-meta,
+      .hero-meta strong {
+        color: #222;
+      }
+
+      .page-shell {
+        display: block;
+        width: 100%;
+        padding: 0;
+      }
+
+      .report {
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+      }
+
+      .report h2 {
+        break-after: avoid;
+        color: #000;
+        font-size: 18pt;
+      }
+
+      .report h3 {
+        break-after: avoid;
+        color: #111;
+        font-size: 14pt;
+      }
+
+      .report table,
+      .report blockquote,
+      .report pre {
+        break-inside: avoid;
+      }
+
+      .report thead th {
+        color: #000;
+        background: #e8e8e8;
+      }
+
+      .report a {
+        color: #000;
+        text-decoration: none;
+      }
+
+      .report a[href^="http"]::after { content: ""; }
+    }
+  </style>
+</head>
+<body>
+  <div class="reading-progress" id="reading-progress" aria-hidden="true"></div>
+
+  <header class="hero" id="inicio">
+    <div class="hero-inner">
+      <p class="eyebrow">Relatório acadêmico · PulseLab 1.4</p>
+      <h1>PulseLab como infraestrutura de mensuração</h1>
+      <p class="hero-lead">Métricas, validade e contribuição científica para pesquisas em oficinas de robótica educacional.</p>
+      <div class="hero-meta">
+        <span><strong>Versão analisada:</strong> PulseLab 1.4</span>
+        <span><strong>Data:</strong> 29 de julho de 2026</span>
+        <span><strong>Autor:</strong> Vinicius Ferreira Amim</span>
+        <span><strong>Instituição:</strong> Universidade Federal do Vale do São Francisco</span>
+        <span><strong>Atuação:</strong> Setor de Pesquisa da FADEX · Projeto Robótica Educacional</span>
+        <span><strong>Status:</strong> base para banca e estudo piloto</span>
+      </div>
+      <div class="action-bar">
+        <a class="button primary" href="#resumo">Começar a leitura</a>
+        <button class="button" type="button" onclick="window.print()">Imprimir ou salvar em PDF</button>
+        <a class="button" href="relatorio-academico-metricas-pulselab-v1.4.md">Abrir versão Markdown</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-shell">
+    <aside class="toc" aria-label="Sumário do relatório">
+      <span class="toc-title">Neste relatório</span>
+      <nav id="toc-nav">
+        <a href="#relatorio-academico-sobre-metricas-validade-e-contribuicao-cientifica" data-level="2">Relatório acadêmico sobre métricas, validade e contribuição científica</a>
+        <a href="#resumo" data-level="2">Resumo</a>
+        <a href="#sec-1-problema-de-pesquisa-e-justificativa" data-level="2">1. Problema de pesquisa e justificativa</a>
+        <a href="#sec-2-enquadramento-metodologico" data-level="2">2. Enquadramento metodológico</a>
+        <a href="#sec-2-1-desenho-recomendado" data-level="3">2.1 Desenho recomendado</a>
+        <a href="#sec-2-2-unidades-de-observacao-e-de-analise" data-level="3">2.2 Unidades de observação e de análise</a>
+        <a href="#sec-3-como-o-pulselab-transforma-a-oficina-em-numeros" data-level="2">3. Como o PulseLab transforma a oficina em números</a>
+        <a href="#sec-3-1-cadeia-de-mensuracao" data-level="3">3.1 Cadeia de mensuração</a>
+        <a href="#sec-3-2-tres-classes-de-indicadores" data-level="3">3.2 Três classes de indicadores</a>
+        <a href="#sec-4-matriz-de-metricas-do-pulselab" data-level="2">4. Matriz de métricas do PulseLab</a>
+        <a href="#sec-4-1-alcance-e-caracterizacao" data-level="3">4.1 Alcance e caracterização</a>
+        <a href="#sec-4-2-processo-de-aprendizagem-e-colaboracao" data-level="3">4.2 Processo de aprendizagem e colaboração</a>
+        <a href="#sec-4-3-resultado-imediato-e-experiencia-final" data-level="3">4.3 Resultado imediato e experiência final</a>
+        <a href="#sec-4-4-qualidade-completude-e-viabilidade" data-level="3">4.4 Qualidade, completude e viabilidade</a>
+        <a href="#sec-4-5-evidencias-auxiliares-que-nao-devem-virar-rotulos-automaticos" data-level="3">4.5 Evidências auxiliares que não devem virar rótulos automáticos</a>
+        <a href="#sec-5-perguntas-de-pesquisa-e-hipoteses-testaveis" data-level="2">5. Perguntas de pesquisa e hipóteses testáveis</a>
+        <a href="#sec-5-1-objetivo-geral" data-level="3">5.1 Objetivo geral</a>
+        <a href="#sec-5-2-objetivos-especificos" data-level="3">5.2 Objetivos específicos</a>
+        <a href="#sec-5-3-hipoteses" data-level="3">5.3 Hipóteses</a>
+        <a href="#sec-6-plano-de-analise-quantitativa" data-level="2">6. Plano de análise quantitativa</a>
+        <a href="#sec-6-1-preparacao" data-level="3">6.1 Preparação</a>
+        <a href="#sec-6-2-analise-descritiva" data-level="3">6.2 Análise descritiva</a>
+        <a href="#sec-6-3-modelos-recomendados" data-level="3">6.3 Modelos recomendados</a>
+        <a href="#sec-6-4-dados-ausentes-e-sensibilidade" data-level="3">6.4 Dados ausentes e sensibilidade</a>
+        <a href="#sec-6-5-tamanho-amostral" data-level="3">6.5 Tamanho amostral</a>
+        <a href="#sec-7-criterios-propostos-para-declarar-o-piloto-viavel" data-level="2">7. Critérios propostos para declarar o piloto viável</a>
+        <a href="#sec-8-evidencias-de-validade-necessarias" data-level="2">8. Evidências de validade necessárias</a>
+        <a href="#sec-9-auditoria-do-estado-atual-da-implementacao" data-level="2">9. Auditoria do estado atual da implementação</a>
+        <a href="#sec-10-por-que-o-aplicativo-agrega-valor-a-pesquisa" data-level="2">10. Por que o aplicativo agrega valor à pesquisa</a>
+        <a href="#sec-10-1-padronizacao" data-level="3">10.1 Padronização</a>
+        <a href="#sec-10-2-observacao-do-processo" data-level="3">10.2 Observação do processo</a>
+        <a href="#sec-10-3-escala-multicentrica" data-level="3">10.3 Escala multicêntrica</a>
+        <a href="#sec-10-4-rastreabilidade-e-reprodutibilidade" data-level="3">10.4 Rastreabilidade e reprodutibilidade</a>
+        <a href="#sec-10-5-qualidade-mensuravel-da-propria-pesquisa" data-level="3">10.5 Qualidade mensurável da própria pesquisa</a>
+        <a href="#sec-10-6-acao-pedagogica" data-level="3">10.6 Ação pedagógica</a>
+        <a href="#sec-10-7-minimizacao-e-protecao" data-level="3">10.7 Minimização e proteção</a>
+        <a href="#sec-11-limites-das-conclusoes" data-level="2">11. Limites das conclusões</a>
+        <a href="#o-pulselab-pode-sustentar" data-level="3">O PulseLab pode sustentar</a>
+        <a href="#o-pulselab-ainda-nao-sustenta-sozinho" data-level="3">O PulseLab ainda não sustenta sozinho</a>
+        <a href="#sec-12-perguntas-provaveis-da-banca-e-respostas-recomendadas" data-level="2">12. Perguntas prováveis da banca e respostas recomendadas</a>
+        <a href="#o-aplicativo-mede-aprendizagem" data-level="3">“O aplicativo mede aprendizagem?”</a>
+        <a href="#como-confiar-no-autorrelato-de-criancas" data-level="3">“Como confiar no autorrelato de crianças?”</a>
+        <a href="#uma-escala-de-quatro-pontos-pode-ser-chamada-de-carga-cognitiva" data-level="3">“Uma escala de quatro pontos pode ser chamada de carga cognitiva?”</a>
+        <a href="#screenshot-e-inatividade-provam-bloqueio" data-level="3">“Screenshot e inatividade provam bloqueio?”</a>
+        <a href="#como-voces-evitam-pseudorreplicacao" data-level="3">“Como vocês evitam pseudorreplicação?”</a>
+        <a href="#podem-dizer-que-a-oficina-causou-melhora" data-level="3">“Podem dizer que a oficina causou melhora?”</a>
+        <a href="#o-painel-ja-mostra-resultados-reais" data-level="3">“O painel já mostra resultados reais?”</a>
+        <a href="#a-coleta-offline-garante-zero-perda" data-level="3">“A coleta offline garante zero perda?”</a>
+        <a href="#como-fica-a-etica-com-criancas" data-level="3">“Como fica a ética com crianças?”</a>
+        <a href="#sec-13-roteiro-de-defesa-oral-em-dois-minutos" data-level="2">13. Roteiro de defesa oral em dois minutos</a>
+        <a href="#sec-14-plano-de-maturacao-antes-da-coleta-definitiva" data-level="2">14. Plano de maturação antes da coleta definitiva</a>
+        <a href="#prioridade-critica" data-level="3">Prioridade crítica</a>
+        <a href="#validacao" data-level="3">Validação</a>
+        <a href="#coleta-e-comunicacao" data-level="3">Coleta e comunicação</a>
+        <a href="#sec-15-consideracoes-eticas-e-protecao-de-dados" data-level="2">15. Considerações éticas e proteção de dados</a>
+        <a href="#sec-16-conclusao" data-level="2">16. Conclusão</a>
+        <a href="#referencias" data-level="2">Referências</a>
+      </nav>
+      <p class="toc-note">Use o botão “Imprimir ou salvar em PDF” para gerar uma versão adequada à entrega acadêmica.</p>
+    </aside>
+
+    <main class="report" id="report-content">
+      <h1 id="pulselab-como-infraestrutura-de-mensuracao-em-oficinas-de-robotica-educacional">PulseLab como infraestrutura de mensuração em oficinas de robótica educacional</h1>
+<h2 id="relatorio-academico-sobre-metricas-validade-e-contribuicao-cientifica">Relatório acadêmico sobre métricas, validade e contribuição científica</h2>
+<p><strong>Versão analisada:</strong> PulseLab 1.4<br><strong>Data:</strong> 29 de julho de 2026<br><strong>Autor:</strong> Vinicius Ferreira Amim<br><strong>Instituição:</strong> Universidade Federal do Vale do São Francisco<br><strong>Atuação no projeto:</strong> Setor de Pesquisa da FADEX — Projeto Robótica Educacional<br><strong>Status do documento:</strong> base para qualificação, apresentação à banca e protocolo de estudo piloto</p>
+<blockquote>
+<p><strong>Tese central para a banca:</strong> o PulseLab agrega valor científico porque converte oficinas distribuídas e efêmeras em sessões de pesquisa padronizadas, pseudonimizadas, temporalmente alinhadas e auditáveis. O aplicativo não substitui a teoria, a rubrica pedagógica nem a análise estatística; ele cria a infraestrutura necessária para que perguntas sobre processo, colaboração, esforço percebido, ajuda e resultados imediatos possam ser respondidas com dados comparáveis.</p>
+</blockquote>
+<hr>
+<h2 id="resumo">Resumo</h2>
+<p>Este relatório avalia a capacidade do PulseLab 1.4 de produzir métricas úteis para pesquisas em oficinas de robótica educacional com LEGO SPIKE. A análise combina o protocolo de pesquisa, o modelo de dados, o agente Windows, o simulador e o painel disponíveis no repositório. O desenho recomendado é observacional multicêntrico, de cortes transversais repetidos, com medidas intrassessão. O sistema registra contexto da oficina, experiência prévia, autoeficácia inicial, esforço mental percebido, situação de progresso, pedidos de ajuda, colaboração, compreensão percebida, afetos, intenção de retorno e evidências operacionais de completude e qualidade. A arquitetura também permite reconstruir a linha do tempo da sessão e distinguir respostas concluídas, recusadas e expiradas.</p>
+<p>O principal valor científico do PulseLab é a padronização da observação em diferentes escolas e momentos: o mesmo instrumento, os mesmos marcos temporais, a mesma codificação e a versão exata da configuração acompanham cada evento. Isso aumenta a comparabilidade, a rastreabilidade e a possibilidade de análise reprodutível. Entretanto, o sistema ainda não deve ser apresentado como instrumento validado de “carga cognitiva” nem como prova autônoma de aprendizagem. A questão de esforço utiliza uma adaptação ordinal de quatro categorias que requer evidências de validade para a população atendida. Além disso, a rubrica de desempenho está implementada no simulador e prevista no banco, mas não é atualmente persistida pelo agente Windows; os itens pré/pós de conhecimento permanecem indefinidos; e o dashboard exibe dados simulados.</p>
+<p>Conclui-se que o PulseLab já é adequado como infraestrutura de um piloto de viabilidade e de investigação do processo vivido na oficina. Após completar a rubrica, definir os itens de conhecimento, validar o instrumento, implantar o painel analítico real e formalizar os procedimentos éticos, poderá sustentar estudos quantitativos mais fortes sobre associações entre esforço, colaboração, mediação e desempenho imediato.</p>
+<p><strong>Palavras-chave:</strong> robótica educacional; learning analytics; mensuração educacional; esforço mental; aprendizagem colaborativa; estudo observacional; qualidade de dados.</p>
+<hr>
+<h2 id="sec-1-problema-de-pesquisa-e-justificativa">1. Problema de pesquisa e justificativa</h2>
+<p>Oficinas de robótica são experiências práticas, colaborativas e distribuídas entre programação, montagem, teste, discussão e intervenção do instrutor. Uma avaliação restrita ao produto final perde a trajetória que levou ao resultado. Por outro lado, manter pesquisadores observando todas as duplas em várias escolas é custoso, pouco escalável e sujeito a variações entre observadores.</p>
+<p>A literatura sobre robótica educacional identifica resultados promissores, mas também ressalta que a presença do recurso tecnológico não garante, por si só, melhoria da aprendizagem e que o método de avaliação precisa ser cuidadosamente definido (BENITTI, 2012). No campo de <em>learning analytics</em>, o objetivo não é apenas acumular registros digitais, mas coletar, analisar, interpretar e comunicar dados de modo teoricamente relevante e acionável para melhorar ensino e aprendizagem (SoLAR, 2025). A abordagem multimodal é particularmente pertinente a tarefas abertas, como construir um robô ou um programa, nas quais processo e produto não ficam inteiramente representados em uma única prova ou em cliques de uma plataforma (BLIKSTEIN, 2013).</p>
+<p>O PulseLab responde a esse problema ao combinar quatro camadas:</p>
+<ol>
+<li><strong>contexto:</strong> escola, oficina, turma, atividade, idade/faixa escolar, experiência prévia e papel;</li>
+<li><strong>processo percebido:</strong> esforço mental, estado de progresso, necessidade de ajuda e colaboração;</li>
+<li><strong>resultado imediato:</strong> compreensão percebida, afetos, intenção de retorno e, após a integração pendente, desempenho da missão e conhecimento específico;</li>
+<li><strong>qualidade da evidência:</strong> linha do tempo, completude, atrasos, recusas, timeouts, sincronização, versão do protocolo e alertas técnicos.</li>
+</ol>
+<p>Essa combinação permite responder não somente “quantas crianças participaram?”, mas “em que momento houve maior esforço?”, “quais situações antecederam pedidos de ajuda?”, “a experiência foi diferente conforme o papel?”, “a colaboração se associou ao desempenho?” e “com que completude e atraso esses dados foram obtidos?”.</p>
+<hr>
+<h2 id="sec-2-enquadramento-metodologico">2. Enquadramento metodológico</h2>
+<h3 id="sec-2-1-desenho-recomendado">2.1 Desenho recomendado</h3>
+<p>O desenho compatível com o funcionamento atual é:</p>
+<blockquote>
+<p><strong>Estudo observacional multicêntrico, de cortes transversais repetidos, com medidas intrassessão, realizado em oficinas pontuais de robótica educacional.</strong></p>
+</blockquote>
+<p>Cada estudante participa de uma oficina, mas responde em diferentes momentos dentro da mesma sessão. Portanto:</p>
+<ul>
+<li>o estudo descreve processo e resultados imediatos;</li>
+<li>as medidas dos minutos 20 e 40 da mesma criança são dependentes;</li>
+<li>participantes de uma mesma dupla compartilham tarefa, robô, instrutor e contexto;</li>
+<li>duplas estão agrupadas em oficinas, escolas e polos;</li>
+<li>não existe seguimento individual suficiente para medir retenção ou desenvolvimento longitudinal;</li>
+<li>sem grupo comparador ou implantação experimental, associações não devem ser redigidas como efeitos causais.</li>
+</ul>
+<p>As recomendações STROBE são uma referência apropriada para relatar de forma transparente desenho, participantes, variáveis, vieses, tamanho amostral, dados ausentes e limitações de estudos observacionais (VON ELM et al., 2007).</p>
+<h3 id="sec-2-2-unidades-de-observacao-e-de-analise">2.2 Unidades de observação e de análise</h3>
+<pre><code class="language-text">Polo/região
+└── Escola
+    └── Oficina/turma
+        └── Sessão/dupla
+            ├── Participante A
+            │   ├── pré
+            │   ├── checkpoint 20
+            │   ├── checkpoint 40
+            │   └── pós
+            └── Participante B
+                ├── pré
+                ├── checkpoint 20
+                ├── checkpoint 40
+                └── pós
+</code></pre>
+<p>O <strong>evento</strong> é a unidade de armazenamento; o <strong>participante</strong> é a unidade das respostas individuais; a <strong>dupla</strong> é a unidade natural da missão compartilhada; e a <strong>oficina/escola</strong> representa o contexto de aplicação. Uma análise correta deve respeitar esses níveis para não tratar observações correlacionadas como se fossem independentes.</p>
+<hr>
+<h2 id="sec-3-como-o-pulselab-transforma-a-oficina-em-numeros">3. Como o PulseLab transforma a oficina em números</h2>
+<h3 id="sec-3-1-cadeia-de-mensuracao">3.1 Cadeia de mensuração</h3>
+<table>
+<thead>
+<tr>
+<th>Etapa</th>
+<th>O que ocorre na oficina</th>
+<th>Registro produzido</th>
+<th>Informação que pode ser estimada</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Entrada</td>
+<td>Contexto e assentimento são conferidos</td>
+<td>IDs pseudonimizados, escola, turma, atividade e versão</td>
+<td>alcance, composição da amostra e rastreabilidade</td>
+</tr>
+<tr>
+<td>Pré-oficina</td>
+<td>Cada participante responde individualmente</td>
+<td>idade, experiência prévia e autoeficácia</td>
+<td>perfil inicial e variáveis de ajuste</td>
+</tr>
+<tr>
+<td>Minuto 20</td>
+<td>Resposta individual e evidência técnica</td>
+<td>esforço, progresso, ajuda, papel, latência e atraso</td>
+<td>estado inicial do processo</td>
+</tr>
+<tr>
+<td>Troca de papéis</td>
+<td>Participantes alternam funções</td>
+<td>evento <code>role_swapped</code> ou alerta</td>
+<td>adesão ao protocolo e exposição aos papéis</td>
+</tr>
+<tr>
+<td>Minuto 40</td>
+<td>Nova resposta individual</td>
+<td>esforço, progresso, ajuda e colaboração</td>
+<td>mudança intrassessão e colaboração percebida</td>
+</tr>
+<tr>
+<td>Encerramento</td>
+<td>Instrutor e participantes avaliam a oficina</td>
+<td>experiência final e, quando integrado, rubrica</td>
+<td>resultado imediato e aceitabilidade</td>
+</tr>
+<tr>
+<td>Sincronização</td>
+<td>Eventos são enviados ou enfileirados</td>
+<td>horário local, recebimento e IDs únicos</td>
+<td>perda, atraso, recuperação e duplicidade</td>
+</tr>
+</tbody></table>
+<h3 id="sec-3-2-tres-classes-de-indicadores">3.2 Três classes de indicadores</h3>
+<p>Para evitar conclusões indevidas, o relatório científico deve separar:</p>
+<ul>
+<li><strong>medidas diretas:</strong> respostas dadas por participante ou instrutor;</li>
+<li><strong>indicadores derivados:</strong> proporções, distribuições, transições e estimativas calculadas a partir das respostas;</li>
+<li><strong>evidências auxiliares:</strong> telemetria e screenshots usados para contexto ou auditoria, sem equivaler automaticamente a aprendizagem, engajamento ou estado mental.</li>
+</ul>
+<p>Essa separação é fundamental. Um valor digital só se torna uma medida educacional defensável quando existe uma definição do construto, um procedimento padronizado e evidências que sustentem a interpretação pretendida. Os <em>Standards for Educational and Psychological Testing</em> tratam validade como o conjunto de evidências e teoria que sustenta a interpretação dos escores para um uso proposto (AERA; APA; NCME, 2014).</p>
+<hr>
+<h2 id="sec-4-matriz-de-metricas-do-pulselab">4. Matriz de métricas do PulseLab</h2>
+<h3 id="sec-4-1-alcance-e-caracterizacao">4.1 Alcance e caracterização</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Definição operacional</th>
+<th>Campo/fonte</th>
+<th>Escala</th>
+<th>Uso científico</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Sessões iniciadas</td>
+<td>contagem distinta de <code>session_id</code> com <code>session_started</code></td>
+<td><code>research_session_events</code></td>
+<td>contagem</td>
+<td>alcance operacional</td>
+</tr>
+<tr>
+<td>Sessões encerradas</td>
+<td>sessões com <code>session_completed</code></td>
+<td><code>research_session_events</code></td>
+<td>contagem e proporção</td>
+<td>adesão ao fluxo</td>
+</tr>
+<tr>
+<td>Participantes com coleta</td>
+<td>combinação distinta de sessão e participante</td>
+<td><code>participant_id</code> + <code>session_id</code></td>
+<td>contagem</td>
+<td>tamanho observado da amostra</td>
+</tr>
+<tr>
+<td>Cobertura territorial</td>
+<td>escolas, sedes e polos distintos</td>
+<td><code>school_code</code>, <code>site_id</code>, <code>regional_hub</code></td>
+<td>contagem/categorias</td>
+<td>diversidade de contextos</td>
+</tr>
+<tr>
+<td>Experiência prévia</td>
+<td>nunca, uma vez, algumas, muitas</td>
+<td><code>prior_robotics</code></td>
+<td>ordinal 1–4</td>
+<td>caracterização e ajuste</td>
+</tr>
+<tr>
+<td>Autoeficácia inicial</td>
+<td>discordo muito a concordo muito</td>
+<td><code>self_efficacy_pre</code></td>
+<td>ordinal 1–4</td>
+<td>perfil inicial e moderador</td>
+</tr>
+<tr>
+<td>Idade/faixa escolar</td>
+<td>idade informada e faixa configurada</td>
+<td><code>student_age</code>, <code>grade_band</code></td>
+<td>razão/categoria</td>
+<td>descrição e estratificação</td>
+</tr>
+</tbody></table>
+<p><strong>Leitura correta:</strong> “142 participantes com eventos de pesquisa registrados” é tecnicamente mais preciso que “142 estudantes impactados”. O aplicativo mede participação na coleta; “impacto” exige um desfecho e um desenho capazes de demonstrar mudança atribuível ao programa.</p>
+<h3 id="sec-4-2-processo-de-aprendizagem-e-colaboracao">4.2 Processo de aprendizagem e colaboração</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Definição operacional</th>
+<th>Campo/fonte</th>
+<th>Escala</th>
+<th>Forma recomendada de reportar</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Esforço mental percebido</td>
+<td>quanto o participante precisou pensar naquele momento</td>
+<td><code>mental_effort</code></td>
+<td>ordinal 1–4</td>
+<td>distribuição por categoria, mediana e modelo ordinal</td>
+</tr>
+<tr>
+<td>Mudança de esforço</td>
+<td>diferença de distribuição entre minutos 20 e 40</td>
+<td><code>mental_effort</code> + <code>interval_mark</code></td>
+<td>transição ordinal</td>
+<td>probabilidades estimadas e razão de chances</td>
+</tr>
+<tr>
+<td>Situação de progresso</td>
+<td>avanço independente, dúvida, tentativa sem avanço ou ajuda imediata</td>
+<td><code>progress_state</code></td>
+<td>categórica ordenável com cautela</td>
+<td>proporções e transições</td>
+</tr>
+<tr>
+<td>Bloqueio</td>
+<td>participante relata tentativa sem avanço ou necessidade de ajuda</td>
+<td>derivado de <code>progress_state</code></td>
+<td>binária</td>
+<td>prevalência por checkpoint</td>
+</tr>
+<tr>
+<td>Pedido de ajuda</td>
+<td>participante seleciona “precisamos de ajuda agora”</td>
+<td><code>help_requested</code> e evento homônimo</td>
+<td>binária</td>
+<td>pedidos por 100 participantes/checkpoints</td>
+</tr>
+<tr>
+<td>Colaboração percebida</td>
+<td>oportunidade de ambos darem ideias e participarem</td>
+<td><code>collaboration</code>, no minuto 40</td>
+<td>ordinal 1–4</td>
+<td>distribuição e associação com resultado</td>
+</tr>
+<tr>
+<td>Papel exercido</td>
+<td>programação/computador ou montagem/teste</td>
+<td><code>participant_role</code> e <code>self_reported_role</code></td>
+<td>nominal</td>
+<td>comparação por papel e momento</td>
+</tr>
+<tr>
+<td>Adesão à troca</td>
+<td>sessão contém <code>role_swapped</code> quando esperado</td>
+<td>linha do tempo</td>
+<td>binária</td>
+<td>proporção de sessões aderentes</td>
+</tr>
+<tr>
+<td>Latência de resposta</td>
+<td>tempo entre apresentação e término da resposta</td>
+<td><code>response_latency_ms</code></td>
+<td>contínua</td>
+<td>mediana e percentis; carga operacional</td>
+</tr>
+</tbody></table>
+<p>O item de esforço se inspira em uma tradição de escalas subjetivas breves. Medidas de esforço podem oferecer informação que não aparece no desempenho isoladamente (PAAS et al., 2003), e medidas repetidas reduzem a dependência de uma avaliação retrospectiva única (VAN GOG et al., 2012). Contudo, a escala clássica de Paas utiliza nove categorias; o PulseLab adota quatro alternativas e linguagem infantil. Estudos recentes reforçam que esforço investido e dificuldade percebida não são necessariamente o mesmo construto e que adaptações exigem investigação de validade (SCHUESSLER; FISCHER; WALPUSKI, 2024). Assim, o termo recomendado para o dado atual é <strong>“esforço mental percebido em escala ordinal experimental de quatro categorias”</strong>, e não “carga cognitiva objetiva”.</p>
+<h3 id="sec-4-3-resultado-imediato-e-experiencia-final">4.3 Resultado imediato e experiência final</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Definição operacional</th>
+<th>Campo/fonte</th>
+<th>Situação na versão auditada</th>
+<th>Interpretação permitida</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Compreensão percebida</td>
+<td>capacidade declarada de explicar o funcionamento do robô</td>
+<td><code>post_understanding</code></td>
+<td>coletado pelo agente</td>
+<td>percepção de compreensão, não prova de domínio</td>
+</tr>
+<tr>
+<td>Afetos</td>
+<td>até duas escolhas entre seis categorias</td>
+<td><code>post_affects</code></td>
+<td>coletado pelo agente</td>
+<td>perfil afetivo descritivo</td>
+</tr>
+<tr>
+<td>Intenção de retorno</td>
+<td>não a sim, em quatro categorias</td>
+<td><code>post_return_intent</code></td>
+<td>coletado pelo agente</td>
+<td>aceitabilidade/intenção, não “satisfação” geral</td>
+</tr>
+<tr>
+<td>Desempenho da missão</td>
+<td>rubrica 0–3 preenchida pelo instrutor</td>
+<td><code>mission_performance</code></td>
+<td>schema e simulador; integração pendente no agente Windows</td>
+<td>resultado observável da dupla</td>
+</tr>
+<tr>
+<td>Intervenções do instrutor</td>
+<td>0, 1, 2 ou 3 ou mais</td>
+<td><code>instructor_interventions</code></td>
+<td>schema e simulador; integração pendente no agente Windows</td>
+<td>intensidade aproximada de mediação</td>
+</tr>
+<tr>
+<td>Dificuldade principal</td>
+<td>montagem, lógica, sensor, técnica, colaboração etc.</td>
+<td><code>primary_issue</code></td>
+<td>schema e simulador; integração pendente no agente Windows</td>
+<td>categorização do gargalo</td>
+</tr>
+<tr>
+<td>Conhecimento específico</td>
+<td>escore de itens alinhados à atividade</td>
+<td><code>knowledge_score</code>, <code>knowledge_answers</code></td>
+<td>previsto no schema; itens ausentes</td>
+<td>ganho imediato quando houver pré e pós equivalentes</td>
+</tr>
+</tbody></table>
+<p>As respostas finais não devem ser fundidas em um único “índice de sucesso”. Uma criança pode relatar esforço alto, sentir frustração e ainda concluir a missão; outra pode desejar retornar sem demonstrar o conceito trabalhado. Manter as dimensões separadas preserva informação e evita interpretar afeto, esforço e aprendizagem como sinônimos.</p>
+<h3 id="sec-4-4-qualidade-completude-e-viabilidade">4.4 Qualidade, completude e viabilidade</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Fórmula ou regra</th>
+<th>Fonte</th>
+<th>Decisão apoiada</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Taxa de conclusão</td>
+<td>sessões com <code>session_completed</code> / sessões iniciadas</td>
+<td>linha do tempo</td>
+<td>viabilidade do fluxo</td>
+</tr>
+<tr>
+<td>Taxa de sessões completas</td>
+<td><code>quality_status = complete</code> / sessões encerradas</td>
+<td>view <code>research_session_quality</code></td>
+<td>seleção e auditoria</td>
+</tr>
+<tr>
+<td>Taxa de revisão</td>
+<td><code>needs_review</code> / sessões encerradas</td>
+<td>view de qualidade</td>
+<td>carga de revisão manual</td>
+</tr>
+<tr>
+<td>Resposta válida por fase</td>
+<td><code>response_status = completed</code> / oportunidades previstas</td>
+<td><code>research_events</code></td>
+<td>quantidade analiticamente utilizável</td>
+</tr>
+<tr>
+<td>Recusa</td>
+<td><code>declined</code> / oportunidades previstas</td>
+<td><code>research_events</code></td>
+<td>aceitabilidade e proteção da autonomia</td>
+</tr>
+<tr>
+<td>Timeout</td>
+<td><code>timeout</code> / oportunidades previstas</td>
+<td><code>research_events</code></td>
+<td>usabilidade e perda técnica</td>
+</tr>
+<tr>
+<td>Atraso do checkpoint</td>
+<td>diferença entre horário previsto e apresentação</td>
+<td><code>checkpoint_lateness_ms</code></td>
+<td>comparabilidade temporal</td>
+</tr>
+<tr>
+<td>Cobertura de screenshot</td>
+<td>checkpoints com captura / checkpoints esperados</td>
+<td>view e linha do tempo</td>
+<td>disponibilidade da evidência opcional</td>
+</tr>
+<tr>
+<td>Continuidade do agente</td>
+<td>heartbeats observados em relação à duração</td>
+<td>eventos <code>heartbeat</code></td>
+<td>falhas e interrupções</td>
+</tr>
+<tr>
+<td>Latência de sincronização</td>
+<td><code>received_at - occurred_at</code></td>
+<td>ambas as tabelas</td>
+<td>períodos offline, com cautela sobre relógio local</td>
+</tr>
+<tr>
+<td>Consistência do protocolo</td>
+<td>sessões por <code>protocol_version</code> e <code>config_hash</code></td>
+<td>ambas as tabelas</td>
+<td>comparabilidade e reprodutibilidade</td>
+</tr>
+<tr>
+<td>Alertas de qualidade</td>
+<td>contagem por código</td>
+<td>eventos <code>quality_issue</code></td>
+<td>revisão de atraso, janela, captura e troca</td>
+</tr>
+</tbody></table>
+<p><strong>Nota técnica:</strong> a view atual conta linhas pré, checkpoint e pós independentemente de <code>response_status</code>. Logo, uma sessão pode conter todos os registros esperados e, ao mesmo tempo, possuir recusas ou timeouts. Para a análise, “registro presente” e “resposta válida” devem ser apresentados separadamente. Recusas são um resultado ético legítimo e não devem ser recodificadas como baixa qualidade do participante.</p>
+<h3 id="sec-4-5-evidencias-auxiliares-que-nao-devem-virar-rotulos-automaticos">4.5 Evidências auxiliares que não devem virar rótulos automáticos</h3>
+<table>
+<thead>
+<tr>
+<th>Evidência</th>
+<th>O que realmente registra</th>
+<th>O que não prova</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Categoria do aplicativo</td>
+<td><code>spike</code>, <code>other</code> ou <code>unknown</code> no instante observado</td>
+<td>distração ou engajamento</td>
+</tr>
+<tr>
+<td>Inatividade</td>
+<td>segundos desde a última entrada de mouse/teclado</td>
+<td>tempo improdutivo; a dupla pode estar montando ou discutindo</td>
+</tr>
+<tr>
+<td>Tamanho do arquivo</td>
+<td>tamanho do projeto encontrado no momento</td>
+<td>qualidade do código, progresso conceitual ou aprendizagem</td>
+</tr>
+<tr>
+<td>Screenshot privado</td>
+<td>estado visual da janela do SPIKE no checkpoint</td>
+<td>pensamento, emoção ou autoria individual</td>
+</tr>
+<tr>
+<td>Heartbeat</td>
+<td>agente em execução e contexto técnico mínimo</td>
+<td>participação pedagógica contínua</td>
+</tr>
+</tbody></table>
+<p>Esses registros podem gerar hipóteses, selecionar casos para revisão ou contextualizar respostas. Não devem produzir diagnósticos automáticos como “aluno distraído”, “carga ideal” ou “bloqueio cognitivo detectado” sem validação contra observação estruturada e critérios previamente definidos.</p>
+<hr>
+<h2 id="sec-5-perguntas-de-pesquisa-e-hipoteses-testaveis">5. Perguntas de pesquisa e hipóteses testáveis</h2>
+<h3 id="sec-5-1-objetivo-geral">5.1 Objetivo geral</h3>
+<p>Analisar as relações entre esforço mental percebido, colaboração em dupla, necessidade de ajuda e desempenho imediato de estudantes durante oficinas pontuais de robótica educacional com LEGO SPIKE, avaliando simultaneamente a viabilidade e a qualidade da coleta distribuída.</p>
+<h3 id="sec-5-2-objetivos-especificos">5.2 Objetivos específicos</h3>
+<ol>
+<li>Descrever o esforço mental percebido nos minutos 20 e 40.</li>
+<li>Estimar a frequência e a transição de situações de dúvida, bloqueio e ajuda.</li>
+<li>Comparar respostas conforme papel exercido e momento da oficina.</li>
+<li>Investigar a associação entre colaboração percebida, mediação do instrutor e desempenho da missão.</li>
+<li>Estimar ganho imediato em conhecimentos específicos, após a implantação dos itens pré/pós.</li>
+<li>Quantificar completude, atrasos, perdas, recusas e recuperação de eventos em diferentes escolas.</li>
+</ol>
+<h3 id="sec-5-3-hipoteses">5.3 Hipóteses</h3>
+<table>
+<thead>
+<tr>
+<th>Hipótese</th>
+<th>Variáveis</th>
+<th>Teste principal</th>
+<th>Condição para ser testada</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>H1: a distribuição do esforço difere entre 20 e 40 minutos</td>
+<td>esforço, momento, papel</td>
+<td>modelo ordinal de efeitos mistos</td>
+<td>já coletável</td>
+</tr>
+<tr>
+<td>H2: bloqueio/pedido de ajuda se associa a mais mediação</td>
+<td>progresso/ajuda e intervenções</td>
+<td>regressão ordinal ou logística multinível</td>
+<td>integrar rubrica no agente</td>
+</tr>
+<tr>
+<td>H3: maior colaboração se associa a melhor desempenho</td>
+<td>colaboração e missão 0–3</td>
+<td>modelo ordinal ajustado</td>
+<td>integrar e validar rubrica</td>
+</tr>
+<tr>
+<td>H4: o desempenho em conhecimento é superior no pós</td>
+<td>itens pré/pós</td>
+<td>modelo pareado/misto por item ou escore</td>
+<td>definir e implementar itens</td>
+</tr>
+<tr>
+<td>H5: a coleta distribuída alcança os critérios de viabilidade</td>
+<td>completude, atraso, timeout e sincronização</td>
+<td>estimativas com IC 95%</td>
+<td>já avaliável no piloto</td>
+</tr>
+</tbody></table>
+<p>O resultado de uma hipótese deve ser apresentado por estimativa, intervalo de confiança e incerteza, não apenas por valor de <em>p</em>. “Não significativo” não significa “sem efeito”, sobretudo em pilotos pequenos.</p>
+<hr>
+<h2 id="sec-6-plano-de-analise-quantitativa">6. Plano de análise quantitativa</h2>
+<h3 id="sec-6-1-preparacao">6.1 Preparação</h3>
+<ol>
+<li>congelar uma versão do protocolo e registrar seu hash;</li>
+<li>definir previamente desfecho primário, exclusões e covariáveis;</li>
+<li>criar dicionário de dados com rótulos e codificação;</li>
+<li>separar dados de teste, homologação e pesquisa;</li>
+<li>deduplicar por <code>event_id</code>;</li>
+<li>identificar sessão, dupla, participante, momento, papel e atividade;</li>
+<li>distinguir <code>completed</code>, <code>declined</code> e <code>timeout</code>;</li>
+<li>manter um relatório de fluxo da amostra desde sessões iniciadas até registros analisados.</li>
+</ol>
+<h3 id="sec-6-2-analise-descritiva">6.2 Análise descritiva</h3>
+<ul>
+<li>contagens de escolas, oficinas, sessões, duplas e participantes;</li>
+<li>distribuição por idade/faixa, experiência e autoeficácia;</li>
+<li>frequências e intervalos de confiança de esforço, progresso, ajuda, colaboração e resultados finais;</li>
+<li>matrizes de transição entre minutos 20 e 40;</li>
+<li>medianas e intervalos interquartis para latência e atraso;</li>
+<li>completude e perdas por escola, versão, máquina e oficina;</li>
+<li>comparação descritiva entre sessões completas e sessões com revisão.</li>
+</ul>
+<p>Escalas de quatro categorias não devem ser apresentadas somente por média. A média “2,4/4” pressupõe distâncias iguais entre categorias e, isoladamente, esconde a distribuição. Barras de proporção, medianas, probabilidades previstas e modelos ordinais são mais defensáveis.</p>
+<h3 id="sec-6-3-modelos-recomendados">6.3 Modelos recomendados</h3>
+<p><strong>H1 — esforço mental:</strong> modelo ordinal de ligação cumulativa, com momento, papel, experiência prévia, faixa etária e atividade como efeitos fixos. Incluir interceptos aleatórios para participante e dupla; oficina/escola entram como níveis adicionais quando o número de agrupamentos permitir.</p>
+<p><strong>H2 — ajuda e mediação:</strong> modelar a probabilidade ou intensidade de intervenção em função do estado de progresso/pedido de ajuda, ajustando por momento, experiência e atividade. Como a intervenção é medida no nível da dupla, não duplicar a rubrica nas duas linhas pós.</p>
+<p><strong>H3 — colaboração e desempenho:</strong> modelar a rubrica 0–3 como desfecho ordinal. A associação deve ser ajustada por experiência prévia, faixa escolar, atividade e intervenções. O resultado será associação, não efeito causal.</p>
+<p><strong>H4 — conhecimento:</strong> construir itens equivalentes alinhados aos objetivos de cada <code>activity_id</code>. Avaliar respostas por item e escore, emparelhar pré/pós e relatar mudança com intervalo de confiança. Sem comparador, usar “ganho imediato observado”, e não “impacto causado”.</p>
+<p><strong>H5 — viabilidade:</strong> estimar proporções de sessões concluídas, completas e revisadas, além de atraso e sincronização. Comparar escolas ou instalações somente quando houver volume suficiente e quando a interpretação não permitir reidentificação ou ranqueamento injustificado.</p>
+<h3 id="sec-6-4-dados-ausentes-e-sensibilidade">6.4 Dados ausentes e sensibilidade</h3>
+<ul>
+<li>relatar recusas e timeouts separadamente;</li>
+<li>não imputar automaticamente respostas recusadas;</li>
+<li>verificar se a ausência se concentra por idade, escola, momento ou papel;</li>
+<li>repetir análises principais em conjunto completo e em cenários de sensibilidade, quando justificável;</li>
+<li>não excluir uma sessão apenas porque contém alerta técnico; aplicar regras definidas antes de observar o resultado.</li>
+</ul>
+<h3 id="sec-6-5-tamanho-amostral">6.5 Tamanho amostral</h3>
+<p>O relatório não propõe um número arbitrário de participantes. O cálculo deve partir:</p>
+<ol>
+<li>do desfecho primário;</li>
+<li>do menor efeito considerado educacionalmente relevante;</li>
+<li>do número esperado de escolas, oficinas e duplas;</li>
+<li>da correlação entre respostas da mesma criança e da mesma dupla;</li>
+<li>da taxa de perda observada no piloto.</li>
+</ol>
+<p>Para modelos multinível ordinais, a estratégia mais transparente é estimar parâmetros preliminares no piloto e realizar cálculo por simulação. O piloto deve ser dimensionado inicialmente para testar compreensão, operação e variabilidade, e não para “provar” eficácia.</p>
+<hr>
+<h2 id="sec-7-criterios-propostos-para-declarar-o-piloto-viavel">7. Critérios propostos para declarar o piloto viável</h2>
+<p>Os valores abaixo são <strong>metas operacionais provisórias</strong>, a serem aprovadas e registradas antes do piloto; não são resultados atuais:</p>
+<table>
+<thead>
+<tr>
+<th>Critério</th>
+<th class="numeric">Meta proposta</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Sessões com desfecho registrado</td>
+<td class="numeric">≥ 95% das sessões iniciadas</td>
+</tr>
+<tr>
+<td>Sessões tecnicamente completas ou justificadamente revisadas</td>
+<td class="numeric">≥ 90%</td>
+</tr>
+<tr>
+<td>Checkpoints apresentados dentro do limite configurado</td>
+<td class="numeric">≥ 95%</td>
+</tr>
+<tr>
+<td>Registros sem duplicidade de <code>event_id</code></td>
+<td class="numeric">100%</td>
+</tr>
+<tr>
+<td>Sessões com versão/hash esperados</td>
+<td class="numeric">100%</td>
+</tr>
+<tr>
+<td>Separação documentada entre recusas e falhas técnicas</td>
+<td class="numeric">100%</td>
+</tr>
+<tr>
+<td>Screenshots públicos</td>
+<td class="numeric">0</td>
+</tr>
+<tr>
+<td>Payloads com nome de participante ou título bruto de janela</td>
+<td class="numeric">0</td>
+</tr>
+</tbody></table>
+<p>O limite técnico existente para atraso é 120 segundos. Além da proporção abaixo desse limite, recomenda-se reportar mediana e percentil 95. Uma meta não atingida não invalida automaticamente o projeto: identifica o componente que precisa ser corrigido antes da coleta confirmatória.</p>
+<hr>
+<h2 id="sec-8-evidencias-de-validade-necessarias">8. Evidências de validade necessárias</h2>
+<p>O aplicativo padroniza a coleta, mas padronização não equivale a validade. A denominação recomendada durante o piloto é:</p>
+<blockquote>
+<p><strong>Instrumento experimental em processo de validação para avaliação da experiência e do processo em oficinas de robótica educacional.</strong></p>
+</blockquote>
+<p>O argumento de validade deve reunir:</p>
+<ol>
+<li><strong>conteúdo:</strong> especialistas verificam se os itens representam esforço, progresso, colaboração e os objetivos pedagógicos;</li>
+<li><strong>processo de resposta:</strong> entrevistas cognitivas avaliam como crianças entendem perguntas e alternativas;</li>
+<li><strong>estrutura interna:</strong> distribuição, efeito teto/piso e relações entre itens/momentos;</li>
+<li><strong>relações com outras variáveis:</strong> comparar ajuda relatada com intervenção registrada, observação estruturada e desempenho;</li>
+<li><strong>consequências do uso:</strong> verificar se alertas apoiam o instrutor sem estigmatizar ou retirar apoio;</li>
+<li><strong>confiabilidade da rubrica:</strong> dois avaliadores pontuam uma amostra de missões e têm sua concordância estimada;</li>
+<li><strong>invariância e equidade:</strong> investigar compreensão e funcionamento das medidas entre faixas etárias, escolas e contextos, se a amostra permitir.</li>
+</ol>
+<p>O screenshot pode apoiar uma rubrica qualitativa, desde que existam categorias, avaliadores treinados, concordância e proteção de dados. Ele não “valida a resposta da criança” de modo automático.</p>
+<hr>
+<h2 id="sec-9-auditoria-do-estado-atual-da-implementacao">9. Auditoria do estado atual da implementação</h2>
+<p>Esta seção impede que a apresentação confunda intenção, protótipo e dado real.</p>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Estado verificado</th>
+<th>Consequência para o relatório</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Pré: idade, experiência e autoeficácia</td>
+<td>implementado no agente e no schema</td>
+<td>disponível para piloto</td>
+</tr>
+<tr>
+<td>Checkpoints 20/40</td>
+<td>implementados com tempo absoluto</td>
+<td>disponível para piloto</td>
+</tr>
+<tr>
+<td>Esforço, progresso, ajuda e colaboração</td>
+<td>implementados</td>
+<td>disponíveis como medidas experimentais</td>
+</tr>
+<tr>
+<td>Pós: compreensão, afetos e retorno</td>
+<td>implementado</td>
+<td>disponível para piloto</td>
+</tr>
+<tr>
+<td>Linha do tempo, heartbeat e alertas</td>
+<td>implementados</td>
+<td>viabilidade e auditoria disponíveis</td>
+</tr>
+<tr>
+<td>Cache e reenvio idempotente</td>
+<td>implementados; requer homologação real</td>
+<td>permite testar resiliência</td>
+</tr>
+<tr>
+<td>Rubrica do instrutor</td>
+<td>tela existe no agente; simulador persiste; fluxo Windows não a chama atualmente</td>
+<td>desempenho, intervenções e dificuldade ainda não devem ser anunciados como coletados pelo agente real</td>
+</tr>
+<tr>
+<td>Conhecimento pré/pós</td>
+<td>campos existem; <code>knowledge_questions</code> está vazio</td>
+<td>aprendizagem imediata ainda não é mensurada</td>
+</tr>
+<tr>
+<td>View de qualidade</td>
+<td>implementada no schema</td>
+<td>exige backend/consulta autorizada</td>
+</tr>
+<tr>
+<td>Dashboard central</td>
+<td>interface com números simulados e exportações fictícias</td>
+<td>não apresentar seus valores como resultados</td>
+</tr>
+<tr>
+<td>Autenticação individual de dispositivos</td>
+<td>pendente</td>
+<td>piloto supervisionado, não coleta acadêmica definitiva de alta garantia</td>
+</tr>
+<tr>
+<td>Validação psicométrica</td>
+<td>pendente</td>
+<td>não chamar a escala de validada</td>
+</tr>
+</tbody></table>
+<p>Evidências técnicas internas:</p>
+<ul>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/docs/protocolo-pesquisa-v1.md">Protocolo de pesquisa v1</a></li>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/docs/arquitetura-evidencias-v1.4.md">Arquitetura de evidências 1.4</a></li>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/schema/supabase-schema.sql">Schema Supabase</a></li>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/config/config.json">Configuração do instrumento</a></li>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/agent/pulselab-agent.ps1">Agente Windows</a></li>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/web/agent-simulator/app/page.jsx">Simulador web</a></li>
+<li><a href="https://github.com/vfamim/pulselab/blob/main/dashboard/index.html">Dashboard demonstrativo</a></li>
+</ul>
+<hr>
+<h2 id="sec-10-por-que-o-aplicativo-agrega-valor-a-pesquisa">10. Por que o aplicativo agrega valor à pesquisa</h2>
+<h3 id="sec-10-1-padronizacao">10.1 Padronização</h3>
+<p>Perguntas, alternativas, marcos temporais e códigos são aplicados da mesma forma. Isso reduz variação introduzida por formulários diferentes, horários improvisados e registros livres.</p>
+<h3 id="sec-10-2-observacao-do-processo">10.2 Observação do processo</h3>
+<p>Dois checkpoints permitem analisar transições dentro da oficina. O projeto deixa de registrar apenas “concluiu/não concluiu” e passa a estudar como esforço, dúvida, ajuda, colaboração e papel evoluem.</p>
+<h3 id="sec-10-3-escala-multicentrica">10.3 Escala multicêntrica</h3>
+<p>O mesmo protocolo pode operar em escolas e polos diferentes. A ampliação territorial aumenta a capacidade de investigar variação entre contextos, embora não transforme uma amostra de conveniência em amostra representativa.</p>
+<h3 id="sec-10-4-rastreabilidade-e-reprodutibilidade">10.4 Rastreabilidade e reprodutibilidade</h3>
+<p>Cada evento contém versão do protocolo, configuração e hash. Uma análise pode identificar exatamente quais sessões usaram o mesmo instrumento, reduzindo o risco de misturar versões.</p>
+<h3 id="sec-10-5-qualidade-mensuravel-da-propria-pesquisa">10.5 Qualidade mensurável da própria pesquisa</h3>
+<p>O PulseLab mede não apenas a oficina, mas a coleta: completude, atraso, recusa, timeout, falha de captura e sincronização. Assim, a banca pode avaliar a qualidade dos dados com números em vez de assumir que “o formulário funcionou”.</p>
+<h3 id="sec-10-6-acao-pedagogica">10.6 Ação pedagógica</h3>
+<p>O pedido de ajuda gera alerta ao instrutor. O sistema fecha o ciclo entre dado e ação sem usar a pesquisa como motivo para negar suporte. Futuramente, padrões agregados poderão orientar revisão de atividade, formação de instrutores e alocação de apoio.</p>
+<h3 id="sec-10-7-minimizacao-e-protecao">10.7 Minimização e proteção</h3>
+<p>O agente não solicita nomes, cria pseudônimos por sessão, envia categoria de aplicativo em vez de título bruto da janela e usa bucket privado para capturas. Essas escolhas apoiam minimização, mas não substituem governança, consentimento/assentimento, retenção, controle de acesso e avaliação ética.</p>
+<hr>
+<h2 id="sec-11-limites-das-conclusoes">11. Limites das conclusões</h2>
+<h3 id="o-pulselab-pode-sustentar">O PulseLab pode sustentar</h3>
+<ul>
+<li>descrição de participantes, sessões e contextos;</li>
+<li>trajetória intrassessão de esforço e progresso;</li>
+<li>frequência de bloqueio, ajuda, colaboração e afetos;</li>
+<li>comparação exploratória por papel, momento, atividade e contexto;</li>
+<li>associação entre medidas, quando os desfechos estiverem implementados;</li>
+<li>viabilidade, completude e qualidade da coleta distribuída.</li>
+</ul>
+<h3 id="o-pulselab-ainda-nao-sustenta-sozinho">O PulseLab ainda não sustenta sozinho</h3>
+<ul>
+<li>causalidade da oficina sobre aprendizagem;</li>
+<li>retenção de longo prazo;</li>
+<li>diagnóstico individual de carga cognitiva;</li>
+<li>eliminação do efeito Hawthorne;</li>
+<li>inferência de distração a partir de inatividade ou aplicativo;</li>
+<li>equivalência entre tamanho de arquivo e progresso;</li>
+<li>aprendizagem medida apenas por compreensão percebida;</li>
+<li>resultados numéricos exibidos no dashboard demonstrativo;</li>
+<li>autenticidade forte da origem de todos os eventos.</li>
+</ul>
+<p>O argumento mais convincente não é afirmar que o sistema mede tudo; é demonstrar que ele conhece o limite de cada medida e registra as condições necessárias para interpretações auditáveis.</p>
+<hr>
+<h2 id="sec-12-perguntas-provaveis-da-banca-e-respostas-recomendadas">12. Perguntas prováveis da banca e respostas recomendadas</h2>
+<h3 id="o-aplicativo-mede-aprendizagem">“O aplicativo mede aprendizagem?”</h3>
+<p><strong>Resposta:</strong> “Hoje ele mede de forma estruturada o processo e a experiência imediata: esforço percebido, progresso, ajuda, colaboração e compreensão declarada. Aprendizagem imediata passará a ser medida quando os itens pré/pós de conhecimento alinhados a cada atividade e a rubrica de desempenho forem integrados e validados. Não confundimos percepção com domínio.”</p>
+<h3 id="como-confiar-no-autorrelato-de-criancas">“Como confiar no autorrelato de crianças?”</h3>
+<p><strong>Resposta:</strong> “Não tratamos uma resposta isolada como verdade absoluta. Usamos linguagem curta, respostas individuais, medidas no momento da atividade e um plano de validação com especialistas, entrevistas cognitivas, piloto e comparação com rubrica e intervenção. A validade é um argumento acumulado, não uma propriedade automática do software.”</p>
+<h3 id="uma-escala-de-quatro-pontos-pode-ser-chamada-de-carga-cognitiva">“Uma escala de quatro pontos pode ser chamada de carga cognitiva?”</h3>
+<p><strong>Resposta:</strong> “A formulação atual mede esforço mental percebido em uma escala ordinal experimental. Ela dialoga com a literatura de esforço mental, mas é uma adaptação infantil de quatro categorias e precisa ser validada. Por isso evitamos o rótulo de carga cognitiva objetiva.”</p>
+<h3 id="screenshot-e-inatividade-provam-bloqueio">“Screenshot e inatividade provam bloqueio?”</h3>
+<p><strong>Resposta:</strong> “Não. São evidências contextuais. A construção física ou a discussão podem gerar inatividade legítima, e uma imagem não revela estado mental. Esses sinais servem para auditoria, amostragem de casos e triangulação com critérios explícitos.”</p>
+<h3 id="como-voces-evitam-pseudorreplicacao">“Como vocês evitam pseudorreplicação?”</h3>
+<p><strong>Resposta:</strong> “Os dados mantêm IDs de participante, dupla, sessão, oficina e escola. A análise usa modelos compatíveis com medidas repetidas e agrupamento, em vez de tratar cada linha como observação independente.”</p>
+<h3 id="podem-dizer-que-a-oficina-causou-melhora">“Podem dizer que a oficina causou melhora?”</h3>
+<p><strong>Resposta:</strong> “Não com o desenho atual. Podemos relatar mudança imediata e associações. Uma afirmação causal exigiria um comparador, randomização, implantação escalonada ou outra estratégia de identificação previamente planejada.”</p>
+<h3 id="o-painel-ja-mostra-resultados-reais">“O painel já mostra resultados reais?”</h3>
+<p><strong>Resposta:</strong> “Não. O painel atual é um protótipo visual claramente marcado como simulado. Os resultados científicos somente serão apresentados após conexão autenticada, congelamento do protocolo, coleta aprovada e análise reprodutível.”</p>
+<h3 id="a-coleta-offline-garante-zero-perda">“A coleta offline garante zero perda?”</h3>
+<p><strong>Resposta:</strong> “Ela reduz o risco por meio de fila local e reenvio idempotente. ‘Zero perda’ é uma hipótese técnica a verificar em homologação, não uma garantia a priori. O próprio sistema permite quantificar sucesso, atraso e falhas de sincronização.”</p>
+<h3 id="como-fica-a-etica-com-criancas">“Como fica a ética com crianças?”</h3>
+<p><strong>Resposta:</strong> “A participação científica depende dos procedimentos institucionais aplicáveis, consentimento do responsável e assentimento da criança. Recusa não altera a participação pedagógica. Usamos pseudonimização e minimização, mas ainda precisamos formalizar controlador, acesso, retenção, descarte e necessidade das imagens.”</p>
+<hr>
+<h2 id="sec-13-roteiro-de-defesa-oral-em-dois-minutos">13. Roteiro de defesa oral em dois minutos</h2>
+<blockquote>
+<p>“Nosso problema não é falta de atividades de robótica; é falta de evidência padronizada sobre o que acontece dentro delas. Uma missão concluída mostra o produto, mas não mostra quando a dupla teve dificuldade, quanto apoio recebeu, se ambos participaram nem com que qualidade os dados foram coletados.</p>
+<p>O PulseLab transforma cada oficina em uma sessão reconstruível. Antes da atividade, registra contexto, experiência e autoeficácia. Nos minutos 20 e 40, cada participante responde individualmente sobre esforço e progresso; no minuto 40, também sobre colaboração. O sistema registra papel, troca de funções, pedido de ajuda, tempo e qualidade da coleta. No encerramento, mede compreensão percebida, afetos e intenção de retorno. Cada evento leva uma versão e um hash do protocolo, o que permite comparar apenas sessões metodologicamente equivalentes.</p>
+<p>Nosso diferencial não é prometer que telemetria lê a mente da criança. É separar medidas diretas, indicadores derivados e evidências auxiliares, respeitando seus limites. Com modelos ordinais e multinível, poderemos estimar mudanças dentro da sessão e associações entre colaboração, ajuda e desempenho, sem fingir independência entre crianças da mesma dupla.</p>
+<p>Hoje o sistema já sustenta um piloto de processo e viabilidade. Para medir aprendizagem imediata, vamos integrar a rubrica do instrutor e itens pré/pós específicos; para uma coleta definitiva, vamos validar o instrumento, implantar autenticação de dispositivos e submeter o protocolo à avaliação ética aplicável. Assim, o PulseLab não substitui o método científico: ele torna o método executável, escalável e auditável.” </p>
+</blockquote>
+<hr>
+<h2 id="sec-14-plano-de-maturacao-antes-da-coleta-definitiva">14. Plano de maturação antes da coleta definitiva</h2>
+<h3 id="prioridade-critica">Prioridade crítica</h3>
+<ol>
+<li>integrar <code>Show-WpfInstructorRubric</code> ao fluxo real do agente Windows;</li>
+<li>persistir a rubrica uma única vez por dupla ou garantir deduplicação analítica;</li>
+<li>definir objetivos pedagógicos e itens pré/pós por <code>activity_id</code>;</li>
+<li>revisar a view para distinguir presença de registro e resposta concluída;</li>
+<li>conectar um painel real por backend autenticado, mantendo os dados simulados fora da apresentação de resultados;</li>
+<li>provisionar identidade e credencial revogável por instalação;</li>
+<li>definir controlador, perfis de acesso, retenção, descarte e necessidade dos screenshots.</li>
+</ol>
+<h3 id="validacao">Validação</h3>
+<ol start="8">
+<li>realizar revisão de conteúdo por especialistas;</li>
+<li>conduzir entrevistas cognitivas com a faixa etária atendida;</li>
+<li>executar piloto de usabilidade e viabilidade;</li>
+<li>testar concordância da rubrica entre avaliadores;</li>
+<li>estimar parâmetros para cálculo amostral;</li>
+<li>congelar instrumento e plano de análise;</li>
+<li>registrar previamente hipóteses, exclusões e desfecho primário.</li>
+</ol>
+<h3 id="coleta-e-comunicacao">Coleta e comunicação</h3>
+<ol start="15">
+<li>separar ambientes e bases de teste e pesquisa;</li>
+<li>produzir relatório de fluxo e qualidade antes dos resultados educacionais;</li>
+<li>apresentar estimativas, intervalos de confiança e limitações;</li>
+<li>divulgar somente resultados agregados que não permitam reidentificação.</li>
+</ol>
+<hr>
+<h2 id="sec-15-consideracoes-eticas-e-protecao-de-dados">15. Considerações éticas e proteção de dados</h2>
+<p>A LGPD determina que o tratamento de dados de crianças e adolescentes observe seu melhor interesse e estabelece requisitos específicos de transparência e consentimento no tratamento de dados de crianças (BRASIL, 2018, art. 14). A Resolução CNS nº 510/2016 dispõe sobre pesquisas em Ciências Humanas e Sociais com dados diretamente obtidos de participantes e enfatiza dignidade, autonomia, privacidade e prevenção de danos (BRASIL, 2016).</p>
+<p>Para o projeto, isso implica:</p>
+<ul>
+<li>avaliação pelo sistema CEP/Conep quando aplicável, sob responsabilidade institucional;</li>
+<li>consentimento do responsável e assentimento em linguagem adequada;</li>
+<li>liberdade de recusa sem prejuízo à oficina;</li>
+<li>justificativa de necessidade e proporcionalidade para screenshots;</li>
+<li>informação clara sobre dados, finalidade, acesso e retenção;</li>
+<li>proteção do cache local e do bucket;</li>
+<li>plano de resposta a incidentes;</li>
+<li>agregação de resultados para impedir reidentificação de criança, turma ou escola;</li>
+<li>vedação de decisões punitivas ou rótulos individuais baseados em sinais experimentais.</li>
+</ul>
+<p>A pseudonimização reduz risco, mas os eventos contextuais e as imagens continuam potencialmente vinculáveis a uma sessão. Portanto, não devem ser descritos como anônimos sem uma avaliação específica de reidentificação.</p>
+<hr>
+<h2 id="sec-16-conclusao">16. Conclusão</h2>
+<p>O PulseLab agrega valor à pesquisa em três níveis. No nível <strong>metodológico</strong>, padroniza instrumentos, momentos e unidades de análise. No nível <strong>analítico</strong>, produz variáveis capazes de descrever trajetórias intrassessão e testar associações com modelos adequados. No nível <strong>operacional</strong>, quantifica a qualidade da própria coleta por completude, atraso, recusa, timeout, alertas e rastreabilidade de versão.</p>
+<p>Sua contribuição científica mais defensável é funcionar como <strong>infraestrutura de observação distribuída e controle de qualidade para oficinas de robótica educacional</strong>. O sistema não transforma qualquer registro em evidência de aprendizagem; ao contrário, cria condições para distinguir perfil, processo, resultado e qualidade. Essa arquitetura permite que conclusões futuras sejam apoiadas por números cujo significado, origem e limite interpretativo estejam documentados.</p>
+<p>No estado atual, o PulseLab está pronto para um piloto supervisionado de viabilidade e processo. A integração da rubrica, o desenvolvimento do pré/pós de conhecimento, a validação do instrumento, a governança ética e o painel real são condições para avançar de protótipo de pesquisa a sistema de mensuração acadêmica consolidado.</p>
+<hr>
+<h2 id="referencias">Referências</h2>
+<p>AMERICAN EDUCATIONAL RESEARCH ASSOCIATION; AMERICAN PSYCHOLOGICAL ASSOCIATION; NATIONAL COUNCIL ON MEASUREMENT IN EDUCATION. <strong>Standards for educational and psychological testing</strong>. Washington, DC: AERA, 2014. Disponível em: <a href="https://www.testingstandards.net/uploads/7/6/6/4/76643089/standards_2014edition.pdf">https://www.testingstandards.net/uploads/7/6/6/4/76643089/standards_2014edition.pdf</a>. Acesso em: 29 jul. 2026.</p>
+<p>BENITTI, Fabiane Barreto Vavassori. Exploring the educational potential of robotics in schools: a systematic review. <strong>Computers &amp; Education</strong>, v. 58, n. 3, p. 978–988, 2012. DOI: <a href="https://doi.org/10.1016/j.compedu.2011.10.006">https://doi.org/10.1016/j.compedu.2011.10.006</a>.</p>
+<p>BLIKSTEIN, Paulo. Multimodal learning analytics. In: <strong>Proceedings of the Third International Conference on Learning Analytics and Knowledge — LAK ’13</strong>. New York: ACM, 2013. p. 102–106. DOI: <a href="https://doi.org/10.1145/2460296.2460316">https://doi.org/10.1145/2460296.2460316</a>.</p>
+<p>BRASIL. Conselho Nacional de Saúde. <strong>Resolução nº 510, de 7 de abril de 2016</strong>. Dispõe sobre as normas aplicáveis a pesquisas em Ciências Humanas e Sociais. Disponível em: <a href="https://www.gov.br/conselho-nacional-de-saude/pt-br/atos-normativos/resolucoes/2016/resolucao-no-510.pdf">https://www.gov.br/conselho-nacional-de-saude/pt-br/atos-normativos/resolucoes/2016/resolucao-no-510.pdf</a>. Acesso em: 29 jul. 2026.</p>
+<p>BRASIL. <strong>Lei nº 13.709, de 14 de agosto de 2018</strong>. Lei Geral de Proteção de Dados Pessoais. Disponível em: <a href="https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm">https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm</a>. Acesso em: 29 jul. 2026.</p>
+<p>PAAS, Fred et al. Cognitive load measurement as a means to advance cognitive load theory. <strong>Educational Psychologist</strong>, v. 38, n. 1, p. 63–71, 2003. DOI: <a href="https://doi.org/10.1207/S15326985EP3801_8">https://doi.org/10.1207/S15326985EP3801_8</a>.</p>
+<p>SCHUESSLER, Katrin; FISCHER, Vanessa; WALPUSKI, Maik. Investigating construct validity of cognitive load measurement using single-item subjective rating scales. <strong>Instructional Science</strong>, v. 53, p. 71–97, 2025. Publicação on-line em 2024. DOI: <a href="https://doi.org/10.1007/s11251-024-09692-6">https://doi.org/10.1007/s11251-024-09692-6</a>.</p>
+<p>SOCIETY FOR LEARNING ANALYTICS RESEARCH. <strong>What is learning analytics?</strong> 2025. Disponível em: <a href="https://www.solaresearch.org/about/what-is-learning-analytics/">https://www.solaresearch.org/about/what-is-learning-analytics/</a>. Acesso em: 29 jul. 2026.</p>
+<p>VAN GOG, Tamara et al. Timing and frequency of mental effort measurement: evidence in favour of repeated measures. <strong>Applied Cognitive Psychology</strong>, v. 26, n. 6, p. 833–839, 2012. DOI: <a href="https://doi.org/10.1002/acp.2883">https://doi.org/10.1002/acp.2883</a>.</p>
+<p>VON ELM, Erik et al. The Strengthening the Reporting of Observational Studies in Epidemiology (STROBE) statement: guidelines for reporting observational studies. <strong>The Lancet</strong>, v. 370, n. 9596, p. 1453–1457, 2007. DOI: <a href="https://doi.org/10.1016/S0140-6736(07)61602-X">https://doi.org/10.1016/S0140-6736(07)61602-X</a>.</p>
+
+    </main>
+  </div>
+
+  <button class="back-to-top" id="back-to-top" type="button" aria-label="Voltar ao início" title="Voltar ao início">↑</button>
+
+  <footer class="document-footer">
+    Vinicius Ferreira Amim · Universidade Federal do Vale do São Francisco · Setor de Pesquisa da FADEX — Projeto Robótica Educacional
+  </footer>
+
+  <script>
+    (() => {
+      const progress = document.getElementById("reading-progress");
+      const toTop = document.getElementById("back-to-top");
+      const tocLinks = [...document.querySelectorAll("#toc-nav a")];
+      const sections = tocLinks
+        .map((link) => document.getElementById(link.getAttribute("href").slice(1)))
+        .filter(Boolean);
+
+      const updateScroll = () => {
+        const root = document.documentElement;
+        const available = root.scrollHeight - root.clientHeight;
+        const ratio = available > 0 ? root.scrollTop / available : 0;
+        progress.style.width = `${Math.min(100, Math.max(0, ratio * 100))}%`;
+        toTop.classList.toggle("is-visible", root.scrollTop > 700);
+
+        let active = sections[0];
+        for (const section of sections) {
+          if (section.getBoundingClientRect().top <= 120) active = section;
+        }
+        tocLinks.forEach((link) => {
+          link.classList.toggle("is-active", active && link.getAttribute("href") === `#${active.id}`);
+        });
+      };
+
+      window.addEventListener("scroll", updateScroll, { passive: true });
+      window.addEventListener("resize", updateScroll);
+      toTop.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+      updateScroll();
+    })();
+  </script>
+</body>
+</html>

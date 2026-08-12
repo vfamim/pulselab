@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     site_id                    text,
     participant_id             text         NOT NULL,
     participant_role           text         NOT NULL
-        CHECK (participant_role IN ('computer', 'assembly')),
+        CHECK (participant_role IN ('computer', 'assembly', 'member_3', 'member_4', 'individual')),
     event_type                 text         NOT NULL
         CHECK (event_type IN ('pre', 'checkpoint', 'post')),
     response_status            text         NOT NULL DEFAULT 'completed'
@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     workshop_code              text         NOT NULL,
     class_code                 text         NOT NULL,
     grade_band                 text,
+    group_size                 integer      CHECK (group_size IS NULL OR group_size >= 1),
     activity_id                text         NOT NULL,
     computer_id                text         NOT NULL,
     protocol_version           text,
@@ -45,12 +46,14 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     activity_stage             text,
 
     -- Pré-oficina
+    student_age                integer      CHECK (student_age IS NULL OR (student_age BETWEEN 5 AND 25)),
     prior_robotics             smallint     CHECK (prior_robotics BETWEEN 1 AND 4),
     self_efficacy_pre          smallint     CHECK (self_efficacy_pre BETWEEN 1 AND 4),
     knowledge_score            numeric,
     knowledge_answers          jsonb,
 
     -- Checkpoints intrassessão
+    self_reported_role         text         CHECK (self_reported_role IS NULL OR self_reported_role IN ('computer', 'assembly', 'both', 'testing')),
     mental_effort              smallint     CHECK (mental_effort BETWEEN 1 AND 4),
     progress_state             text         CHECK (progress_state IN (
         'progressing_independently',
@@ -230,7 +233,7 @@ CREATE TABLE IF NOT EXISTS public.research_session_events (
     interval_mark              integer      CHECK (interval_mark IS NULL OR interval_mark >= 0),
     participant_id             text,
     participant_role           text
-        CHECK (participant_role IS NULL OR participant_role IN ('computer', 'assembly')),
+        CHECK (participant_role IS NULL OR participant_role IN ('computer', 'assembly', 'member_3', 'member_4', 'individual')),
     activity_stage             text,
 
     elapsed_ms                 bigint       CHECK (elapsed_ms IS NULL OR elapsed_ms >= 0),
@@ -394,3 +397,83 @@ COMMENT ON COLUMN public.research_events.received_at IS
 
 COMMENT ON COLUMN public.research_events.screenshot_path IS
     'Caminho do objeto em bucket privado. Nunca é uma URL pública.';
+
+-- =============================================================================
+-- AVALIAÇÃO DE CAMPO DO INSTRUTOR (PORTAL DO INSTRUTOR /instrutor/)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.instructor_evaluations (
+    id                         uuid         DEFAULT gen_random_uuid() PRIMARY KEY,
+    instructor_email           text         NOT NULL,
+    submitted_at               timestamptz  NOT NULL DEFAULT timezone('utc'::text, now()),
+    workshop_code              text         NOT NULL,
+    class_code                 text         NOT NULL,
+    site_id                    text,
+    mission_performance        smallint     NOT NULL CHECK (mission_performance BETWEEN 0 AND 3),
+    instructor_interventions   smallint     NOT NULL CHECK (instructor_interventions >= 0),
+    primary_issue              text         NOT NULL CHECK (primary_issue IN (
+        'none', 'assembly', 'logic', 'sensor', 'technical', 'collaboration', 'other'
+    )),
+    notes                      jsonb        NOT NULL DEFAULT '{}'::jsonb,
+    created_at                 timestamptz  NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_instructor_evaluations_email
+    ON public.instructor_evaluations (instructor_email, submitted_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_instructor_evaluations_workshop
+    ON public.instructor_evaluations (workshop_code, submitted_at DESC);
+
+ALTER TABLE public.instructor_evaluations ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.instructor_evaluations FROM anon, authenticated;
+GRANT INSERT ON TABLE public.instructor_evaluations TO authenticated, anon;
+GRANT SELECT ON TABLE public.instructor_evaluations TO authenticated;
+
+DROP POLICY IF EXISTS "allow_insert_instructor_evaluations" ON public.instructor_evaluations;
+CREATE POLICY "allow_insert_instructor_evaluations"
+    ON public.instructor_evaluations
+    FOR INSERT
+    TO authenticated, anon
+    WITH CHECK (true);
+
+COMMENT ON TABLE public.instructor_evaluations IS
+    'Avaliações de campo preenchidas de forma independente pelos instrutores no Portal do Instrutor (/instrutor/).';
+
+-- =============================================================================
+-- LISTA DE INSTRUTORES AUTORIZADOS (WHITELIST DE ACESSO EXCLUSIVO)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS public.authorized_instructors (
+    id                         uuid         DEFAULT gen_random_uuid() PRIMARY KEY,
+    email                      text         NOT NULL UNIQUE,
+    full_name                  text,
+    role_description           text         DEFAULT 'Instrutor de Robótica',
+    is_active                  boolean      NOT NULL DEFAULT true,
+    added_at                   timestamptz  NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+CREATE INDEX IF NOT EXISTS idx_authorized_instructors_email
+    ON public.authorized_instructors (email);
+
+ALTER TABLE public.authorized_instructors ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.authorized_instructors FROM anon, authenticated;
+GRANT SELECT ON TABLE public.authorized_instructors TO authenticated;
+
+DROP POLICY IF EXISTS "allow_select_authorized_instructors" ON public.authorized_instructors;
+CREATE POLICY "allow_select_authorized_instructors"
+    ON public.authorized_instructors
+    FOR SELECT
+    TO authenticated
+    USING (is_active = true);
+
+COMMENT ON TABLE public.authorized_instructors IS
+    'Lista seleta e autorizada de instrutores que possuem acesso exclusivo ao portal de avaliacao.';
+
+-- Cadastrar o administrador inicial Vinicius Famim (vfamim@gmail.com)
+INSERT INTO public.authorized_instructors (email, full_name, role_description, is_active)
+VALUES ('vfamim@gmail.com', 'Vinicius Famim', 'Coordenador / Administrador PulseLab', true)
+ON CONFLICT (email) DO UPDATE SET is_active = true;
+
+

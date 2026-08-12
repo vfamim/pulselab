@@ -1,0 +1,43 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "agent/**",
+      "config/**",
+      "dashboard/**",
+      "docs/**",
+      "installer/**",
+      "schema/**",
+      "tests/**",
+      "web/**",
+      "*.ps1",
+      "*.bat",
+      "*.py",
+      "*.sql"
+    ],
+    "headers": [
+      {
+        "source": "**/*.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/simulador/**",
+        "destination": "/simulador/index.html"
+      },
+      {
+        "source": "/instrutor/**",
+        "destination": "/instrutor/index.html"
+      }
+    ]
+  }
+}

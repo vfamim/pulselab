@@ -18,16 +18,19 @@ const DEFAULT_CONTEXT = {
   workshop_code: "OFICINA-DEMO-001",
   class_code: "TURMA-DEMO-A",
   grade_band: "8º e 9º ano",
+  group_size: 2,
   activity_id: "atividade-01-spike",
   authorization_verified: false
 };
 
 const PRE_DEFAULT = {
+  student_age: null,
   prior_robotics: null,
   self_efficacy_pre: null
 };
 
 const CHECKPOINT_DEFAULT = {
+  self_reported_role: null,
   mental_effort: null,
   progress_state: "",
   collaboration: null
@@ -78,19 +81,12 @@ const FLOW_STEPS = [
 
 const SCREEN_STEP = {
   context: 1,
-  assent_a: 2,
-  assent_b: 2,
-  declined: 2,
-  pre_a: 3,
-  pre_b: 3,
+  assent_a: 2, assent_b: 2, assent_c: 2, assent_d: 2, declined: 2,
+  pre_a: 3, pre_b: 3, pre_c: 3, pre_d: 3,
   activity: 4,
-  checkpoint_a: 4,
-  checkpoint_b: 4,
-  role_swap: 4,
-  activity_end: 5,
-  rubric: 5,
-  post_a: 5,
-  post_b: 5,
+  checkpoint_a: 4, checkpoint_b: 4, checkpoint_c: 4, checkpoint_d: 4, role_swap: 4,
+  activity_end: 5, rubric: 5,
+  post_a: 5, post_b: 5, post_c: 5, post_d: 5,
   summary: 6
 };
 
@@ -168,28 +164,28 @@ function FormShell({ eyebrow, title, description, children, footer, compact = fa
   );
 }
 
-function ParticipantBadge({ participantKey, role }) {
+function ParticipantBadge({ participantKey }) {
+  const p = PARTICIPANTS[participantKey] || { label: `Aluno ${participantKey}` };
   return (
     <div className="participant-badge">
       <span className="participant-badge__avatar">{participantKey}</span>
       <span>
-        <strong>{PARTICIPANTS[participantKey].label}</strong>
-        <small>
-          {roleIcon(role)} {roleLabel(role)}
-        </small>
+        <strong>{p.label}</strong>
       </span>
     </div>
   );
 }
 
-function ScaleQuestion({ title, description, value, onChange, labels }) {
+function ScaleQuestion({ title, description, value, onChange, labels, values, icons }) {
+  const columns = labels.length === 3 ? 3 : 4;
   return (
     <fieldset className="question-block">
       <legend>{title}</legend>
       {description ? <p>{description}</p> : null}
-      <div className="scale-grid">
+      <div className="scale-grid" style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
         {labels.map((label, index) => {
-          const optionValue = index + 1;
+          const optionValue = values ? values[index] : index + 1;
+          const icon = icons ? icons[index] : null;
           return (
             <button
               key={label}
@@ -198,7 +194,7 @@ function ScaleQuestion({ title, description, value, onChange, labels }) {
               onClick={() => onChange(optionValue)}
               aria-pressed={value === optionValue}
             >
-              <span>{optionValue}</span>
+              <span>{icon || optionValue}</span>
               <small>{label}</small>
             </button>
           );
@@ -251,6 +247,15 @@ export default function AgentSimulatorPage() {
     setSessionId(createUuid());
     setDyadId(createUuid());
     setStartedAt(Date.now());
+
+    const storedContextKey = "pulselab_stored_context";
+    const storedContextRaw = window.localStorage.getItem(storedContextKey);
+    if (storedContextRaw) {
+      try {
+        const parsed = JSON.parse(storedContextRaw);
+        setContext((current) => ({ ...current, ...parsed }));
+      } catch (e) {}
+    }
   }, []);
 
   useEffect(() => {
@@ -286,7 +291,21 @@ export default function AgentSimulatorPage() {
   }, [eventFilter, responses, timeline]);
 
   const activeStep = SCREEN_STEP[screen] || 1;
-  const participantKey = screen.endsWith("_b") ? "B" : "A";
+  const participantMatch = screen.match(/_(a|b|c|d)$/);
+  const participantKey = participantMatch ? participantMatch[1].toUpperCase() : "A";
+
+  const activeParticipants = useMemo(() => {
+    const count = Math.max(1, Math.min(4, Number(context.group_size) || 2));
+    return ["A", "B", "C", "D"].slice(0, count);
+  }, [context.group_size]);
+
+  function getNextParticipant(currentKey) {
+    const index = activeParticipants.indexOf(currentKey);
+    if (index >= 0 && index < activeParticipants.length - 1) {
+      return activeParticipants[index + 1];
+    }
+    return null;
+  }
 
   function flash(message) {
     setToast(message);
@@ -376,21 +395,23 @@ export default function AgentSimulatorPage() {
       flash("Preencha os códigos e confirme a verificação das autorizações.");
       return;
     }
+    try {
+      window.localStorage.setItem("pulselab_stored_context", JSON.stringify(context));
+    } catch (e) {}
     setScreen("assent_a");
   }
 
   function acceptAssent(participant) {
-    if (participant === "A") {
-      setAssentA(true);
-      setScreen("assent_b");
+    const nextKey = getNextParticipant(participant);
+    if (nextKey) {
+      setScreen(`assent_${nextKey.toLowerCase()}`);
       return;
     }
 
-    if (!assentA) return;
     emitTimeline("session_started", {
       elapsedMs: 0,
       details: {
-        participant_count: 2,
+        participant_count: activeParticipants.length,
         authorization_verified: true,
         assent_completed: true,
         expected_checkpoints: [20, 40],
@@ -411,9 +432,9 @@ export default function AgentSimulatorPage() {
     const participant = participantKey;
     if (
       responseStatus === "completed" &&
-      (!preAnswers.prior_robotics || !preAnswers.self_efficacy_pre)
+      (!preAnswers.prior_robotics || !preAnswers.self_efficacy_pre || !preAnswers.student_age)
     ) {
-      flash("Escolha uma opção em cada pergunta.");
+      flash("Escolha uma opção em cada pergunta (incluindo sua idade).");
       return;
     }
     emitResponse(
@@ -424,8 +445,9 @@ export default function AgentSimulatorPage() {
     );
     setPreAnswers(PRE_DEFAULT);
 
-    if (participant === "A") {
-      setScreen("pre_b");
+    const nextKey = getNextParticipant(participant);
+    if (nextKey) {
+      setScreen(`pre_${nextKey.toLowerCase()}`);
       return;
     }
 
@@ -556,7 +578,8 @@ export default function AgentSimulatorPage() {
     const collaborationRequired = currentMark === 40;
     if (
       responseStatus === "completed" &&
-      (!checkpointAnswers.mental_effort ||
+      (!checkpointAnswers.self_reported_role ||
+        !checkpointAnswers.mental_effort ||
         !checkpointAnswers.progress_state ||
         (collaborationRequired && !checkpointAnswers.collaboration))
     ) {
@@ -636,8 +659,9 @@ export default function AgentSimulatorPage() {
     }
 
     setCheckpointAnswers(CHECKPOINT_DEFAULT);
-    if (participant === "A") {
-      setScreen("checkpoint_b");
+    const nextKey = getNextParticipant(participant);
+    if (nextKey) {
+      setScreen(`checkpoint_${nextKey.toLowerCase()}`);
       return;
     }
 
@@ -656,9 +680,10 @@ export default function AgentSimulatorPage() {
     });
 
     if (currentMark === 20) {
-      setScreen("role_swap");
+      setCurrentMark(40);
+      setScreen("activity");
     } else {
-      setScreen("activity_end");
+      setScreen("post_a");
     }
   }
 
@@ -786,8 +811,9 @@ export default function AgentSimulatorPage() {
     );
     setPostAnswers(POST_DEFAULT);
 
-    if (participant === "A") {
-      setScreen("post_b");
+    const nextKey = getNextParticipant(participant);
+    if (nextKey) {
+      setScreen(`post_${nextKey.toLowerCase()}`);
       return;
     }
 
@@ -807,7 +833,7 @@ export default function AgentSimulatorPage() {
         simulator: true
       }
     });
-    setScreen("summary");
+    setScreen("finished");
   }
 
   function syncQueue() {
@@ -973,6 +999,18 @@ export default function AgentSimulatorPage() {
               }
             />
           </label>
+          <label>
+            <span>Integrantes por grupo</span>
+            <input
+              type="number"
+              min="1"
+              max="4"
+              value={context.group_size ?? 2}
+              onChange={(event) =>
+                setContext({ ...context, group_size: Math.max(1, Number(event.target.value)) })
+              }
+            />
+          </label>
           <label className="form-grid__wide">
             <span>Código da atividade</span>
             <input
@@ -1014,7 +1052,7 @@ export default function AgentSimulatorPage() {
         description="A escolha deve ser feita individualmente, sem pressão da equipe ou da outra pessoa da dupla."
         compact
       >
-        <ParticipantBadge participantKey={participant} role={roles[participant]} />
+        <ParticipantBadge participantKey={participant} />
         <div className="assent-copy">
           <div className="assent-copy__icon">?</div>
           <div>
@@ -1065,7 +1103,28 @@ export default function AgentSimulatorPage() {
           </ActionRow>
         }
       >
-        <ParticipantBadge participantKey={participant} role={roles[participant]} />
+        <ParticipantBadge participantKey={participant} />
+        <ScaleQuestion
+          title="Qual a sua idade?"
+          value={preAnswers.student_age}
+          onChange={(value) =>
+            setPreAnswers((current) => ({
+              ...current,
+              student_age: value
+            }))
+          }
+          labels={[
+            "8 anos",
+            "9 anos",
+            "10 anos",
+            "11 anos",
+            "12 anos",
+            "13 anos",
+            "14 anos",
+            "15+ anos"
+          ]}
+          values={[8, 9, 10, 11, 12, 13, 14, 15]}
+        />
         <ScaleQuestion
           title="Antes de hoje, você já tinha montado ou programado um robô?"
           value={preAnswers.prior_robotics}
@@ -1158,12 +1217,11 @@ export default function AgentSimulatorPage() {
               <i /> Janela SPIKE{" "}
               {scenario === "missing_spike" ? "não detectada" : "detectada"}
             </span>
-            <span>
-              <i /> Participante A: {roleLabel(roles.A)}
-            </span>
-            <span>
-              <i /> Participante B: {roleLabel(roles.B)}
-            </span>
+            {activeParticipants.map((key) => (
+              <span key={key}>
+                <i /> Participante {key}: {roleLabel(roles[key])}
+              </span>
+            ))}
           </div>
         </div>
         <div className="simulation-note">
@@ -1202,12 +1260,33 @@ export default function AgentSimulatorPage() {
         }
       >
         <div className="checkpoint-meta">
-          <ParticipantBadge participantKey={participant} role={roles[participant]} />
+          <ParticipantBadge participantKey={participant} />
           <span className="time-chip">
             alvo {currentMark}:00 · captura{" "}
             {formatElapsed(checkpointEvidence?.captureMs || 0)}
           </span>
         </div>
+        <ScaleQuestion
+          title="O que você mais fez desde o último checkpoint?"
+          value={checkpointAnswers.self_reported_role}
+          onChange={(value) =>
+            setCheckpointAnswers((current) => ({
+              ...current,
+              self_reported_role: value
+            }))
+          }
+          labels={[
+            "Computador / Programação",
+            "Montagem das peças",
+            "Ambos / Fizemos juntos"
+          ]}
+          values={["computer", "assembly", "both"]}
+          icons={[
+            <svg key="comp" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>,
+            <svg key="assy" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>,
+            <svg key="both" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          ]}
+        />
         <ScaleQuestion
           title="Quanto você precisou pensar para fazer a parte em que estava agora?"
           value={checkpointAnswers.mental_effort}
@@ -1445,7 +1524,7 @@ export default function AgentSimulatorPage() {
           </ActionRow>
         }
       >
-        <ParticipantBadge participantKey={participant} role={roles[participant]} />
+        <ParticipantBadge participantKey={participant} />
         <ScaleQuestion
           title="Eu conseguiria explicar para outra pessoa como fizemos o robô funcionar."
           value={postAnswers.post_understanding}
@@ -1584,64 +1663,74 @@ export default function AgentSimulatorPage() {
     );
   }
 
+  function FinishedScreen() {
+    return (
+      <FormShell
+        eyebrow="Oficina Concluída"
+        title="Muito obrigado por sua participação! 🚀"
+        description="A sua participação foi registrada com sucesso. A atividade de robótica pode continuar normalmente."
+        compact
+      >
+        <div className="decline-message">
+          <span style={{ background: "rgba(0, 167, 160, 0.15)", color: "var(--aqua)" }}>✓</span>
+          <div>
+            <h2>Todas as etapas foram finalizadas</h2>
+            <p>
+              As respostas foram salvas com sucesso no projeto PulseLab.
+            </p>
+          </div>
+        </div>
+        <ActionRow>
+          <button className="button button--ghost" onClick={() => setScreen("summary")}>
+            Ver Resumo Técnico
+          </button>
+          <button className="button button--primary" onClick={resetSimulation}>
+            Nova Simulação
+          </button>
+        </ActionRow>
+      </FormShell>
+    );
+  }
+
   function renderScreen() {
-    switch (screen) {
-      case "context":
-        return <ContextScreen />;
-      case "assent_a":
-        return <AssentScreen participant="A" />;
-      case "assent_b":
-        return <AssentScreen participant="B" />;
-      case "declined":
-        return (
-          <FormShell
-            eyebrow="Coleta encerrada"
-            title="A oficina pode continuar"
-            description="Como uma pessoa da dupla não quis participar, nenhum evento de pesquisa foi produzido."
-            compact
-          >
-            <div className="decline-message">
-              <span>♡</span>
-              <div>
-                <h2>Escolha respeitada</h2>
-                <p>
-                  A dupla continua a atividade normalmente, sem prejuízo de nota,
-                  atendimento ou participação.
-                </p>
-              </div>
+    if (screen === "context") return <ContextScreen />;
+    if (screen === "declined") {
+      return (
+        <FormShell
+          eyebrow="Coleta encerrada"
+          title="A oficina pode continuar"
+          description="Como um integrante do grupo não quis participar, nenhum evento de pesquisa foi produzido."
+          compact
+        >
+          <div className="decline-message">
+            <span>♡</span>
+            <div>
+              <h2>Escolha respeitada</h2>
+              <p>
+                O grupo continua a atividade normalmente, sem prejuízo de nota,
+                atendimento ou participação.
+              </p>
             </div>
-            <ActionRow>
-              <button className="button button--primary" onClick={resetSimulation}>
-                Preparar outra simulação
-              </button>
-            </ActionRow>
-          </FormShell>
-        );
-      case "pre_a":
-        return <PreScreen participant="A" />;
-      case "pre_b":
-        return <PreScreen participant="B" />;
-      case "activity":
-        return <SpikeWorkspace />;
-      case "checkpoint_a":
-        return <CheckpointScreen participant="A" />;
-      case "checkpoint_b":
-        return <CheckpointScreen participant="B" />;
-      case "role_swap":
-        return <RoleSwapScreen />;
-      case "activity_end":
-        return <ActivityEndScreen />;
-      case "rubric":
-        return <RubricScreen />;
-      case "post_a":
-        return <PostScreen participant="A" />;
-      case "post_b":
-        return <PostScreen participant="B" />;
-      case "summary":
-        return <SummaryScreen />;
-      default:
-        return <ContextScreen />;
+          </div>
+          <ActionRow>
+            <button className="button button--primary" onClick={resetSimulation}>
+              Preparar outra simulação
+            </button>
+          </ActionRow>
+        </FormShell>
+      );
     }
+    if (screen === "finished") return <FinishedScreen />;
+    if (screen.startsWith("assent_")) return <AssentScreen participant={participantKey} />;
+    if (screen.startsWith("pre_")) return <PreScreen participant={participantKey} />;
+    if (screen === "activity") return <SpikeWorkspace />;
+    if (screen.startsWith("checkpoint_")) return <CheckpointScreen participant={participantKey} />;
+    if (screen === "role_swap") return <RoleSwapScreen />;
+    if (screen === "activity_end") return <ActivityEndScreen />;
+    if (screen === "rubric") return <RubricScreen />;
+    if (screen.startsWith("post_")) return <PostScreen participant={participantKey} />;
+    if (screen === "summary") return <SummaryScreen />;
+    return <ContextScreen />;
   }
 
   return (

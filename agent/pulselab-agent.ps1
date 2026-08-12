@@ -158,6 +158,10 @@ function Save-InstallationProfile {
         site_id = $script:SiteId
         regional_hub = $script:RegionalHub
         school_code = $script:SchoolCode
+        workshop_code = $script:WorkshopCode
+        class_code = $script:ClassCode
+        activity_id = $script:ActivityId
+        group_size = $script:GroupSize
         updated_at = [DateTimeOffset]::Now.ToString("o")
     }
     $profile | ConvertTo-Json -Depth 4 | Set-Content $script:INSTALLATION_FILE -Encoding UTF8 -Force
@@ -189,6 +193,18 @@ function Initialize-Installation {
         $script:SiteId = [string]$profile.site_id
         $script:RegionalHub = [string]$profile.regional_hub
         $script:SchoolCode = [string]$profile.school_code
+        if ($profile.PSObject.Properties.Name -contains "workshop_code" -and -not [string]::IsNullOrWhiteSpace([string]$profile.workshop_code)) {
+            $script:WorkshopCode = [string]$profile.workshop_code
+        }
+        if ($profile.PSObject.Properties.Name -contains "class_code" -and -not [string]::IsNullOrWhiteSpace([string]$profile.class_code)) {
+            $script:ClassCode = [string]$profile.class_code
+        }
+        if ($profile.PSObject.Properties.Name -contains "activity_id" -and -not [string]::IsNullOrWhiteSpace([string]$profile.activity_id)) {
+            $script:ActivityId = [string]$profile.activity_id
+        }
+        if ($profile.PSObject.Properties.Name -contains "group_size" -and $profile.group_size -gt 0) {
+            $script:GroupSize = [int]$profile.group_size
+        }
     } else {
         $script:InstallationId = [Guid]::NewGuid().ToString()
         $script:SiteId = if ($local -and $local.PSObject.Properties.Name -contains "site_id") {
@@ -198,10 +214,14 @@ function Initialize-Installation {
         }
         $script:RegionalHub = if ($local) { [string]$local.regional_hub } else { "CONFIGURE_REGIONAL" }
         $script:SchoolCode = if ($local) { [string]$local.school_code } else { "CONFIGURE_ESCOLA" }
+        $script:WorkshopCode = if ($local -and $local.PSObject.Properties.Name -contains "workshop_code") { [string]$local.workshop_code } else { "CONFIGURE_OFICINA" }
+        $script:ClassCode = if ($local -and $local.PSObject.Properties.Name -contains "class_code") { [string]$local.class_code } else { "CONFIGURE_TURMA" }
+        $script:ActivityId = if ($local -and $local.PSObject.Properties.Name -contains "activity_id") { [string]$local.activity_id } else { "atividade-01-spike" }
+        $script:GroupSize = if ($local -and $local.PSObject.Properties.Name -contains "group_size" -and $local.group_size -gt 0) { [int]$local.group_size } else { 2 }
         Save-InstallationProfile
     }
 
-    Write-PulseLog "INFO" "Installation initialized. installation_id=$($script:InstallationId) site_id=$($script:SiteId)"
+    Write-PulseLog "INFO" "Installation initialized. installation_id=$($script:InstallationId) site_id=$($script:SiteId) group_size=$($script:GroupSize)"
 }
 
 function Initialize-Session {
@@ -246,6 +266,23 @@ function Get-RemoteConfig {
                 -not ($remote.PSObject.Properties.Name -contains "protocol_version")) {
                 throw "Remote config is not compatible with PulseLab 1.4.0."
             }
+
+            # Remote protocol updates must not erase the identity embedded by a
+            # site-specific installer. Keeping these fields in the local
+            # snapshot also protects a second Windows user on the same machine.
+            foreach ($identityField in @("site_id", "regional_hub", "school_code")) {
+                if ($local.PSObject.Properties.Name -contains $identityField) {
+                    $identityValue = [string]$local.$identityField
+                    if (-not (Test-NeedsSetupValue $identityValue)) {
+                        if ($remote.PSObject.Properties.Name -contains $identityField) {
+                            $remote.$identityField = $identityValue
+                        } else {
+                            $remote | Add-Member -NotePropertyName $identityField -NotePropertyValue $identityValue
+                        }
+                    }
+                }
+            }
+            $remoteRaw = $remote | ConvertTo-Json -Depth 10
             $remoteRaw | Set-Content $script:LOCAL_CONFIG -Encoding UTF8 -Force
             $script:Config = $remote
             $selectedRaw = $remoteRaw
@@ -726,39 +763,92 @@ function Submit-SessionEvent {
 # INTERFACES WPF
 # =============================================================================
 
+function Test-NeedsSetupValue {
+    param([string]$Value)
+    return ([string]::IsNullOrWhiteSpace($Value) -or $Value -match '^CONFIGURE_')
+}
+
+function Get-SetupDisplayValue {
+    param([string]$Value)
+    if (Test-NeedsSetupValue $Value) { return "a definir" }
+    return $Value
+}
+
 function Show-WpfSessionSetup {
+    param([switch]$ForcePrompt)
+
+    $valuesCheck = @(
+        $script:SiteId, $script:RegionalHub, $script:SchoolCode,
+        $script:WorkshopCode, $script:ClassCode, $script:ActivityId
+    )
+    $hasMissing = (($valuesCheck | Where-Object { Test-NeedsSetupValue $_ }).Count -gt 0)
+
+    if (-not $ForcePrompt -and -not $hasMissing) {
+        Write-PulseLog "INFO" "All setup parameters pre-filled from installation profile. Bypassing setup window."
+        return $true
+    }
+
+    $installationSummary = "Sede/cidade: $(Get-SetupDisplayValue $script:SiteId)  •  Escola: $(Get-SetupDisplayValue $script:SchoolCode)  •  Regional: $(Get-SetupDisplayValue $script:RegionalHub)"
+    $sessionSummary = "Oficina: $(Get-SetupDisplayValue $script:WorkshopCode)  •  Turma: $(Get-SetupDisplayValue $script:ClassCode)  •  Atividade: $(Get-SetupDisplayValue $script:ActivityId)"
+    $installationSummaryXaml = [Security.SecurityElement]::Escape($installationSummary)
+    $sessionSummaryXaml = [Security.SecurityElement]::Escape($sessionSummary)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Contexto da oficina"
-        Width="540" Height="790" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        Width="540" Height="460" WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
-  <Border CornerRadius="22" Background="#171128" BorderBrush="#6D5BD0" BorderThickness="3" Padding="26">
+  <Border CornerRadius="22" Background="#171128" BorderBrush="#6D5BD0" BorderThickness="3" Padding="24">
     <Grid>
-      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Margin="0,0,0,18">
-        <TextBlock Text="PULSELAB · CONTEXTO DA OFICINA" Foreground="#A99AF5" FontSize="20" FontWeight="Bold"/>
-        <TextBlock Text="Use apenas códigos institucionais. Não digite nomes de estudantes." Foreground="#D1CCE2" FontSize="13" TextWrapping="Wrap" Margin="0,7,0,0"/>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,14">
+        <TextBlock Text="INICIAR OFICINA" Foreground="#A99AF5" FontSize="20" FontWeight="Bold"/>
+        <TextBlock Text="Confira o contexto. As informações serão salvas nesta máquina." Foreground="#D1CCE2" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"/>
       </StackPanel>
-      <StackPanel Grid.Row="1">
-        <TextBlock Text="Código da sede" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtSite" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <TextBlock Text="Polo ou regional" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtRegional" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <TextBlock Text="Código da escola" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtSchool" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <TextBlock Text="Código desta oficina" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtWorkshop" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <TextBlock Text="Código da turma" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtClass" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <TextBlock Text="Ano ou faixa escolar" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtGrade" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <TextBlock Text="Código da atividade" Foreground="White" FontWeight="Bold"/>
-        <TextBox Name="TxtActivity" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
-        <Border Background="#27203D" CornerRadius="10" Padding="12" Margin="0,8,0,0">
-          <TextBlock Text="Sede, regional e escola ficam associados a esta instalação. Os participantes recebem códigos temporários A e B." Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="12"/>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+          <Border Background="#27203D" CornerRadius="10" Padding="12" Margin="0,0,0,12">
+            <StackPanel>
+              <TextBlock Text="$installationSummaryXaml" Foreground="White" TextWrapping="Wrap" FontSize="13"/>
+              <TextBlock Text="$sessionSummaryXaml" Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="12" Margin="0,6,0,0"/>
+            </StackPanel>
+          </Border>
+          <TextBlock Name="TxtMissingIntro" Text="Complete somente os dados abaixo:" Foreground="#A99AF5" FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
+          <StackPanel Name="PnlSite">
+            <TextBlock Text="Sede / cidade" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtSite" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+          </StackPanel>
+          <StackPanel Name="PnlRegional">
+            <TextBlock Text="Polo ou regional" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtRegional" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+          </StackPanel>
+          <StackPanel Name="PnlSchool">
+            <TextBlock Text="Código da escola" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtSchool" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+          </StackPanel>
+          <StackPanel Name="PnlWorkshop">
+            <TextBlock Text="Código desta oficina" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtWorkshop" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+          </StackPanel>
+          <StackPanel Name="PnlClass">
+            <TextBlock Text="Código da turma" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtClass" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+          </StackPanel>
+          <StackPanel Name="PnlActivity">
+            <TextBlock Text="Código da atividade" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtActivity" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+          </StackPanel>
+          <StackPanel Name="PnlGroupSize">
+            <TextBlock Text="Integrantes por computador/grupo" Foreground="White" FontWeight="Bold"/>
+            <TextBox Name="TxtGroupSize" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14" Text="2"/>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+      <StackPanel Grid.Row="2">
+        <CheckBox Name="ChkConsent" Content="Confirmo que as autorizações e o consentimento aplicáveis foram verificados." Foreground="White" FontSize="12" Margin="0,12,0,12"/>
+        <Border Background="#27203D" CornerRadius="8" Padding="10" Margin="0,0,0,12">
+          <TextBlock Text="Não use nomes de estudantes. Os dados ficam salvos localmente no computador." Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="11"/>
         </Border>
-        <CheckBox Name="ChkConsent" Content="Confirmo que a equipe verificou as autorizações e o consentimento aplicáveis para esta dupla." Foreground="White" FontSize="12" Margin="0,14,0,0"/>
       </StackPanel>
-      <Button Name="BtnStart" Grid.Row="2" Content="Confirmar e iniciar" Height="48" Background="#6D5BD0" Foreground="White" FontSize="16" FontWeight="Bold" IsEnabled="False"/>
+      <Button Name="BtnStart" Grid.Row="3" Content="Confirmar e iniciar" Height="46" Background="#6D5BD0" Foreground="White" FontSize="16" FontWeight="Bold" IsEnabled="False"/>
     </Grid>
   </Border>
 </Window>
@@ -769,27 +859,54 @@ function Show-WpfSessionSetup {
     $school = $window.FindName("TxtSchool")
     $workshop = $window.FindName("TxtWorkshop")
     $class = $window.FindName("TxtClass")
-    $grade = $window.FindName("TxtGrade")
     $activity = $window.FindName("TxtActivity")
+    $groupSizeTxt = $window.FindName("TxtGroupSize")
     $consent = $window.FindName("ChkConsent")
     $button = $window.FindName("BtnStart")
+
     $site.Text = $script:SiteId
     $regional.Text = $script:RegionalHub
     $school.Text = $script:SchoolCode
-    $workshop.Text = [string]$script:Config.workshop_code
-    $class.Text = [string]$script:Config.class_code
-    $grade.Text = [string]$script:Config.grade_band
-    $activity.Text = [string]$script:Config.activity_id
+    $workshop.Text = $script:WorkshopCode
+    $class.Text = $script:ClassCode
+    $activity.Text = $script:ActivityId
+    $groupSizeTxt.Text = [string]$script:GroupSize
+
+    $setupFields = @(
+        @{ Panel = $window.FindName("PnlSite"); TextBox = $site },
+        @{ Panel = $window.FindName("PnlRegional"); TextBox = $regional },
+        @{ Panel = $window.FindName("PnlSchool"); TextBox = $school },
+        @{ Panel = $window.FindName("PnlWorkshop"); TextBox = $workshop },
+        @{ Panel = $window.FindName("PnlClass"); TextBox = $class },
+        @{ Panel = $window.FindName("PnlActivity"); TextBox = $activity }
+    )
+    $missingFieldCount = 0
+    foreach ($field in $setupFields) {
+        if ($ForcePrompt -or (Test-NeedsSetupValue $field.TextBox.Text)) {
+            $field.Panel.Visibility = [Windows.Visibility]::Visible
+            if (Test-NeedsSetupValue $field.TextBox.Text) { $field.TextBox.Clear() }
+            $missingFieldCount++
+        } else {
+            $field.Panel.Visibility = [Windows.Visibility]::Collapsed
+        }
+    }
+    if (-not $ForcePrompt -and $missingFieldCount -eq 0) {
+        $window.FindName("TxtMissingIntro").Visibility = [Windows.Visibility]::Collapsed
+    }
+    $window.Height = [Math]::Min(680, 385 + (62 * $missingFieldCount))
 
     $validate = {
         $values = @(
             $site.Text.Trim(), $regional.Text.Trim(), $school.Text.Trim(),
             $workshop.Text.Trim(), $class.Text.Trim(), $activity.Text.Trim()
         )
-        $button.IsEnabled = (($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $consent.IsChecked -eq $true)
+        $parsedGroup = 0
+        [int]::TryParse($groupSizeTxt.Text.Trim(), [ref]$parsedGroup) | Out-Null
+        $button.IsEnabled = (($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $parsedGroup -gt 0 -and $consent.IsChecked -eq $true)
     }
     $site.add_TextChanged($validate); $regional.add_TextChanged($validate); $school.add_TextChanged($validate)
     $workshop.add_TextChanged($validate); $class.add_TextChanged($validate); $activity.add_TextChanged($validate)
+    $groupSizeTxt.add_TextChanged($validate)
     $consent.add_Checked($validate); $consent.add_Unchecked($validate)
     & $validate
 
@@ -799,13 +916,76 @@ function Show-WpfSessionSetup {
         $script:SchoolCode = $school.Text.Trim()
         $script:WorkshopCode = $workshop.Text.Trim()
         $script:ClassCode = $class.Text.Trim()
-        $script:GradeBand = $grade.Text.Trim()
+        $script:GradeBand = [string]$script:Config.grade_band
         $script:ActivityId = $activity.Text.Trim()
+        [int]$script:GroupSize = [Math]::Max(1, [int]$groupSizeTxt.Text.Trim())
         Save-InstallationProfile
         $window.DialogResult = $true
         $window.Close()
     })
     return ($window.ShowDialog() -eq $true)
+}
+
+function Show-WpfGroupSizeSelection {
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Quantidade de alunos"
+        Width="500" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,15">
+        <TextBlock Text="INTEGRANTES NO COMPUTADOR" Foreground="#57E0D5" FontSize="20" FontWeight="Bold"/>
+        <TextBlock Text="Quantos alunos estão trabalhando neste computador nesta aula?" Foreground="#D2CCDF" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Row="1" VerticalAlignment="Center">
+        <RadioButton Name="Rad1" GroupName="SizeGroup" Content="1 Aluno (Trabalho Solo)" Foreground="White" FontSize="15" Margin="0,6"/>
+        <RadioButton Name="Rad2" GroupName="SizeGroup" Content="2 Alunos (Dupla)" Foreground="White" FontSize="15" Margin="0,6" IsChecked="True"/>
+        <RadioButton Name="Rad3" GroupName="SizeGroup" Content="3 Alunos (Trio)" Foreground="White" FontSize="15" Margin="0,6"/>
+        <RadioButton Name="Rad4" GroupName="SizeGroup" Content="4 Alunos (Grupo)" Foreground="White" FontSize="15" Margin="0,6"/>
+      </StackPanel>
+      <Button Name="BtnConfirm" Grid.Row="2" Content="Confirmar e continuar" Height="46" Background="#00A7A0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+    </Grid>
+  </Border>
+</Window>
+"@
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $r1 = $window.FindName("Rad1"); $r2 = $window.FindName("Rad2"); $r3 = $window.FindName("Rad3"); $r4 = $window.FindName("Rad4")
+    if ($script:GroupSize -eq 1) { $r1.IsChecked = $true }
+    elseif ($script:GroupSize -eq 3) { $r3.IsChecked = $true }
+    elseif ($script:GroupSize -eq 4) { $r4.IsChecked = $true }
+    else { $r2.IsChecked = $true }
+
+    $window.FindName("BtnConfirm").add_Click({
+        if ($r1.IsChecked) { $script:GroupSize = 1 }
+        elseif ($r3.IsChecked) { $script:GroupSize = 3 }
+        elseif ($r4.IsChecked) { $script:GroupSize = 4 }
+        else { $script:GroupSize = 2 }
+        $window.DialogResult = $true
+        $window.Close()
+    })
+    $window.ShowDialog() | Out-Null
+}
+
+function Get-ParticipantList {
+    $list = @()
+    $letters = @("A", "B", "C", "D")
+    $roles = @("computer", "assembly", "member_3", "member_4")
+    if ($script:GroupSize -eq 1) {
+        $roles = @("individual")
+    }
+    for ($i = 0; $i -lt $script:GroupSize; $i++) {
+        $shortId = $script:SessionId.Substring(0, 8).ToUpperInvariant()
+        $letter = $letters[$i]
+        $role = $roles[$i]
+        $list += @{
+            Id = "$shortId-$letter"
+            Letter = $letter
+            Label = "Participante $letter"
+            Role = $role
+        }
+    }
+    return $list
 }
 
 function Show-WpfAssent {
@@ -853,7 +1033,7 @@ function Show-WpfPreSurvey {
     $selfEfficacyXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.self_efficacy)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
-        Width="610" Height="570" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        Width="630" Height="660" WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
     <Grid>
@@ -861,25 +1041,38 @@ function Show-WpfPreSurvey {
       <StackPanel Grid.Row="0" Margin="0,0,0,15">
         <TextBlock Text="ANTES DE COMEÇAR" Foreground="#57E0D5" FontSize="23" FontWeight="Bold"/>
         <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="Responda sozinho. Sua resposta não será mostrada à sua dupla." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+        <TextBlock Text="Responda sozinho. Sua resposta é individual." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
       </StackPanel>
-      <StackPanel Grid.Row="1">
-        <TextBlock Text="$priorRoboticsXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-        <StackPanel Margin="10,8,0,20">
-          <RadioButton Name="Prior1" GroupName="Prior" Content="Nunca" Foreground="White" Margin="0,4"/>
-          <RadioButton Name="Prior2" GroupName="Prior" Content="Uma vez" Foreground="White" Margin="0,4"/>
-          <RadioButton Name="Prior3" GroupName="Prior" Content="Algumas vezes" Foreground="White" Margin="0,4"/>
-          <RadioButton Name="Prior4" GroupName="Prior" Content="Muitas vezes" Foreground="White" Margin="0,4"/>
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+          <TextBlock Text="Qual a sua idade?" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <WrapPanel Margin="10,8,0,15">
+            <RadioButton Name="Age8" GroupName="Age" Content="8 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age9" GroupName="Age" Content="9 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age10" GroupName="Age" Content="10 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age11" GroupName="Age" Content="11 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age12" GroupName="Age" Content="12 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age13" GroupName="Age" Content="13 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age14" GroupName="Age" Content="14 anos" Foreground="White" Margin="0,4,12,4"/>
+            <RadioButton Name="Age15Plus" GroupName="Age" Content="15+ anos" Foreground="White" Margin="0,4,12,4"/>
+          </WrapPanel>
+          <TextBlock Text="$priorRoboticsXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,8,0,20">
+            <RadioButton Name="Prior1" GroupName="Prior" Content="Nunca" Foreground="White" Margin="0,4"/>
+            <RadioButton Name="Prior2" GroupName="Prior" Content="Uma vez" Foreground="White" Margin="0,4"/>
+            <RadioButton Name="Prior3" GroupName="Prior" Content="Algumas vezes" Foreground="White" Margin="0,4"/>
+            <RadioButton Name="Prior4" GroupName="Prior" Content="Muitas vezes" Foreground="White" Margin="0,4"/>
+          </StackPanel>
+          <TextBlock Text="$selfEfficacyXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,8,0,0">
+            <RadioButton Name="Self1" GroupName="Self" Content="Discordo muito" Foreground="White" Margin="0,4"/>
+            <RadioButton Name="Self2" GroupName="Self" Content="Discordo" Foreground="White" Margin="0,4"/>
+            <RadioButton Name="Self3" GroupName="Self" Content="Concordo" Foreground="White" Margin="0,4"/>
+            <RadioButton Name="Self4" GroupName="Self" Content="Concordo muito" Foreground="White" Margin="0,4"/>
+          </StackPanel>
         </StackPanel>
-        <TextBlock Text="$selfEfficacyXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-        <StackPanel Margin="10,8,0,0">
-          <RadioButton Name="Self1" GroupName="Self" Content="Discordo muito" Foreground="White" Margin="0,4"/>
-          <RadioButton Name="Self2" GroupName="Self" Content="Discordo" Foreground="White" Margin="0,4"/>
-          <RadioButton Name="Self3" GroupName="Self" Content="Concordo" Foreground="White" Margin="0,4"/>
-          <RadioButton Name="Self4" GroupName="Self" Content="Concordo muito" Foreground="White" Margin="0,4"/>
-        </StackPanel>
-      </StackPanel>
-      <Grid Grid.Row="2">
+      </ScrollViewer>
+      <Grid Grid.Row="2" Margin="0,15,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
         <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
         <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Height="46" Background="#00A7A0" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
@@ -889,17 +1082,32 @@ function Show-WpfPreSurvey {
 </Window>
 "@
     $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $ages = @(
+        @{ Control = $window.FindName("Age8"); Value = 8 },
+        @{ Control = $window.FindName("Age9"); Value = 9 },
+        @{ Control = $window.FindName("Age10"); Value = 10 },
+        @{ Control = $window.FindName("Age11"); Value = 11 },
+        @{ Control = $window.FindName("Age12"); Value = 12 },
+        @{ Control = $window.FindName("Age13"); Value = 13 },
+        @{ Control = $window.FindName("Age14"); Value = 14 },
+        @{ Control = $window.FindName("Age15Plus"); Value = 15 }
+    )
     $prior = 1..4 | ForEach-Object { $window.FindName("Prior$_") }
     $self = 1..4 | ForEach-Object { $window.FindName("Self$_") }
     $button = $window.FindName("BtnSave")
     $skip = $window.FindName("BtnSkip")
-    $result = @{ Status = $false; Declined = $false; PriorRobotics = $null; SelfEfficacy = $null; LatencyMs = 0 }
+    $result = @{ Status = $false; Declined = $false; StudentAge = $null; PriorRobotics = $null; SelfEfficacy = $null; LatencyMs = 0 }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $validate = {
-        $button.IsEnabled = (($prior | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and ($self | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
+        $ageSelected = ($ages | Where-Object { $_.Control.IsChecked -eq $true }).Count -eq 1
+        $priorSelected = ($prior | Where-Object { $_.IsChecked -eq $true }).Count -eq 1
+        $selfSelected = ($self | Where-Object { $_.IsChecked -eq $true }).Count -eq 1
+        $button.IsEnabled = ($ageSelected -and $priorSelected -and $selfSelected)
     }
-    @($prior + $self) | ForEach-Object { $_.add_Checked($validate) }
+    @($ages | ForEach-Object { $_.Control }) + @($prior) + @($self) | ForEach-Object { $_.add_Checked($validate) }
     $button.add_Click({
+        $selectedAge = $ages | Where-Object { $_.Control.IsChecked -eq $true } | Select-Object -First 1
+        if ($selectedAge) { $result.StudentAge = $selectedAge.Value }
         for ($i = 0; $i -lt 4; $i++) {
             if ($prior[$i].IsChecked) { $result.PriorRobotics = $i + 1 }
             if ($self[$i].IsChecked) { $result.SelfEfficacy = $i + 1 }
@@ -921,9 +1129,11 @@ function Show-WpfCheckpoint {
     $mentalEffortXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.mental_effort)
     $progressStateXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.progress_state)
     $collaborationXaml = [Security.SecurityElement]::Escape([string]$script:Config.questions.collaboration)
+    $subtext = if ($script:GroupSize -eq 1) { "Responda à sua pergunta sobre a atividade." } else { "Responda sozinho. Depois, passe o computador para o colega." }
+    $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Checkpoint"
-        Width="650" Height="720" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        Width="650" Height="740" WindowStartupLocation="CenterScreen" WindowStyle="None"
         AllowsTransparency="True" Background="Transparent" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#FF686B" BorderThickness="3" Padding="26">
     <Grid>
@@ -931,10 +1141,16 @@ function Show-WpfCheckpoint {
       <StackPanel Grid.Row="0" Margin="0,0,0,14">
         <TextBlock Text="CHECKPOINT · $IntervalMark MIN" Foreground="#FF8B8E" FontSize="22" FontWeight="Bold"/>
         <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="Responda sozinho. Depois, passe o computador para sua dupla." Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+        <TextBlock Text="$subtextXaml" Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
         <StackPanel>
+          <TextBlock Text="O que você mais fez desde o último checkpoint?" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
+          <StackPanel Margin="10,7,0,17">
+            <RadioButton Name="SelfRoleComputer" GroupName="SelfRole" Content="Computador / Programação" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="SelfRoleAssembly" GroupName="SelfRole" Content="Montagem das peças do robô" Foreground="White" Margin="0,3"/>
+            <RadioButton Name="SelfRoleBoth" GroupName="SelfRole" Content="Ambos / Fizemos juntos" Foreground="White" Margin="0,3"/>
+          </StackPanel>
           <TextBlock Text="$mentalEffortXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
           <StackPanel Margin="10,7,0,17">
             <RadioButton Name="Effort1" GroupName="Effort" Content="Muito pouco" Foreground="White" Margin="0,3"/>
@@ -970,26 +1186,39 @@ function Show-WpfCheckpoint {
 </Window>
 "@
     $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $selfRoleComp = $window.FindName("SelfRoleComputer")
+    $selfRoleAssy = $window.FindName("SelfRoleAssembly")
+    $selfRoleBoth = $window.FindName("SelfRoleBoth")
     $effort = 1..4 | ForEach-Object { $window.FindName("Effort$_") }
     $progress = 1..4 | ForEach-Object { $window.FindName("Progress$_") }
     $collab = 1..4 | ForEach-Object { $window.FindName("Collab$_") }
     $button = $window.FindName("BtnSave")
     $skip = $window.FindName("BtnSkip")
-    $result = @{ Status = $false; Declined = $false; MentalEffort = $null; ProgressState = $null; Collaboration = $null; LatencyMs = 0 }
+    $result = @{ Status = $false; Declined = $false; SelfReportedRole = $null; MentalEffort = $null; ProgressState = $null; Collaboration = $null; LatencyMs = 0 }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $validate = {
+        $roleComplete = ($selfRoleComp.IsChecked -eq $true -or $selfRoleAssy.IsChecked -eq $true -or $selfRoleBoth.IsChecked -eq $true)
         $baseComplete = (($effort | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and ($progress | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
         $collabComplete = (-not $AskCollaboration -or ($collab | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
-        $button.IsEnabled = ($baseComplete -and $collabComplete)
+        $button.IsEnabled = ($roleComplete -and $baseComplete -and $collabComplete)
     }
+    @($selfRoleComp, $selfRoleAssy, $selfRoleBoth) | ForEach-Object { $_.add_Checked($validate) }
     @($effort + $progress + $collab) | ForEach-Object { $_.add_Checked($validate) }
     $button.add_Click({
+        if ($selfRoleComp.IsChecked) { $result.SelfReportedRole = "computer" }
+        elseif ($selfRoleAssy.IsChecked) { $result.SelfReportedRole = "assembly" }
+        elseif ($selfRoleBoth.IsChecked) { $result.SelfReportedRole = "both" }
         for ($i = 0; $i -lt 4; $i++) {
             if ($effort[$i].IsChecked) { $result.MentalEffort = $i + 1 }
-            if ($progress[$i].IsChecked) {
-                $result.ProgressState = @('progressing_independently','progressing_with_doubt','trying_without_progress','needs_help_now')[$i]
+        }
+        $states = @("progressing_independently", "progressing_with_doubt", "trying_without_progress", "needs_help_now")
+        for ($i = 0; $i -lt 4; $i++) {
+            if ($progress[$i].IsChecked) { $result.ProgressState = $states[$i] }
+        }
+        if ($AskCollaboration) {
+            for ($i = 0; $i -lt 4; $i++) {
+                if ($collab[$i].IsChecked) { $result.Collaboration = $i + 1 }
             }
-            if ($AskCollaboration -and $collab[$i].IsChecked) { $result.Collaboration = $i + 1 }
         }
         $result.Status = $true
         $result.LatencyMs = [int]$watch.ElapsedMilliseconds
@@ -1180,6 +1409,40 @@ function Show-WpfPostSurvey {
     return $result
 }
 
+function Show-WpfFinished {
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Oficina Concluída"
+        Width="580" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Border CornerRadius="24" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="32">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
+        <TextBlock Text="🚀" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+        <TextBlock Text="OFICINA CONCLUÍDA!" Foreground="#00A7A0" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+        <TextBlock Text="Muito obrigado por sua participação na atividade!" Foreground="#E2DBED" FontSize="15" Margin="0,10,0,0" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
+      </StackPanel>
+      <Button Name="BtnClose" Grid.Row="1" Content="Fechar" Height="46" Background="#00A7A0" Foreground="White" FontWeight="Bold" Margin="0,16,0,0"/>
+    </Grid>
+  </Border>
+</Window>
+"@
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+    $window.FindName("BtnClose").add_Click({
+        $window.DialogResult = $true
+        $window.Close()
+    })
+    $timer = New-Object Windows.Forms.Timer
+    $timer.Interval = 5000
+    $timer.add_Tick({ $timer.Stop(); $window.Close() })
+    $timer.Start()
+    $window.ShowDialog() | Out-Null
+    $timer.Stop()
+}
+
 # =============================================================================
 # TRAY E ORQUESTRAÇÃO
 # =============================================================================
@@ -1190,6 +1453,10 @@ function Initialize-TrayIcon {
     $script:NotifyIcon.Text = "PulseLab - Oficina em andamento"
     $script:NotifyIcon.Visible = $true
     $menu = New-Object Windows.Forms.ContextMenu
+    $reconfig = New-Object Windows.Forms.MenuItem "Reconfigurar Contexto da Máquina"
+    $reconfig.add_Click({
+        Show-WpfSessionSetup -ForcePrompt | Out-Null
+    })
     $finish = New-Object Windows.Forms.MenuItem "Concluir Oficina"
     $finish.add_Click({
         if (-not $script:TriggerEnding) {
@@ -1198,6 +1465,7 @@ function Initialize-TrayIcon {
             Write-PulseLog "INFO" "Manual ending requested."
         }
     })
+    $menu.MenuItems.Add($reconfig) | Out-Null
     $menu.MenuItems.Add($finish) | Out-Null
     $script:NotifyIcon.ContextMenu = $menu
 }
@@ -1227,6 +1495,7 @@ function Save-PreSurvey {
     $event = New-ResearchEvent $ParticipantId $Role "pre" $null
     $event["response_latency_ms"] = [int]$result.LatencyMs
     if ($result.Status) {
+        if ($result.StudentAge) { $event["student_age"] = [int]$result.StudentAge }
         $event["prior_robotics"] = [int]$result.PriorRobotics
         $event["self_efficacy_pre"] = [int]$result.SelfEfficacy
     } else {
@@ -1265,6 +1534,7 @@ function Save-CheckpointSurvey {
     $event["captured_at"] = $CapturedAt.ToString("o")
 
     if ($result.Status) {
+        if ($result.SelfReportedRole) { $event["self_reported_role"] = [string]$result.SelfReportedRole }
         $event["mental_effort"] = [int]$result.MentalEffort
         $event["progress_state"] = [string]$result.ProgressState
         $event["help_requested"] = ($result.ProgressState -eq "needs_help_now")
@@ -1283,12 +1553,9 @@ function Save-CheckpointSurvey {
 }
 
 function Save-PostSurvey {
-    param([string]$ParticipantId, [string]$Role, [string]$Label, [hashtable]$Rubric)
+    param([string]$ParticipantId, [string]$Role, [string]$Label)
     $result = Show-WpfPostSurvey $Label
     $event = New-ResearchEvent $ParticipantId $Role "post" $null
-    $event["mission_performance"] = [int]$Rubric.Mission
-    $event["instructor_interventions"] = [int]$Rubric.Interventions
-    $event["primary_issue"] = [string]$Rubric.Issue
     $event["response_latency_ms"] = [int]$result.LatencyMs
     if ($script:ActivityStopwatch) { $event["elapsed_ms"] = [long]$script:ActivityStopwatch.ElapsedMilliseconds }
     if ($result.Status) {
@@ -1456,19 +1723,18 @@ function Start-ResearchLoop {
             }
         }
 
-        $askCollaboration = ([int[]]$script:Config.collaboration_marks_minutes -contains $mark)
-        $labelA = "Participante A · papel atual: $(Get-RoleLabel $script:ParticipantComputerRole)"
-        $labelB = "Participante B · papel atual: $(Get-RoleLabel $script:ParticipantAssemblyRole)"
-        $statusA = Save-CheckpointSurvey $script:ParticipantComputer $script:ParticipantComputerRole $labelA $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot $scheduledAt $capturedAt $activityStage
-        $statusB = Save-CheckpointSurvey $script:ParticipantAssembly $script:ParticipantAssemblyRole $labelB $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot $scheduledAt $capturedAt $activityStage
+        $askCollaboration = ($script:GroupSize -gt 1 -and [int[]]$script:Config.collaboration_marks_minutes -contains $mark)
+        $participants = Get-ParticipantList
+        $checkpointStatuses = @{}
+        foreach ($p in $participants) {
+            $pLabel = "$($p.Label)"
+            $st = Save-CheckpointSurvey $p.Id $p.Role $pLabel $mark $askCollaboration $telemetry $fileSize $privatePath $localScreenshot $scheduledAt $capturedAt $activityStage
+            $checkpointStatuses["participant_$($p.Letter.ToLower())_status"] = $st
+        }
         Restore-SpikeFocus $script:SpikeHandle
 
         $elapsedAfterResponses = [long]$script:ActivityStopwatch.ElapsedMilliseconds
-        Submit-SessionEvent "checkpoint_completed" "info" $mark $null $null $activityStage $elapsedAfterResponses $scheduledAt @{
-            participant_a_status = $statusA
-            participant_b_status = $statusB
-        }
-        Invoke-ConfiguredRoleSwap $mark $activityStage
+        Submit-SessionEvent "checkpoint_completed" "info" $mark $null $null $activityStage $elapsedAfterResponses $scheduledAt $checkpointStatuses
         Invoke-FlushCache
     }
 
@@ -1486,35 +1752,18 @@ function Start-ResearchLoop {
         requested_at = if ($script:EndingRequestedAt) { $script:EndingRequestedAt.ToString("o") } else { $null }
     }
 
-    $rubric = Show-WpfInstructorRubric
-    if (-not $rubric.Status) {
-        Write-PulseLog "WARN" "Instructor rubric canceled; session aborted before post-survey."
-        Submit-SessionEvent "session_aborted" "warning" $null $null $null $null $elapsedAtEnding $null @{
-            reason = "instructor_rubric_canceled"
-        }
-        Invoke-FlushCache
-        return $false
+    $postStatuses = @{ phase = "post" }
+    foreach ($p in $participants) {
+        $postLabel = "$($p.Label)"
+        $st = Save-PostSurvey $p.Id $p.Role $postLabel
+        $postStatuses["participant_$($p.Letter.ToLower())_status"] = $st
     }
-
-    Submit-SessionEvent "rubric_completed" "info" $null $null $null $null ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null @{
-        mission_performance = [int]$rubric.Mission
-        interventions_band = [int]$rubric.Interventions
-        primary_issue = [string]$rubric.Issue
-    }
-
-    $postLabelA = "Participante A · papel final: $(Get-RoleLabel $script:ParticipantComputerRole)"
-    $postLabelB = "Participante B · papel final: $(Get-RoleLabel $script:ParticipantAssemblyRole)"
-    $postStatusA = Save-PostSurvey $script:ParticipantComputer $script:ParticipantComputerRole $postLabelA $rubric
-    $postStatusB = Save-PostSurvey $script:ParticipantAssembly $script:ParticipantAssemblyRole $postLabelB $rubric
-    Submit-SessionEvent "phase_completed" "info" $null $null $null "post" ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null @{
-        phase = "post"
-        participant_a_status = $postStatusA
-        participant_b_status = $postStatusB
-    }
+    Submit-SessionEvent "phase_completed" "info" $null $null $null "post" ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null $postStatuses
     Submit-SessionEvent "session_completed" "info" $null $null $null $null ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null @{
         checkpoint_count = $marks.Count
     }
     Invoke-FlushCache
+    Show-WpfFinished
     $script:ActivityStopwatch.Stop()
     return $true
 }
@@ -1534,12 +1783,22 @@ try {
         exit 0
     }
 
-    $computerAssent = Show-WpfAssent "Participante A"
-    $assemblyAssent = Show-WpfAssent "Participante B"
-    if (-not $computerAssent -or -not $assemblyAssent) {
-        Write-PulseLog "INFO" "Research collection canceled because assent was not granted by all members of the dyad."
+    Show-WpfGroupSizeSelection
+    $participants = Get-ParticipantList
+
+    $allAccepted = $true
+    foreach ($p in $participants) {
+        $accepted = Show-WpfAssent $p.Label
+        if (-not $accepted) {
+            $allAccepted = $false
+            break
+        }
+    }
+
+    if (-not $allAccepted) {
+        Write-PulseLog "INFO" "Research collection canceled because assent was not granted by all group members."
         [Windows.MessageBox]::Show(
-            "A coleta de pesquisa foi encerrada. A dupla pode continuar participando normalmente da oficina.",
+            "A coleta de pesquisa foi encerrada. O grupo pode continuar participando normalmente da oficina.",
             "PulseLab",
             [Windows.MessageBoxButton]::OK,
             [Windows.MessageBoxImage]::Information
@@ -1551,18 +1810,18 @@ try {
     Initialize-TrayIcon
     Invoke-FlushCache
     Submit-SessionEvent "session_started" "info" $null $null $null $null 0L $null @{
-        participant_count = 2
+        participant_count = $script:GroupSize
         authorization_verified = $true
         assent_completed = $true
         expected_checkpoints = [int[]]$script:Config.interval_marks_minutes
     }
-    $preStatusA = Save-PreSurvey $script:ParticipantComputer $script:ParticipantComputerRole "Participante A"
-    $preStatusB = Save-PreSurvey $script:ParticipantAssembly $script:ParticipantAssemblyRole "Participante B"
-    Submit-SessionEvent "phase_completed" "info" $null $null $null "pre" 0L $null @{
-        phase = "pre"
-        participant_a_status = $preStatusA
-        participant_b_status = $preStatusB
+
+    $preStatuses = @{ phase = "pre" }
+    foreach ($p in $participants) {
+        $st = Save-PreSurvey $p.Id $p.Role $p.Label
+        $preStatuses["participant_$($p.Letter.ToLower())_status"] = $st
     }
+    Submit-SessionEvent "phase_completed" "info" $null $null $null "pre" 0L $null $preStatuses
     Start-ResearchLoop | Out-Null
 } catch {
     Write-PulseLog "ERROR" "Fatal error: $($_.Exception.Message)"

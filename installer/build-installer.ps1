@@ -7,7 +7,16 @@ param(
     [string]$SupabaseKey = $null,
 
     [Parameter(Mandatory = $false)]
-    [string]$OutputPath = $null
+    [string]$OutputPath = $null,
+
+    [Parameter(Mandatory = $false)]
+    [string]$SiteId = $null,
+
+    [Parameter(Mandatory = $false)]
+    [string]$RegionalHub = $null,
+
+    [Parameter(Mandatory = $false)]
+    [string]$SchoolCode = $null
 )
 
 Set-StrictMode -Version Latest
@@ -99,6 +108,36 @@ $agentBytes = [System.IO.File]::ReadAllBytes($agentPath)
 $agentB64 = [System.Convert]::ToBase64String($agentBytes)
 
 $configBytes = [System.IO.File]::ReadAllBytes($configPath)
+
+$identityOverrides = @{
+    site_id = $SiteId
+    regional_hub = $RegionalHub
+    school_code = $SchoolCode
+}
+$selectedOverrides = @{}
+foreach ($field in $identityOverrides.Keys) {
+    $value = [string]$identityOverrides[$field]
+    if (-not [string]::IsNullOrWhiteSpace($value)) {
+        $value = $value.Trim()
+        if ($value -match '^CONFIGURE_') {
+            Write-Error "Erro: o valor pre-configurado de '$field' nao pode usar CONFIGURE_."
+            exit 1
+        }
+        $selectedOverrides[$field] = $value
+    }
+}
+if ($selectedOverrides.Count -gt 0) {
+    $configText = [System.Text.Encoding]::UTF8.GetString($configBytes)
+    $configObj = $configText | ConvertFrom-Json
+    foreach ($field in $selectedOverrides.Keys) {
+        $configObj.$field = $selectedOverrides[$field]
+    }
+    $configText = ($configObj | ConvertTo-Json -Depth 10) + [Environment]::NewLine
+    $configBytes = [System.Text.Encoding]::UTF8.GetBytes($configText)
+    $presetSummary = ($selectedOverrides.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ", "
+    Write-Host "Identidade pre-configurada no instalador: $presetSummary"
+}
+
 $configB64 = [System.Convert]::ToBase64String($configBytes)
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {

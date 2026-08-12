@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PulseLab | Coleta de Evidências em Robótica Educacional</title>
+    <meta name="description" content="Fundação de observação distribuída, autorrelato pseudonimizado e controle de qualidade para oficinas de robótica LEGO SPIKE.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-canvas: #f2f0f7;
+            --color-canvas-soft: #f8f7fb;
+            --color-surface: #ffffff;
+            --color-surface-hover: #f7f4fc;
+            --color-border: #ded9e8;
+            --color-border-bright: #c9c0d8;
+            --color-text-main: #171329;
+            --color-text-muted: #6e687d;
+            --color-coral: #f37c7f;
+            --color-aqua: #49d9ce;
+            --color-aqua-dark: #087e78;
+            --color-blue: #6547a8;
+            --color-purple: #8064c8;
+            --color-yellow: #f1c75b;
+            --color-emerald: #16856d;
+            --radius-lg: 16px;
+            --radius-xl: 24px;
+            --radius-full: 9999px;
+            --shadow-card: 0 22px 70px rgba(31, 20, 58, 0.12);
+            --shadow-glow-coral: 0 0 40px rgba(243, 124, 127, 0.14);
+            --shadow-glow-blue: 0 0 40px rgba(101, 71, 168, 0.14);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: radial-gradient(circle at 12% 5%, rgba(128, 100, 200, 0.15), transparent 26rem), linear-gradient(135deg, var(--color-canvas-soft), var(--color-canvas)); color: var(--color-text-main); line-height: 1.6; overflow-x: hidden; }
+        .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+        header.nav-header { position: sticky; top: 0; z-index: 50; background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid var(--color-border); box-shadow: 0 8px 30px rgba(31, 20, 58, 0.06); }
+        .nav-header__inner { display: flex; align-items: center; justify-content: space-between; height: 72px; }
+        .brand { display: flex; align-items: center; gap: 12px; font-family: 'Outfit', sans-serif; font-weight: 800; font-size: 1.25rem; color: #30204f; text-decoration: none; }
+        .brand-badge { background: linear-gradient(135deg, var(--color-aqua), var(--color-purple)); color: #171027; font-size: 0.65rem; padding: 2px 8px; border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.05em; }
+        .nav-links { display: flex; align-items: center; gap: 24px; list-style: none; }
+        .nav-links a { color: var(--color-text-muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--color-blue); }
+        .button { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: var(--radius-full); font-weight: 600; font-size: 0.9rem; text-decoration: none; transition: all 0.2s; border: 1px solid transparent; }
+        .button--primary { background: var(--color-blue); color: #fff; box-shadow: 0 10px 26px rgba(101, 71, 168, 0.20); }
+        .button--primary:hover { background: #563b92; transform: translateY(-1px); box-shadow: 0 14px 30px rgba(101, 71, 168, 0.26); }
+        .nav-links .button--primary,
+        .nav-links .button--primary:hover { color: #fff; }
+        .button--secondary { background: rgba(255, 255, 255, 0.78); color: var(--color-blue); border-color: var(--color-border-bright); }
+        .button--secondary:hover { background: var(--color-surface); border-color: var(--color-purple); transform: translateY(-1px); }
+        .hero { padding: 96px 0 72px; text-align: center; position: relative; }
+        .hero::before { content: ""; position: absolute; width: 240px; height: 240px; left: -100px; top: 40px; border-radius: 50%; background: rgba(73, 217, 206, 0.14); filter: blur(2px); pointer-events: none; }
+        .hero-kicker { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: var(--radius-full); background: rgba(73, 217, 206, 0.16); border: 1px solid rgba(8, 126, 120, 0.22); color: var(--color-aqua-dark); font-size: 0.85rem; font-weight: 700; margin-bottom: 24px; }
+        .hero h1 { font-family: 'Outfit', sans-serif; font-size: 3.5rem; font-weight: 800; line-height: 1.15; max-width: 800px; margin: 0 auto 24px; letter-spacing: -0.02em; }
+        .hero-lead { font-size: 1.2rem; color: var(--color-text-muted); max-width: 680px; margin: 0 auto 36px; }
+        .hero-actions { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 48px; }
+        .section-heading { margin-bottom: 48px; }
+        .section-heading--split { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: flex-end; }
+        .section-kicker { color: var(--color-aqua-dark); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; display: block; }
+        .section-heading h2 { font-family: 'Outfit', sans-serif; font-size: 2.25rem; font-weight: 700; letter-spacing: -0.01em; }
+        .project-story { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 96px; }
+        .challenge-card, .answer-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 36px; box-shadow: var(--shadow-card); }
+        .card-label { display: inline-block; padding: 4px 12px; border-radius: var(--radius-full); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 20px; }
+        .card-label--coral { background: rgba(243, 124, 127, 0.14); color: #a33f47; }
+        .card-label--blue { background: var(--violet-100, #eee8ff); color: var(--color-blue); }
+        .challenge-list { list-style: none; margin-top: 24px; }
+        .challenge-list li { display: flex; gap: 16px; margin-bottom: 20px; }
+        .challenge-list span { font-family: 'Outfit', sans-serif; font-weight: 800; color: var(--color-coral); font-size: 1.2rem; }
+        .answer-flow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 28px 0; background: #f5f1fb; border: 1px solid var(--color-border); padding: 20px; border-radius: var(--radius-lg); }
+        .answer-flow__number { width: 28px; height: 28px; border-radius: 50%; background: var(--color-blue); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; margin-bottom: 8px; }
+        .privacy-note { display: flex; align-items: center; gap: 12px; background: #eaf7f3; border: 1px solid #bde5db; padding: 12px 16px; border-radius: var(--radius-lg); font-size: 0.85rem; color: #0f6a56; margin-top: 24px; }
+        .privacy-note svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; flex-shrink: 0; }
+        .experience-section { padding: 96px 0; border-top: 1px solid var(--color-border); }
+        .experience-chapter { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center; margin-bottom: 80px; }
+        .experience-chapter--reverse { direction: rtl; }
+        .experience-chapter--reverse > * { direction: ltr; }
+        .chapter-number { font-family: 'Outfit', sans-serif; font-size: 3rem; font-weight: 800; color: rgba(101, 71, 168, 0.16); display: block; line-height: 1; margin-bottom: 8px; }
+        .chapter-kicker { color: var(--color-aqua-dark); font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px; }
+        .chapter-copy h3 { font-family: 'Outfit', sans-serif; font-size: 1.75rem; font-weight: 700; margin-bottom: 16px; }
+        .chapter-points { list-style: none; margin-top: 20px; }
+        .chapter-points li { position: relative; padding-left: 24px; margin-bottom: 8px; color: var(--color-text-muted); font-size: 0.95rem; }
+        .chapter-points li::before { content: "✓"; position: absolute; left: 0; color: var(--color-emerald); font-weight: 700; }
+        .screen-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+        .screen-card img { width: 100%; height: auto; display: block; }
+        .screen-card figcaption { padding: 12px; background: #fbfafc; border-top: 1px solid var(--color-border); text-align: center; font-size: 0.8rem; color: var(--color-text-muted); }
+        .architecture-section { padding: 96px 0; background: linear-gradient(180deg, #efecf6, #f7f5fb); border-top: 1px solid var(--color-border); border-bottom: 1px solid var(--color-border); }
+        .architecture-flow { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 48px; background: rgba(255, 255, 255, 0.90); border: 1px solid var(--color-border); border-radius: var(--radius-xl); padding: 32px; overflow-x: auto; box-shadow: var(--shadow-card); }
+        .architecture-flow article { display: flex; flex-direction: column; align-items: center; text-align: center; min-width: 120px; }
+        .architecture-icon { width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+        .architecture-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 2; }
+        .architecture-icon--coral { background: rgba(243, 124, 127, 0.14); color: #b44952; }
+        .architecture-icon--blue { background: rgba(128, 100, 200, 0.14); color: var(--color-blue); }
+        .flow-connector { flex: 1; height: 2px; background: var(--color-border-bright); position: relative; min-width: 30px; }
+        .research-section { padding: 96px 0; border-top: 1px solid var(--color-border); }
+        .research-card { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr); gap: 48px; align-items: center; padding: 44px; background: linear-gradient(135deg, rgba(128, 100, 200, 0.15), rgba(73, 217, 206, 0.12)); border: 1px solid var(--color-border-bright); border-radius: var(--radius-xl); box-shadow: var(--shadow-card); }
+        .research-card h2 { margin-bottom: 16px; font-family: 'Outfit', sans-serif; font-size: 2.25rem; line-height: 1.2; }
+        .research-card p { color: var(--color-text-muted); }
+        .research-card__meta { display: grid; gap: 10px; margin-top: 24px; color: var(--color-text-muted); font-size: 0.9rem; }
+        .research-card__meta span { display: flex; gap: 10px; align-items: flex-start; }
+        .research-card__meta strong { min-width: 82px; color: #30204f; }
+        .research-card__actions { display: grid; gap: 12px; padding: 26px; background: rgba(255, 255, 255, 0.82); border: 1px solid var(--color-border); border-radius: var(--radius-lg); }
+        .research-card__actions .button { justify-content: center; }
+        .research-card__actions small { color: var(--color-text-muted); text-align: center; }
+        footer { border-top: 1px solid var(--color-border); padding: 48px 0; text-align: center; color: var(--color-text-muted); font-size: 0.85rem; }
+        @media (max-width: 900px) {
+            .nav-links li:not(.nav-report):not(:last-child) { display: none; }
+            .hero h1 { font-size: clamp(2.4rem, 10vw, 3.5rem); }
+            .hero-actions { flex-wrap: wrap; }
+            .experience-chapter, .section-heading--split, .research-card { grid-template-columns: 1fr; }
+            .experience-chapter--reverse { direction: ltr; }
+            .research-card { padding: 30px; }
+        }
+        @media (max-width: 560px) {
+            .container { padding: 0 16px; }
+            .nav-links { gap: 10px; }
+            .nav-links a { font-size: 0.8rem; }
+            .nav-links .button { padding: 8px 12px; }
+            .brand-badge { display: none; }
+            .hero { padding-top: 64px; }
+            .hero-actions { display: grid; }
+            .architecture-flow { align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+
+    <header class="nav-header">
+        <div class="container nav-header__inner">
+            <a href="#" class="brand">
+                PulseLab
+                <span class="brand-badge">Pesquisa v1.4</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#projeto">O Projeto</a></li>
+                <li><a href="#experiencia">Experiência</a></li>
+                <li><a href="#arquitetura">Arquitetura</a></li>
+                <li class="nav-report"><a href="/relatorio/">Relatório Acadêmico</a></li>
+                <li><a href="https://pulselab-robotica-edu.web.app/instrutor/" target="_blank">Portal do Instrutor</a></li>
+                <li><a href="https://pulselab-robotica-edu.web.app/simulador/" class="button button--primary" target="_blank">Simulador Web</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero" id="projeto">
+            <div class="container">
+                <div class="hero-kicker">
+                    <span>🔬 Robótica Educacional &amp; Evidências</span>
+                </div>
+                <h1>Uma visão ética da oficina de robótica.</h1>
+                <p class="hero-lead">
+                    O PulseLab acompanha a jornada do aluno na atividade de robótica
+                    com checkpoints curtos, autorrelato ilustrado, encerramento direto e um portal web dedicado
+                    para a rubrica móvel do instrutor.
+                </p>
+                <div class="hero-actions">
+                    <a class="button button--primary" href="https://pulselab-robotica-edu.web.app/simulador/" target="_blank">
+                        Explorar o simulador →
+                    </a>
+                    <a class="button button--secondary" href="https://pulselab-robotica-edu.web.app/instrutor/" target="_blank">
+                        Portal do Instrutor
+                    </a>
+                    <a class="button button--secondary" href="/relatorio/">
+                        Relatório acadêmico
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section class="experience-section" id="experiencia">
+            <div class="container">
+                <div class="section-heading section-heading--center" style="text-align: center;">
+                    <span class="section-kicker">O projeto em funcionamento</span>
+                    <h2>Da preparação ao encerramento da sessão.</h2>
+                    <p style="color: var(--color-text-muted);">
+                        O simulador percorre a experiência de estudantes, instrutores e pesquisadores ao longo da atividade de robótica.
+                    </p>
+                </div>
+
+                <article class="experience-chapter" style="margin-top: 48px;">
+                    <div class="chapter-copy">
+                        <span class="chapter-number">01</span>
+                        <span class="chapter-kicker">Antes da oficina</span>
+                        <h3>Preparar com clareza e consentimento.</h3>
+                        <p style="color: var(--color-text-muted);">
+                            O instrutor confirma o contexto e os alunos participantes no computador.
+                            Depois, cada participante recebe um convite individual e pode recusar sem prejuízo à atividade.
+                        </p>
+                        <ul class="chapter-points">
+                            <li>Sem coleta de nomes de estudantes</li>
+                            <li>Decisão individual de participação respeitada</li>
+                            <li>Configuração flexível para os alunos na bancada</li>
+                        </ul>
+                    </div>
+                    <div class="screen-card">
+                        <img src="assets/images/app-context.jpg" alt="Preparação no simulador" loading="lazy">
+                        <figcaption>Contexto e Assentimento da Oficina</figcaption>
+                    </div>
+                </article>
+
+                <article class="experience-chapter experience-chapter--reverse">
+                    <div class="chapter-copy">
+                        <span class="chapter-number">02</span>
+                        <span class="chapter-kicker">Durante a atividade</span>
+                        <h3>Acompanhar com autorrelato fluido.</h3>
+                        <p style="color: var(--color-text-muted);">
+                            O agente fica em segundo plano e aparece apenas nos marcos previstos.
+                            Em cada checkpoint, o próprio aluno indica de forma ilustrada o que esteve fazendo.
+                        </p>
+                        <ul class="chapter-points">
+                            <li>Checkpoints nos minutos 20 e 40</li>
+                            <li>Autorrelato visual e transparente</li>
+                            <li>Sem janelas intrusivas de troca de papéis</li>
+                        </ul>
+                    </div>
+                    <div class="screen-card">
+                        <img src="assets/images/app-workshop.jpg" alt="Atividade em andamento" loading="lazy">
+                        <figcaption>Atividade em Andamento</figcaption>
+                    </div>
+                </article>
+
+                <article class="experience-chapter">
+                    <div class="chapter-copy">
+                        <span class="chapter-number">03</span>
+                        <span class="chapter-kicker">Depois da oficina</span>
+                        <h3>Portal do Instrutor e Encerramento.</h3>
+                        <p style="color: var(--color-text-muted);">
+                            O aluno encerra com uma mensagem final direta. O instrutor avalia o desempenho da turma de forma independente em seu próprio dispositivo no <strong>Portal do Instrutor (/instrutor/)</strong>.
+                        </p>
+                        <ul class="chapter-points">
+                            <li>Encerramento com mensagem de agradecimento ao aluno</li>
+                            <li>Portal do Instrutor via celular ou tablet</li>
+                            <li>Registro seguro e autenticado em JSON</li>
+                        </ul>
+                    </div>
+                    <div class="screen-card">
+                        <img src="assets/images/app-summary.jpg" alt="Portal do Instrutor" loading="lazy">
+                        <figcaption>Portal do Instrutor e Encerramento</figcaption>
+                    </div>
+                </article>
+            </div>
+        </section>
+
+        <section class="architecture-section" id="arquitetura">
+            <div class="container">
+                <div class="section-heading section-heading--split">
+                    <div>
+                        <span class="section-kicker">Da oficina ao dado confiável</span>
+                        <h2>Uma arquitetura leve, resiliente e auditável.</h2>
+                    </div>
+                    <p style="color: var(--color-text-muted);">
+                        Cada componente tem uma responsabilidade clara: acolher a resposta,
+                        preservar o contexto e manter a sessão íntegra mesmo quando a internet oscila.
+                    </p>
+                </div>
+
+                <div class="architecture-flow" role="img" aria-label="Fluxo da Arquitetura PulseLab">
+                    <article>
+                        <div class="architecture-icon architecture-icon--coral">
+                            <svg viewBox="0 0 32 32"><circle cx="11" cy="11" r="5"></circle><circle cx="22" cy="12" r="4"></circle><path d="M3 27c1-6 4-9 8-9s8 3 9 9M18 27c.5-4 2-7 5-7 3.5 0 5.5 3 6 7"></path></svg>
+                        </div>
+                        <strong>Alunos na Bancada</strong>
+                        <small style="color: var(--color-text-muted);">Autorrelato individual</small>
+                    </article>
+                    <span class="flow-connector"></span>
+                    <article>
+                        <div class="architecture-icon architecture-icon--blue">
+                            <svg viewBox="0 0 32 32"><rect x="4" y="5" width="24" height="18" rx="3"></rect><path d="M11 28h10M16 23v5M10 12h5l2-4 3 9 2-5h2"></path></svg>
+                        </div>
+                        <strong>Agente Local</strong>
+                        <small style="color: var(--color-text-muted);">Daemon PowerShell</small>
+                    </article>
+                    <span class="flow-connector"></span>
+                    <article>
+                        <div class="architecture-icon architecture-icon--coral">
+                            <svg viewBox="0 0 32 32"><path d="M4 16h24M16 4v24"></path></svg>
+                        </div>
+                        <strong>Fila Offline</strong>
+                        <small style="color: var(--color-text-muted);">Entrega atômica</small>
+                    </article>
+                    <span class="flow-connector"></span>
+                    <article>
+                        <div class="architecture-icon architecture-icon--blue">
+                            <svg viewBox="0 0 32 32"><path d="M12 21s7-3.8 7-10V5l-7-3-7 3v6c0 6.2 7 10 7 10Z"></path></svg>
+                        </div>
+                        <strong>Portal &amp; Supabase</strong>
+                        <small style="color: var(--color-text-muted);">RLS &amp; Auth</small>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="research-section" id="pesquisa">
+            <div class="container">
+                <article class="research-card">
+                    <div>
+                        <span class="section-kicker">Documentação científica</span>
+                        <h2>Métricas, validade e contribuição acadêmica do PulseLab.</h2>
+                        <p>
+                            Consulte o relatório que descreve o que o aplicativo mede, como cada indicador
+                            deve ser analisado e quais limites metodológicos precisam ser respeitados na
+                            apresentação à banca e na condução do estudo piloto.
+                        </p>
+                        <div class="research-card__meta">
+                            <span><strong>Autor</strong> Vinicius Ferreira Amim</span>
+                            <span><strong>Instituição</strong> Universidade Federal do Vale do São Francisco</span>
+                            <span><strong>Atuação</strong> Setor de Pesquisa da FADEX — Projeto Robótica Educacional</span>
+                        </div>
+                    </div>
+                    <div class="research-card__actions">
+                        <a class="button button--primary" href="/relatorio/">Ler relatório completo →</a>
+                        <small>Versão 1.4 · preparada para leitura, impressão e PDF</small>
+                    </div>
+                </article>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>PulseLab · Setor de Pesquisa da FADEX — Projeto Robótica Educacional</p>
+            <p>Vinicius Ferreira Amim · Universidade Federal do Vale do São Francisco</p>
+        </div>
+    </footer>
+</body>
+</html>

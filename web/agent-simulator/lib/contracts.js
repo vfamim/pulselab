@@ -17,8 +17,10 @@ export const TIMELINE_EVENT_TYPES = [
 ];
 
 export const PARTICIPANTS = {
-  A: { id: "PARTICIPANTE-A", label: "Participante A" },
-  B: { id: "PARTICIPANTE-B", label: "Participante B" }
+  A: { id: "PARTICIPANTE-A", label: "Aluno 1" },
+  B: { id: "PARTICIPANTE-B", label: "Aluno 2" },
+  C: { id: "PARTICIPANTE-C", label: "Aluno 3" },
+  D: { id: "PARTICIPANTE-D", label: "Aluno 4" }
 };
 
 export function createUuid() {
@@ -61,9 +63,9 @@ export function getQualityStatus({
   if (
     qualityIssueCount > 0 ||
     completedCheckpointCount < expectedCheckpointCount ||
-    preCount < 2 ||
-    checkpointCount < expectedCheckpointCount * 2 ||
-    postCount < 2
+    preCount < 1 ||
+    checkpointCount < expectedCheckpointCount ||
+    postCount < 1
   ) {
     return "needs_review";
   }
@@ -72,9 +74,12 @@ export function getQualityStatus({
 }
 
 export function roleLabel(role) {
-  return role === "computer"
-    ? "computador e programação"
-    : "montagem e testes";
+  if (role === "computer") return "computador e programação";
+  if (role === "assembly") return "montagem e testes";
+  if (role === "member_3") return "suporte e testes";
+  if (role === "member_4") return "documentação e apoio";
+  if (role === "individual") return "trabalho individual";
+  return role;
 }
 
 export function formatEventName(eventType) {

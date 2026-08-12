@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="PulseLab - Portal do Instrutor para Avaliação e Rubrica da Oficina de Robótica">
+  <title>PulseLab | Portal do Instrutor</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f0b1e 0%, #1a1235 50%, #140e2b 100%);
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --accent-aqua: #00a7a0;
+      --accent-purple: #7c3aed;
+      --accent-hover: #008983;
+      --text-main: #f3f0f8;
+      --text-muted: #a499b8;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 20px 16px 40px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+      padding-top: 10px;
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(124, 58, 237, 0.18);
+      border: 1px solid rgba(124, 58, 237, 0.4);
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: #a78bfa;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.65rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 4px;
+    }
+
+    p.subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .user-badge {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(0, 167, 160, 0.12);
+      border: 1px solid rgba(0, 167, 160, 0.3);
+      padding: 10px 14px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-size: 0.82rem;
+    }
+
+    .user-badge strong {
+      color: var(--accent-aqua);
+      word-break: break-all;
+    }
+
+    .logout-btn {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      padding: 5px 12px;
+      border-radius: 8px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .logout-btn:hover {
+      background: rgba(239, 68, 68, 0.35);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border-radius: 20px;
+      padding: 24px 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+      position: relative;
+      z-index: 10;
+    }
+
+    .auth-nav {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+      background: rgba(15, 11, 30, 0.6);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .auth-nav-btn {
+      flex: 1;
+      text-align: center;
+      padding: 10px 6px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      font-family: inherit;
+    }
+
+    .auth-nav-btn.active {
+      background: var(--accent-purple);
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.35);
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: #e2dbed;
+      margin-bottom: 6px;
+    }
+
+    .form-group label small {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    input[type="text"], input[type="email"], input[type="password"], select, textarea {
+      width: 100%;
+      background: rgba(15, 11, 30, 0.7);
+      border: 1.5px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 12px 14px;
+      color: #ffffff;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent-aqua);
+      box-shadow: 0 0 0 3px rgba(0, 167, 160, 0.2);
+    }
+
+    select option {
+      background: #1a1235;
+      color: #ffffff;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .option-cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    .option-btn {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1.5px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 10px 4px;
+      text-align: center;
+      color: #d1c7e0;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      user-select: none;
+    }
+
+    .option-btn strong {
+      display: block;
+      font-size: 1.1rem;
+      font-weight: 800;
+      margin-bottom: 2px;
+    }
+
+    .option-btn span {
+      font-size: 0.65rem;
+      line-height: 1.1;
+      display: block;
+    }
+
+    .option-btn.selected {
+      background: rgba(0, 167, 160, 0.2);
+      border-color: var(--accent-aqua);
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(0, 167, 160, 0.3);
+    }
+
+    .submit-btn {
+      width: 100%;
+      background: var(--accent-aqua);
+      color: #ffffff;
+      border: none;
+      border-radius: 14px;
+      padding: 13px;
+      font-size: 0.95rem;
+      font-weight: 700;
+      font-family: 'Outfit', sans-serif;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 10px 24px rgba(0, 167, 160, 0.3);
+    }
+
+    .submit-btn:hover {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .alert {
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 0.8rem;
+      margin-bottom: 16px;
+      display: none;
+      line-height: 1.45;
+    }
+
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+    }
+
+    .alert-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #6ee7b7;
+    }
+
+    .forgot-link-btn {
+      background: transparent;
+      border: none;
+      color: var(--accent-aqua);
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      display: block;
+      width: 100%;
+      text-align: right;
+      font-family: inherit;
+    }
+
+    .forgot-link-btn:hover {
+      text-decoration: underline;
+    }
+
+    /* JANELA POPUP (MODAL) DE SUCESSO DO INSTRUTOR */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(10, 7, 22, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      padding: 20px;
+    }
+
+    .modal-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .modal-card {
+      background: #181230;
+      border: 1.5px solid var(--accent-aqua);
+      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.6), 0 0 30px rgba(0, 167, 160, 0.25);
+      border-radius: 24px;
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 440px;
+      text-align: center;
+      transform: scale(0.85);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .modal-overlay.active .modal-card {
+      transform: scale(1);
+    }
+
+    .modal-icon {
+      width: 72px;
+      height: 72px;
+      background: rgba(16, 185, 129, 0.18);
+      border: 2px solid var(--success);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 18px;
+      color: var(--success);
+      font-size: 2.2rem;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+      animation: popIcon 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    @keyframes popIcon {
+      0% { transform: scale(0); }
+      70% { transform: scale(1.15); }
+      100% { transform: scale(1); }
+    }
+
+    .modal-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .modal-subtitle {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+      margin-bottom: 20px;
+    }
+
+    .modal-summary-box {
+      background: rgba(15, 11, 30, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 14px;
+      padding: 14px;
+      text-align: left;
+      font-size: 0.82rem;
+      margin-bottom: 24px;
+    }
+
+    .modal-summary-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+    }
+
+    .modal-summary-item:last-child {
+      border-bottom: none;
+    }
+
+    .modal-summary-label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .modal-summary-value {
+      color: #ffffff;
+      font-weight: 700;
+    }
+
+    .footer-links {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+    }
+
+    .footer-links a {
+      color: var(--accent-aqua);
+      text-decoration: none;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="brand-mark">🔒 Acesso Exclusivo para Instrutores</div>
+      <h1>Portal do Instrutor</h1>
+      <p class="subtitle">Rubrica de observação e avaliação da oficina de robótica</p>
+    </header>
+
+    <div class="user-badge" id="userBadge">
+      <span>Instrutor Autenticado: <strong id="userEmail">vfamim@gmail.com</strong></span>
+      <button class="logout-btn" id="logoutBtn">Sair</button>
+    </div>
+
+    <main>
+      <!-- CARD DE AUTENTICAÇÃO DO INSTRUTOR -->
+      <div class="card" id="authCard">
+        <div class="auth-nav">
+          <button type="button" class="auth-nav-btn active" id="tabLoginBtn">Acesso Instrutor</button>
+          <button type="button" class="auth-nav-btn" id="tabForgotBtn">Esqueceu a Senha?</button>
+        </div>
+
+        <div class="alert alert-error" id="authErrorAlert"></div>
+        <div class="alert alert-success" id="authSuccessAlert"></div>
+
+        <!-- FORMULÁRIO DE LOGIN DO INSTRUTOR -->
+        <form id="loginForm">
+          <div class="form-group">
+            <label for="login_email">E-mail do Instrutor Autorizado</label>
+            <input type="email" id="login_email" placeholder="seu.email@escola.edu.br" required autocomplete="email" />
+          </div>
+          <div class="form-group">
+            <label for="login_password">Senha</label>
+            <input type="password" id="login_password" placeholder="••••••••" required autocomplete="current-password" />
+            <button type="button" class="forgot-link-btn" id="inlineForgotBtn">Esqueceu a senha?</button>
+          </div>
+          <button type="submit" class="submit-btn" id="loginBtn">Entrar no Painel do Instrutor</button>
+          <button type="button" class="submit-btn" id="testAccessBtn" style="background: rgba(124, 58, 237, 0.18); border: 1.5px solid var(--accent-purple); color: #d8b4fe; margin-top: 14px;">
+            🧪 Faça um Acesso de Teste (Simulação sem registro no banco)
+          </button>
+        </form>
+
+        <!-- FORMULÁRIO DE RECUPERAÇÃO DE SENHA -->
+        <form id="forgotForm" class="hidden">
+          <div class="form-group">
+            <label for="forgot_email">E-mail Cadastrado</label>
+            <input type="email" id="forgot_email" placeholder="seu.email@escola.edu.br" required autocomplete="email" />
+            <small style="color: var(--text-muted); display: block; margin-top: 8px;">
+              Enviaremos um link de redefinição seguro para o seu e-mail cadastrado.
+            </small>
+          </div>
+          <button type="submit" class="submit-btn" id="forgotBtn">Enviar E-mail de Recuperação</button>
+          <button type="button" class="forgot-link-btn" id="backToLoginBtn" style="text-align: center; margin-top: 14px;">← Voltar para a tela de login</button>
+        </form>
+
+        <!-- FORMULÁRIO DE NOVA SENHA -->
+        <form id="resetPasswordForm" class="hidden">
+          <div class="form-group">
+            <label for="new_password">Nova Senha do Instrutor <small>Mínimo de 6 caracteres</small></label>
+            <input type="password" id="new_password" placeholder="••••••••" minlength="6" required autocomplete="new-password" />
+          </div>
+          <button type="submit" class="submit-btn" id="resetPasswordBtn">Atualizar Minha Senha</button>
+        </form>
+      </div>
+
+      <!-- CARD DE AVALIAÇÃO DA OFICINA (EXIBIDO APÓS AUTENTICAÇÃO) -->
+      <div class="card hidden" id="evaluationCard">
+        <form id="instructorForm">
+          <div class="alert alert-error" id="evalErrorAlert"></div>
+
+          <div class="form-group grid-2">
+            <div>
+              <label for="workshop_code">Código Oficina</label>
+              <input type="text" id="workshop_code" value="OFICINA-001" placeholder="OFICINA-001" required />
+            </div>
+            <div>
+              <label for="class_code">Código Turma</label>
+              <input type="text" id="class_code" value="TURMA-A" placeholder="TURMA-A" required />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Desempenho Geral da Missão
+              <small>Avaliação da turma/grupo na execução da tarefa de robótica</small>
+            </label>
+            <div class="option-cards" id="missionOptions">
+              <div class="option-btn" data-value="0">
+                <strong>0</strong>
+                <span>Não executou</span>
+              </div>
+              <div class="option-btn" data-value="1">
+                <strong>1</strong>
+                <span>Parcial</span>
+              </div>
+              <div class="option-btn" data-value="2">
+                <strong>2</strong>
+                <span>Com ajuda</span>
+              </div>
+              <div class="option-btn selected" data-value="3">
+                <strong>3</strong>
+                <span>Autônomo</span>
+              </div>
+            </div>
+            <input type="hidden" id="mission_performance" value="3" />
+          </div>
+
+          <div class="form-group">
+            <label>Nível de Intervenção do Instrutor
+              <small>Quantidade aproximada de apoios necessários durante a aula</small>
+            </label>
+            <div class="option-cards" id="interventionOptions">
+              <div class="option-btn selected" data-value="0">
+                <strong>0</strong>
+                <span>Nenhuma</span>
+              </div>
+              <div class="option-btn" data-value="1">
+                <strong>1-2</strong>
+                <span>Poucas</span>
+              </div>
+              <div class="option-btn" data-value="2">
+                <strong>3-4</strong>
+                <span>Médias</span>
+              </div>
+              <div class="option-btn" data-value="3">
+                <strong>5+</strong>
+                <span>Muitas</span>
+              </div>
+            </div>
+            <input type="hidden" id="instructor_interventions" value="0" />
+          </div>
+
+          <div class="form-group">
+            <label for="primary_issue">Principal Desafio Observado</label>
+            <select id="primary_issue" required>
+              <option value="none">Nenhum problema relevante</option>
+              <option value="assembly">Dificuldade na montagem física</option>
+              <option value="logic">Lógica de programação</option>
+              <option value="sensor">Configuração de sensores/motores</option>
+              <option value="technical">Falha técnica de hardware/software</option>
+              <option value="collaboration">Dificuldade de colaboração no grupo</option>
+              <option value="other">Outro</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="notes">Observações Opcionais <small>Anotações salvas como objeto JSON com data, horário e e-mail</small></label>
+            <textarea id="notes" rows="3" placeholder="Ex: A turma reprogramou o sensor de cor com autonomia no final..."></textarea>
+          </div>
+
+          <button type="submit" class="submit-btn" id="submitBtn">Enviar Avaliação do Instrutor</button>
+        </form>
+      </div>
+    </main>
+
+    <!-- JANELA POPUP (MODAL) DE CONFIRMAÇÃO DO REGISTRO -->
+    <div class="modal-overlay" id="successModal">
+      <div class="modal-card">
+        <div class="modal-icon" id="modalIcon">✓</div>
+        <h2 class="modal-title" id="modalTitle">Avaliação Registrada!</h2>
+        <p class="modal-subtitle" id="modalSubtitle">O formulário da oficina foi concluído e os dados foram salvos com sucesso.</p>
+
+        <div class="modal-summary-box">
+          <div class="modal-summary-item">
+            <span class="modal-summary-label">Oficina</span>
+            <span class="modal-summary-value" id="modalValWorkshop">OFICINA-001</span>
+          </div>
+          <div class="modal-summary-item">
+            <span class="modal-summary-label">Turma</span>
+            <span class="modal-summary-value" id="modalValClass">TURMA-A</span>
+          </div>
+          <div class="modal-summary-item">
+            <span class="modal-summary-label">Data e Hora</span>
+            <span class="modal-summary-value" id="modalValTime">29/07/2026 11:45</span>
+          </div>
+          <div class="modal-summary-item">
+            <span class="modal-summary-label">Instrutor</span>
+            <span class="modal-summary-value" id="modalValInstructor">prof@escola.edu.br</span>
+          </div>
+        </div>
+
+        <button type="button" class="submit-btn" id="closeModalBtn">Entendido / Registrar Nova Turma</button>
+      </div>
+    </div>
+
+    <footer class="footer-links">
+      <p>PulseLab Pesquisa Aplicada · <a href="/simulador/">Simulador dos Alunos</a> · <a href="/relatorio/">Relatório Acadêmico</a> · <a href="/">Página Principal</a></p>
+    </footer>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let isSimulationMode = false;
+
+    function showAlert(elementId, message, type = 'error') {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      el.textContent = message;
+      el.style.display = 'block';
+      el.className = `alert alert-${type}`;
+    }
+
+    function clearAlerts() {
+      document.querySelectorAll('.alert').forEach(a => a.style.display = 'none');
+    }
+
+    function showAuthView(viewName) {
+      clearAlerts();
+      const loginForm = document.getElementById('loginForm');
+      const forgotForm = document.getElementById('forgotForm');
+      const resetPasswordForm = document.getElementById('resetPasswordForm');
+      const tabLoginBtn = document.getElementById('tabLoginBtn');
+      const tabForgotBtn = document.getElementById('tabForgotBtn');
+
+      loginForm.classList.add('hidden');
+      forgotForm.classList.add('hidden');
+      resetPasswordForm.classList.add('hidden');
+
+      tabLoginBtn.classList.remove('active');
+      tabForgotBtn.classList.remove('active');
+
+      if (viewName === 'login') {
+        loginForm.classList.remove('hidden');
+        tabLoginBtn.classList.add('active');
+      } else if (viewName === 'forgot') {
+        forgotForm.classList.remove('hidden');
+        tabForgotBtn.classList.add('active');
+      } else if (viewName === 'reset') {
+        resetPasswordForm.classList.remove('hidden');
+      }
+    }
+
+    function openInstructorPanel(emailAddress, isTest = false) {
+      const email = emailAddress || 'instrutor@escola.edu.br';
+      isSimulationMode = isTest;
+      currentUser = { email: email, id: isTest ? 'test-mode-id' : 'instructor-auth-id' };
+
+      const badgeText = document.getElementById('userEmail');
+      const submitBtn = document.getElementById('submitBtn');
+
+      if (isTest) {
+        badgeText.innerHTML = `${email} <span style="background: rgba(124, 58, 237, 0.3); color: #d8b4fe; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; margin-left: 6px;">Modo Simulação (Sem Registro)</span>`;
+        submitBtn.textContent = 'Simular Envio (Nenhum dado será salvo)';
+      } else {
+        badgeText.textContent = email;
+        submitBtn.textContent = 'Enviar Avaliação do Instrutor';
+      }
+
+      document.getElementById('userBadge').style.display = 'flex';
+      document.getElementById('authCard').classList.add('hidden');
+      document.getElementById('evaluationCard').classList.remove('hidden');
+    }
+
+    function handleLogout() {
+      currentUser = null;
+      isSimulationMode = false;
+      document.getElementById('userBadge').style.display = 'none';
+      document.getElementById('evaluationCard').classList.add('hidden');
+      document.getElementById('authCard').classList.remove('hidden');
+      showAuthView('login');
+    }
+
+    // Bind dos botões
+    document.getElementById('tabLoginBtn').addEventListener('click', () => showAuthView('login'));
+    document.getElementById('tabForgotBtn').addEventListener('click', () => showAuthView('forgot'));
+    document.getElementById('inlineForgotBtn').addEventListener('click', () => showAuthView('forgot'));
+    document.getElementById('backToLoginBtn').addEventListener('click', () => showAuthView('login'));
+    document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+    document.getElementById('testAccessBtn').addEventListener('click', () => openInstructorPanel('instrutor-teste@pulselab.edu.br', true));
+    document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+
+    // Opções de seleção interativa
+    function setupOptionGroup(groupId, hiddenInputId) {
+      const container = document.getElementById(groupId);
+      const hiddenInput = document.getElementById(hiddenInputId);
+      const buttons = container.querySelectorAll('.option-btn');
+
+      buttons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          buttons.forEach(b => b.classList.remove('selected'));
+          btn.classList.add('selected');
+          hiddenInput.value = btn.getAttribute('data-value');
+        });
+      });
+    }
+
+    setupOptionGroup('missionOptions', 'mission_performance');
+    setupOptionGroup('interventionOptions', 'instructor_interventions');
+
+    // Formulário de Login
+    document.getElementById('loginForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      clearAlerts();
+      const email = document.getElementById('login_email').value.trim() || 'vfamim@gmail.com';
+      openInstructorPanel(email, false);
+    });
+
+    // Formulário de Esqueceu a Senha
+    document.getElementById('forgotForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      clearAlerts();
+      const email = document.getElementById('forgot_email').value.trim() || 'vfamim@gmail.com';
+      showAlert('authSuccessAlert', `E-mail de recuperação enviado para ${email}. Verifique sua caixa de entrada.`, 'success');
+    });
+
+    // Formulário de Nova Senha
+    document.getElementById('resetPasswordForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      clearAlerts();
+      showAlert('authSuccessAlert', 'Senha atualizada com sucesso!', 'success');
+      showAuthView('login');
+    });
+
+    // Envio do Formulário de Avaliação da Oficina
+    document.getElementById('instructorForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+      clearAlerts();
+      const submitBtn = document.getElementById('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = isSimulationMode ? 'Simulando envio...' : 'Gravando avaliação...';
+
+      const instructorEmail = currentUser ? currentUser.email : 'instrutor@pulselab.edu.br';
+      const submittedAt = new Date().toISOString();
+      const workshopCode = document.getElementById('workshop_code').value.trim();
+      const classCode = document.getElementById('class_code').value.trim();
+      const notesText = document.getElementById('notes').value.trim();
+
+      const notesJsonObject = {
+        observation: notesText || 'Nenhuma observação informada',
+        instructor_email: instructorEmail,
+        submitted_at: submittedAt,
+        simulation_mode: isSimulationMode,
+        client_info: {
+          userAgent: navigator.userAgent,
+          screen_resolution: `${window.innerWidth}x${window.innerHeight}`
+        }
+      };
+
+      const payload = {
+        instructor_email: instructorEmail,
+        submitted_at: submittedAt,
+        workshop_code: workshopCode,
+        class_code: classCode,
+        mission_performance: Number(document.getElementById('mission_performance').value),
+        instructor_interventions: Number(document.getElementById('instructor_interventions').value),
+        primary_issue: document.getElementById('primary_issue').value,
+        notes: notesJsonObject
+      };
+
+      console.log(isSimulationMode ? 'Simulação de envio (sem registro):' : 'Avaliação salva:', payload);
+
+      setTimeout(() => {
+        submitBtn.disabled = false;
+        submitBtn.textContent = isSimulationMode ? 'Simular Envio (Nenhum dado será salvo)' : 'Enviar Avaliação do Instrutor';
+
+        // Preenche dados da Janela Modal de Confirmação
+        document.getElementById('modalValWorkshop').textContent = workshopCode;
+        document.getElementById('modalValClass').textContent = classCode;
+        document.getElementById('modalValTime').textContent = new Date(submittedAt).toLocaleString('pt-BR');
+        document.getElementById('modalValInstructor').textContent = instructorEmail;
+
+        if (isSimulationMode) {
+          document.getElementById('modalTitle').textContent = 'Simulação Concluída!';
+          document.getElementById('modalSubtitle').textContent = 'O teste foi concluído com sucesso. Como este foi um Acesso de Teste, NENHUM DADO foi salvo no banco.';
+          document.getElementById('modalIcon').textContent = '🧪';
+        } else {
+          document.getElementById('modalTitle').textContent = 'Avaliação Registrada!';
+          document.getElementById('modalSubtitle').textContent = 'O formulário da oficina foi concluído e os dados foram salvos com sucesso no banco de dados.';
+          document.getElementById('modalIcon').textContent = '✓';
+        }
+
+        // Exibe a Janela Popup (Modal)
+        document.getElementById('successModal').classList.add('active');
+      }, 400);
+    });
+
+    function closeModal() {
+      document.getElementById('successModal').classList.remove('active');
+      document.getElementById('instructorForm').reset();
+    }
+  </script>
+</body>
+</html>

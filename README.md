@@ -101,9 +101,9 @@ de avaliação está em
 ## Setup: GitHub (GitOps)
 
 1. Edite o arquivo `config/config.json`:
-   - Defina `"site_id"` para uma sede inicial ou preencha-o na primeira sessão.
+   - Defina `"site_id"` para a sede/cidade inicial ou informe-o ao gerar o instalador.
    - Insira o identificador regional em `"regional_hub"` (ex: `"Polo-Nordeste-01"`).
-   - Defina os códigos padrão de escola, oficina e turma ou preencha-os na abertura de cada sessão.
+   - Defina os códigos padrão de escola, oficina e turma. Valores que ainda começarem com `CONFIGURE_` serão os únicos solicitados na abertura da sessão.
    - Ajuste `activity_id` e as perguntas somente após aprovação da versão do protocolo.
    - Configure `"config_remote_url"` com a URL raw do seu repositório pessoal:
      ```
@@ -111,7 +111,7 @@ de avaliação está em
      ```
 2. Realize o commit e envie para a branch `main` ou de release ativa.
 
-Sede, regional e escola são persistidos em `%LOCALAPPDATA%\PulseLab\installation.json` após a primeira confirmação válida. Atualizações remotas do protocolo não substituem essa identidade local.
+Sede, regional e escola são persistidos em `%LOCALAPPDATA%\PulseLab\installation.json` após a primeira confirmação válida. Atualizações remotas do protocolo não substituem essa identidade local. Depois disso, a tela inicial mostra esses valores apenas em um resumo compacto.
 
 ---
 
@@ -148,21 +148,29 @@ Você pode gerar o instalador a partir de qualquer ambiente:
 - **No Linux/macOS (usando Python)**:
   ```bash
   python3 installer/build-installer.py \
-      --output "Install-Pulselab-Polo-Nordeste-01.bat"
+      --site-id "JUAZEIRO-BA" \
+      --regional-hub "POLO-VALE-SAO-FRANCISCO" \
+      --school-code "ESCOLA-01" \
+      --output "Install-Pulselab-Juazeiro-BA.bat"
   ```
 
 - **No Windows (usando PowerShell)**:
   ```powershell
   .\installer\build-installer.ps1 `
-      -OutputPath ".\Install-Pulselab-Polo-Nordeste-01.bat"
+      -SiteId "JUAZEIRO-BA" `
+      -RegionalHub "POLO-VALE-SAO-FRANCISCO" `
+      -SchoolCode "ESCOLA-01" `
+      -OutputPath ".\Install-Pulselab-Juazeiro-BA.bat"
   ```
 
 Os dois scripts leem automaticamente `PULSELAB_URL` e `PULSELAB_KEY` do `.env`. Também é possível fornecer as credenciais diretamente, mas isso deixa a chave no histórico do terminal.
 
+Os parâmetros de identidade alteram somente a cópia da configuração embutida no instalador; o `config/config.json` do projeto não é modificado. Assim, você pode gerar um arquivo para cada sede e enviar ao respectivo responsável. Se algum valor continuar como `CONFIGURE_...`, somente esse valor será solicitado ao iniciar a oficina.
+
 Isso criará um arquivo `.bat` na raiz do projeto. Ele é ignorado pelo Git.
 
 #### 3. Executar na máquina do aluno
-1. Copie somente o arquivo `Install-Pulselab-Polo-Nordeste-01.bat` para um pendrive ou rede escolar.
+1. Copie somente o instalador correspondente à sede para um pendrive ou rede escolar.
 2. Na máquina do aluno, execute o arquivo clicando **duas vezes** nele (sem necessidade de privilégios de Administrador).
 3. O instalador copiará os arquivos necessários de forma transparente para `C:\Users\Public\Pulselab\`, configurará as chaves no ambiente do usuário e criará o atalho na Área de Trabalho.
 4. Feche a janela do instalador após a mensagem de conclusão.
@@ -192,7 +200,7 @@ $u="https://SEU_PROJECT_REF.supabase.co"; $k="SUA_ANON_KEY"; iex (irm "https://r
 
 ## Como Usar na Oficina (Fluxo do Usuário)
 
-1. O instrutor abre o atalho, confirma sede, regional, escola, oficina, turma e atividade, sem nomes de estudantes.
+1. O instrutor abre o atalho, confere o resumo e preenche somente os itens que não foram pré-configurados, sem nomes de estudantes.
 2. O instrutor confirma que verificou as autorizações e o consentimento aplicáveis.
 3. Cada criança recebe o convite de assentimento. Se qualquer uma recusar, o coletor encerra e a dupla continua normalmente na oficina.
 4. As crianças respondem, separadamente, experiência prévia e autoeficácia.

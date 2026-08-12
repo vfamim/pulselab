@@ -21,6 +21,15 @@ param(
     [string]$SupabaseKey = "",
 
     [Parameter(Mandatory = $false)]
+    [string]$SiteId = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$RegionalHub = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$SchoolCode = "",
+
+    [Parameter(Mandatory = $false)]
     [string]$DestinationDir = "C:\Users\Public\pulselab-main",
 
     [Parameter(Mandatory = $false)]
@@ -173,8 +182,17 @@ if (Test-Path $configFilePath) {
         $configObj  = $configJson | ConvertFrom-Json
         $configObj.supabase_url = $SupabaseUrl
         $configObj.supabase_key = $SupabaseKey
+        if (-not [string]::IsNullOrWhiteSpace($SiteId)) {
+            $configObj.site_id = $SiteId.Trim()
+        }
+        if (-not [string]::IsNullOrWhiteSpace($RegionalHub)) {
+            $configObj.regional_hub = $RegionalHub.Trim()
+        }
+        if (-not [string]::IsNullOrWhiteSpace($SchoolCode)) {
+            $configObj.school_code = $SchoolCode.Trim()
+        }
         $configObj | ConvertTo-Json -Depth 10 | Set-Content -Path $configFilePath -Encoding UTF8 -Force
-        Write-InstallLog "SUCCESS" "Credenciais gravadas no arquivo 'config/config.json' portátil."
+        Write-InstallLog "SUCCESS" "Credenciais e identidade informada gravadas em 'config/config.json'."
     } catch {
         Write-InstallLog "WARN" "Não foi possível gravar as credenciais diretamente no config.json: $_"
     }

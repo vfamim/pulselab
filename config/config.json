@@ -1,6 +1,8 @@
 {
   "version": "1.4.0",
   "protocol_version": "protocolo-pesquisa-v1",
+  "group_size": 2,
+  "student_age_prompt": true,
   "site_id": "CONFIGURE_SEDE",
   "activity_id": "atividade-01-spike",
   "regional_hub": "Polo-Nordeste-01",
