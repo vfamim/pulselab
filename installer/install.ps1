@@ -90,11 +90,15 @@ if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
 # If still missing, fallback to interactive input
 if ([string]::IsNullOrWhiteSpace($SupabaseUrl)) {
     Write-InstallLog "WARN" "A URL do Supabase não foi fornecida."
-    $SupabaseUrl = (Read-Host "🌐 Digite a URL do Supabase (ex: https://ref.supabase.co)").Trim()
+    $SupabaseUrl = (Read-Host "🌐 Digite a URL do Supabase (ex: https://ref.supabase.co)").Trim().Trim('"').Trim("'")
+} else {
+    $SupabaseUrl = $SupabaseUrl.Trim().Trim('"').Trim("'")
 }
 if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
     Write-InstallLog "WARN" "A Anon Key do Supabase não foi fornecida."
-    $SupabaseKey = (Read-Host "🔑 Digite a ANON KEY do Supabase").Trim()
+    $SupabaseKey = (Read-Host "🔑 Digite a ANON KEY do Supabase").Trim().Trim('"').Trim("'")
+} else {
+    $SupabaseKey = $SupabaseKey.Trim().Trim('"').Trim("'")
 }
 
 if ([string]::IsNullOrWhiteSpace($SupabaseUrl) -or [string]::IsNullOrWhiteSpace($SupabaseKey)) {
@@ -210,34 +214,39 @@ try {
 }
 
 # =============================================================================
-# STEP 6: Create Desktop Shortcut
+# STEP 6: Create Desktop and Start Menu Shortcuts
 # =============================================================================
-$desktopDir  = [System.Environment]::GetFolderPath("Desktop")
-$shortcutPath = Join-Path $desktopDir "Iniciar Pulselab - Oficina de Robótica.lnk"
+$shortcutName = "Iniciar Pulselab - Oficina de Robótica.lnk"
+$desktopDir   = [System.Environment]::GetFolderPath("Desktop")
+$startMenuDir = [System.Environment]::GetFolderPath("Programs")
 
-try {
-    # Remove old automatically startup folder link if it was ever configured
-    $startupDir  = [System.Environment]::GetFolderPath("Startup")
-    $legacyShortcut = Join-Path $startupDir "Pulselab.lnk"
-    if (Test-Path $legacyShortcut) {
-        Remove-Item $legacyShortcut -Force -ErrorAction SilentlyContinue
+# Remove old legacy startup shortcut if present
+$startupDir     = [System.Environment]::GetFolderPath("Startup")
+$legacyShortcut = Join-Path $startupDir "Pulselab.lnk"
+if (Test-Path $legacyShortcut) {
+    Remove-Item $legacyShortcut -Force -ErrorAction SilentlyContinue
+}
+
+$shortcutLocations = @($desktopDir, $startMenuDir) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) }
+
+foreach ($locDir in $shortcutLocations) {
+    $shortcutPath = Join-Path $locDir $shortcutName
+    try {
+        $wshell   = New-Object -ComObject WScript.Shell
+        $shortcut = $wshell.CreateShortcut($shortcutPath)
+
+        $shortcut.TargetPath       = "powershell.exe"
+        $shortcut.Arguments        = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$DestinationDir\pulselab.ps1`""
+        $shortcut.WorkingDirectory = $DestinationDir
+        $shortcut.WindowStyle      = 7 # Minimized/Hidden
+        $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
+        $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+        $shortcut.Save()
+
+        Write-InstallLog "SUCCESS" "Atalho criado com sucesso: '$shortcutPath'"
+    } catch {
+        Write-InstallLog "WARN" "Falha ao criar atalho em '$shortcutPath': $_"
     }
-
-    # Create Desktop shortcut pointing to the new install
-    $wshell   = New-Object -ComObject WScript.Shell
-    $shortcut = $wshell.CreateShortcut($shortcutPath)
-
-    $shortcut.TargetPath       = "powershell.exe"
-    $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$DestinationDir\pulselab.ps1`""
-    $shortcut.WorkingDirectory = $DestinationDir
-    $shortcut.WindowStyle      = 7 # Minimized/Hidden
-    $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
-    $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-    $shortcut.Save()
-
-    Write-InstallLog "SUCCESS" "Atalho na Área de Trabalho criado: '$shortcutPath'"
-} catch {
-    Write-InstallLog "WARN" "Falha ao criar o atalho na Área de Trabalho: $_"
 }
 
 # =============================================================================
@@ -247,5 +256,5 @@ Write-InstallLog "SUCCESS" "----------------------------------------------------
 Write-InstallLog "SUCCESS" "INSTALAÇÃO CONCLUÍDA COM SUCESSO!"
 Write-InstallLog "SUCCESS" "Pulselab está pronto para ser utilizado nesta máquina."
 Write-InstallLog "SUCCESS" "  Pasta Local : $DestinationDir"
-Write-InstallLog "SUCCESS" "  Atalho      : Área de Trabalho -> 'Iniciar Pulselab - Oficina de Robótica'"
+Write-InstallLog "SUCCESS" "  Atalhos     : Área de Trabalho e Menu Iniciar ('Iniciar Pulselab - Oficina de Robótica')"
 Write-InstallLog "SUCCESS" "--------------------------------------------------------"

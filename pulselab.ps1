@@ -120,8 +120,8 @@ function Show-WpfSetup {
     }
 
     $btnSave.add_Click({
-        $results.Url = $txtUrl.Text.Trim()
-        $results.Key = $txtKey.Text.Trim()
+        $results.Url = $txtUrl.Text.Trim().Trim('"').Trim("'")
+        $results.Key = $txtKey.Text.Trim().Trim('"').Trim("'")
         $results.Status = $true
         $window.Close()
     })
@@ -164,29 +164,35 @@ if (-not $hasConfigCreds -and -not $hasEnvCreds) {
 }
 
 # =============================================================================
-# STEP 3: Setup shortcut on the Desktop (runs once)
+# STEP 3: Setup shortcuts on Desktop and Start Menu (runs once)
 # =============================================================================
-$desktopDir  = [System.Environment]::GetFolderPath("Desktop")
-$shortcutPath = Join-Path $desktopDir "Iniciar Pulselab - Oficina de Robótica.lnk"
+$shortcutName = "Iniciar Pulselab - Oficina de Robótica.lnk"
+$desktopDir   = [System.Environment]::GetFolderPath("Desktop")
+$startMenuDir = [System.Environment]::GetFolderPath("Programs")
 
-if (-not (Test-Path $shortcutPath)) {
-    try {
-        Write-SetupLog "INFO" "Creating Desktop shortcut for manual launch..."
+$shortcutLocations = @($desktopDir, $startMenuDir) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) }
 
-        $wshell   = New-Object -ComObject WScript.Shell
-        $shortcut = $wshell.CreateShortcut($shortcutPath)
+foreach ($locDir in $shortcutLocations) {
+    $targetPath = Join-Path $locDir $shortcutName
+    if (-not (Test-Path $targetPath)) {
+        try {
+            Write-SetupLog "INFO" "Creating shortcut at $targetPath..."
 
-        $shortcut.TargetPath       = "powershell.exe"
-        $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\pulselab.ps1`""
-        $shortcut.WorkingDirectory = $PSScriptRoot
-        $shortcut.WindowStyle      = 7 # Minimized/Hidden
-        $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
-        $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-        $shortcut.Save()
+            $wshell   = New-Object -ComObject WScript.Shell
+            $shortcut = $wshell.CreateShortcut($targetPath)
 
-        Write-SetupLog "INFO" "Desktop shortcut created successfully at $shortcutPath"
-    } catch {
-        Write-SetupLog "WARN" "Failed to generate Desktop shortcut: $_"
+            $shortcut.TargetPath       = "powershell.exe"
+            $shortcut.Arguments        = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$PSScriptRoot\pulselab.ps1`""
+            $shortcut.WorkingDirectory = $PSScriptRoot
+            $shortcut.WindowStyle      = 7 # Minimized/Hidden
+            $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
+            $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+            $shortcut.Save()
+
+            Write-SetupLog "INFO" "Shortcut created successfully at $targetPath"
+        } catch {
+            Write-SetupLog "WARN" "Failed to generate shortcut at ${targetPath}: $_"
+        }
     }
 }
 

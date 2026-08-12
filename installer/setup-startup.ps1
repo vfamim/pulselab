@@ -64,6 +64,10 @@ Write-SetupLog "INFO" "Agent path resolved. path=$AgentPath"
 # STEP 2: Set user-scoped environment variables (no UAC required)
 # =============================================================================
 
+# Clean credentials from surrounding quotes
+$SupabaseUrl = $SupabaseUrl.Trim().Trim('"').Trim("'")
+$SupabaseKey = $SupabaseKey.Trim().Trim('"').Trim("'")
+
 [System.Environment]::SetEnvironmentVariable("PULSELAB_URL", $SupabaseUrl, "User")
 [System.Environment]::SetEnvironmentVariable("PULSELAB_KEY", $SupabaseKey, "User")
 
@@ -81,42 +85,39 @@ if ($verifyUrl -ne $SupabaseUrl -or $verifyKey -ne $SupabaseKey) {
 Write-SetupLog "INFO" "Environment variables verified successfully."
 
 # =============================================================================
-# STEP 3: Create Windows Desktop shortcut (.lnk) for On-Demand manual launch
+# STEP 3: Create Windows Desktop & Start Menu shortcuts (.lnk) for On-Demand manual launch
 # Uses COM WSScript.Shell - available on all Windows versions, no UAC.
 # =============================================================================
 
-$desktopDir  = [System.Environment]::GetFolderPath("Desktop")
-$shortcutPath = Join-Path $desktopDir "Iniciar Pulselab - Oficina de Robótica.lnk"
+$shortcutName = "Iniciar Pulselab - Oficina de Robótica.lnk"
+$desktopDir   = [System.Environment]::GetFolderPath("Desktop")
+$startMenuDir = [System.Environment]::GetFolderPath("Programs")
 
 # Clean up any legacy automatic startup shortcut if present
-$startupDir  = [System.Environment]::GetFolderPath("Startup")
+$startupDir     = [System.Environment]::GetFolderPath("Startup")
 $legacyShortcut = Join-Path $startupDir "Pulselab.lnk"
 if (Test-Path $legacyShortcut) {
     Write-SetupLog "INFO" "Removing legacy automatic startup shortcut..."
     Remove-Item $legacyShortcut -Force -ErrorAction SilentlyContinue
 }
 
-$wshell   = New-Object -ComObject WScript.Shell
-$shortcut = $wshell.CreateShortcut($shortcutPath)
+$shortcutLocations = @($desktopDir, $startMenuDir) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) }
 
-$shortcut.TargetPath       = "powershell.exe"
-$shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
-$shortcut.WorkingDirectory = Split-Path -Parent $AgentPath
-$shortcut.WindowStyle      = 7    # 7 = Minimized / Hidden
-$shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
-$shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+foreach ($locDir in $shortcutLocations) {
+    $shortcutPath = Join-Path $locDir $shortcutName
+    $wshell   = New-Object -ComObject WScript.Shell
+    $shortcut = $wshell.CreateShortcut($shortcutPath)
 
-$shortcut.Save()
+    $shortcut.TargetPath       = "powershell.exe"
+    $shortcut.Arguments        = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
+    $shortcut.WorkingDirectory = Split-Path -Parent $AgentPath
+    $shortcut.WindowStyle      = 7    # 7 = Minimized / Hidden
+    $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
+    $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
 
-Write-SetupLog "INFO" "Desktop shortcut created. path=$shortcutPath"
-
-# Verify shortcut was created
-if (-not (Test-Path $shortcutPath)) {
-    Write-SetupLog "ERROR" "Shortcut creation verification failed. File not found at $shortcutPath"
-    exit 1
+    $shortcut.Save()
+    Write-SetupLog "INFO" "Shortcut created at $shortcutPath"
 }
-
-Write-SetupLog "INFO" "Shortcut creation verified."
 
 # =============================================================================
 # STEP 4: Summary
@@ -125,9 +126,9 @@ Write-SetupLog "INFO" "Shortcut creation verified."
 Write-SetupLog "INFO" "---------------------------------------------"
 Write-SetupLog "INFO" "Setup complete. Pulselab is ready for on-demand use."
 Write-SetupLog "INFO" "  Daemon       : $AgentPath"
-Write-SetupLog "INFO" "  Desktop link : $shortcutPath"
+Write-SetupLog "INFO" "  Shortcuts    : Desktop & Start Menu ('Iniciar Pulselab - Oficina de Robótica')"
 Write-SetupLog "INFO" "  Supabase URL : $($SupabaseUrl.Substring(0, [Math]::Min(30, $SupabaseUrl.Length)))..."
 Write-SetupLog "INFO" "---------------------------------------------"
-Write-SetupLog "INFO" "To start the session, the instructor should double-click the desktop shortcut:"
+Write-SetupLog "INFO" "To start the session, double-click the shortcut on the Desktop or search in Start Menu:"
 Write-SetupLog "INFO" "  'Iniciar Pulselab - Oficina de Robótica'"
 Write-SetupLog "INFO" "---------------------------------------------"

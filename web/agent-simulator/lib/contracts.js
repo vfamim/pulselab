@@ -17,10 +17,10 @@ export const TIMELINE_EVENT_TYPES = [
 ];
 
 export const PARTICIPANTS = {
-  A: { id: "PARTICIPANTE-A", label: "Aluno 1" },
-  B: { id: "PARTICIPANTE-B", label: "Aluno 2" },
-  C: { id: "PARTICIPANTE-C", label: "Aluno 3" },
-  D: { id: "PARTICIPANTE-D", label: "Aluno 4" }
+  A: { id: "PARTICIPANTE-A", label: "Participante A" },
+  B: { id: "PARTICIPANTE-B", label: "Participante B" },
+  C: { id: "PARTICIPANTE-C", label: "Participante C" },
+  D: { id: "PARTICIPANTE-D", label: "Participante D" }
 };
 
 export function createUuid() {

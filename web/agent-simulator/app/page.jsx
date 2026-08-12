@@ -96,17 +96,17 @@ const SCREEN_STEP = {
 const PROGRESS_OPTIONS = [
   {
     value: "progressing_independently",
-    title: "Avançando sozinhos",
+    title: "Avançando sem ajuda",
     description: "Estamos conseguindo seguir sem ajuda."
   },
   {
     value: "progressing_with_doubt",
-    title: "Avançando com dúvida",
+    title: "Avançando, mas com dúvida",
     description: "Estamos progredindo, mas ainda inseguros."
   },
   {
     value: "trying_without_progress",
-    title: "Tentando sem avançar",
+    title: "Tentando, mas sem conseguir avançar",
     description: "Já tentamos caminhos, mas continuamos no mesmo ponto."
   },
   {

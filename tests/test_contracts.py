@@ -363,6 +363,16 @@ class InstallerPackagingTests(unittest.TestCase):
             self.assertIn(parameter, powershell_installer)
             self.assertIn(parameter, bootstrap_installer)
 
+    def test_shortcut_locations_and_quote_guards(self):
+        for path in (SETUP_PATH, POWERSHELL_INSTALLER_PATH, BOOTSTRAP_PATH, PORTABLE_LAUNCHER_PATH):
+            text = read_text(path)
+            self.assertIn("Desktop", text)
+            self.assertIn("Programs", text)
+            self.assertIn("-NoProfile", text)
+        py_installer = read_text(INSTALLER_PATH)
+        self.assertIn("$p=$env:BATCH_PATH", py_installer)
+        self.assertIn("Programs", py_installer)
+
 
 if __name__ == "__main__":
     unittest.main()

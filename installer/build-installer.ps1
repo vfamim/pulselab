@@ -151,7 +151,7 @@ if ([string]::IsNullOrWhiteSpace($OutputPath)) {
 $batchTemplate = @"
 @echo off
 set "BATCH_PATH=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "iex ((Get-Content -LiteralPath `$env:BATCH_PATH -Raw) -split '(?ms)^#PS_START#')[1]"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "`$p=`$env:BATCH_PATH; iex ((Get-Content -LiteralPath `$p -Raw) -split '(?ms)^#PS_START#')[1]"
 exit /b %errorlevel%
 #PS_START#
 `$ErrorActionPreference = "Stop"
@@ -210,9 +210,10 @@ Write-InstallerLog "INFO" "Extraindo arquivo de configuracao..."
 `$configBytes = [System.Convert]::FromBase64String(`$configB64)
 [System.IO.File]::WriteAllBytes(`$configPath, `$configBytes)
 
-# 6. Criar atalho na Area de Trabalho
+# 6. Criar atalhos na Area de Trabalho e no Menu Iniciar
+`$shortcutName = "Iniciar Pulselab - Oficina de Robotica.lnk"
 `$desktopDir = [System.Environment]::GetFolderPath("Desktop")
-`$shortcutPath = Join-Path `$desktopDir "Iniciar Pulselab - Oficina de Robotica.lnk"
+`$startMenuDir = [System.Environment]::GetFolderPath("Programs")
 
 # Remover atalho legado de inicializacao automatica se existir
 `$startupDir = [System.Environment]::GetFolderPath("Startup")
@@ -222,25 +223,29 @@ if (Test-Path `$legacyShortcut) {
     Remove-Item `$legacyShortcut -Force -ErrorAction SilentlyContinue
 }
 
-Write-InstallerLog "INFO" "Criando atalho na Area de Trabalho..."
-try {
-    `$wshell = New-Object -ComObject WScript.Shell
-    `$shortcut = `$wshell.CreateShortcut(`$shortcutPath)
-    `$shortcut.TargetPath = "powershell.exe"
-    `$shortcut.Arguments = "-ExecutionPolicy Bypass -WindowStyle Hidden -File `"`$agentPath`""
-    `$shortcut.WorkingDirectory = `$agentDir
-    `$shortcut.WindowStyle = 7 # Minimized/Hidden
-    `$shortcut.Description = "Iniciar Pulselab - Oficina de Robotica"
-    `$shortcut.IconLocation = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-    `$shortcut.Save()
-    Write-InstallerLog "INFO" "Atalho criado com sucesso: `$shortcutPath"
-} catch {
-    Write-InstallerLog "ERROR" "Erro ao criar o atalho: `$_"
+Write-InstallerLog "INFO" "Criando atalhos na Area de Trabalho e no Menu Iniciar..."
+`$locations = @(`$desktopDir, `$startMenuDir) | Where-Object { -not [string]::IsNullOrWhiteSpace(`$_) -and (Test-Path `$_) }
+foreach (`$locDir in `$locations) {
+    `$shortcutPath = Join-Path `$locDir `$shortcutName
+    try {
+        `$wshell = New-Object -ComObject WScript.Shell
+        `$shortcut = `$wshell.CreateShortcut(`$shortcutPath)
+        `$shortcut.TargetPath = "powershell.exe"
+        `$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"`$agentPath`""
+        `$shortcut.WorkingDirectory = `$agentDir
+        `$shortcut.WindowStyle = 7 # Minimized/Hidden
+        `$shortcut.Description = "Iniciar Pulselab - Oficina de Robotica"
+        `$shortcut.IconLocation = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
+        `$shortcut.Save()
+        Write-InstallerLog "INFO" "Atalho criado com sucesso: `$shortcutPath"
+    } catch {
+        Write-InstallerLog "ERROR" "Erro ao criar o atalho em `$shortcutPath: `$_"
+    }
 }
 
 Write-InstallerLog "INFO" "----------------------------------------"
 Write-InstallerLog "INFO" "Instalacao concluida com sucesso!"
-Write-InstallerLog "INFO" "O instrutor pode iniciar a oficina clicando no atalho da Area de Trabalho."
+Write-InstallerLog "INFO" "O aplicativo pode ser iniciado pelos atalhos da Area de Trabalho ou Menu Iniciar."
 Write-InstallerLog "INFO" "----------------------------------------"
 Read-Host "Pressione Enter para finalizar..."
 "@
