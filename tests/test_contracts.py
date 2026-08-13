@@ -22,7 +22,7 @@ FAST_LAUNCHER_PATH = REPO_ROOT / "Testar-Pulselab-Rapido.bat"
 
 
 def read_text(path):
-    return path.read_text(encoding="utf-8")
+    return path.read_text(encoding="utf-8-sig")
 
 
 class ConfigContractTests(unittest.TestCase):

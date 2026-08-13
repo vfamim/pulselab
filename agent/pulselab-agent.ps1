@@ -89,6 +89,7 @@ $script:SchoolCode = ""
 $script:WorkshopCode = ""
 $script:ClassCode = ""
 $script:ActivityId = ""
+$script:GroupSize = 2
 $script:SupabaseUrl = $null
 $script:SupabaseKey = $null
 $script:Config = $null
@@ -304,7 +305,7 @@ function Get-RemoteConfig {
     }
 
     $marks = [int[]]$script:Config.interval_marks_minutes
-    if ($marks.Count -eq 0 -or ($marks | Where-Object { $_ -le 0 }).Count -gt 0) {
+    if ($marks.Count -eq 0 -or @($marks | Where-Object { $_ -le 0 }).Count -gt 0) {
         throw "Checkpoint marks must be positive integers."
     }
     for ($index = 1; $index -lt $marks.Count; $index++) {
@@ -867,7 +868,7 @@ function Show-WpfSessionSetup {
         )
         $parsedGroup = 0
         [int]::TryParse($groupSizeTxt.Text.Trim(), [ref]$parsedGroup) | Out-Null
-        $button.IsEnabled = (($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $parsedGroup -ge 1 -and $parsedGroup -le 3 -and $consent.IsChecked -eq $true)
+        $button.IsEnabled = (@($values | Where-Object { [string]::IsNullOrWhiteSpace($_) -or $_ -match '^CONFIGURE_' }).Count -eq 0 -and $parsedGroup -ge 1 -and $parsedGroup -le 3 -and $consent.IsChecked -eq $true)
     }
     $site.add_TextChanged($validate); $regional.add_TextChanged($validate); $school.add_TextChanged($validate)
     $workshop.add_TextChanged($validate); $class.add_TextChanged($validate); $activity.add_TextChanged($validate)
@@ -1051,8 +1052,8 @@ function Show-WpfPreSurvey {
     $result = @{ Status = $false; Declined = $false; PriorRobotics = $null; SelfEfficacy = $null; LatencyMs = 0 }
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $validate = {
-        $priorSelected = ($prior | Where-Object { $_.IsChecked -eq $true }).Count -eq 1
-        $selfSelected = ($self | Where-Object { $_.IsChecked -eq $true }).Count -eq 1
+        $priorSelected = (@($prior | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
+        $selfSelected = (@($self | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
         $button.IsEnabled = ($priorSelected -and $selfSelected)
     }
     @($prior) + @($self) | ForEach-Object { $_.add_Checked($validate) }
@@ -1154,8 +1155,8 @@ function Show-WpfCheckpoint {
     $watch = [Diagnostics.Stopwatch]::StartNew()
     $validate = {
         $roleComplete = ($selfRoleComp.IsChecked -eq $true -or $selfRoleAssy.IsChecked -eq $true -or $selfRoleBoth.IsChecked -eq $true)
-        $baseComplete = (($effort | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and ($progress | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
-        $collabComplete = (-not $AskCollaboration -or ($collab | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
+        $baseComplete = (@($effort | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and @($progress | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
+        $collabComplete = (-not $AskCollaboration -or @($collab | Where-Object { $_.IsChecked -eq $true }).Count -eq 1)
         $button.IsEnabled = ($roleComplete -and $baseComplete -and $collabComplete)
     }
     @($selfRoleComp, $selfRoleAssy, $selfRoleBoth) | ForEach-Object { $_.add_Checked($validate) }
@@ -1353,8 +1354,8 @@ function Show-WpfPostSurvey {
         $affectCount = @($affects | Where-Object { $_.Box.IsChecked -eq $true }).Count
         $hint.Text = if ($affectCount -gt 2) { "Escolha no máximo duas opções." } else { "Escolha uma ou duas opções." }
         $hint.Foreground = if ($affectCount -gt 2) { "#FF9B9D" } else { "#BDB8D0" }
-        $button.IsEnabled = (($understand | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and
-            ($returns | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and $affectCount -ge 1 -and $affectCount -le 2)
+        $button.IsEnabled = (@($understand | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and
+            @($returns | Where-Object { $_.IsChecked -eq $true }).Count -eq 1 -and $affectCount -ge 1 -and $affectCount -le 2)
     }
     @($understand + $returns) | ForEach-Object { $_.add_Checked($validate) }
     $affects | ForEach-Object { $_.Box.add_Checked($validate); $_.Box.add_Unchecked($validate) }
@@ -1820,3 +1821,4 @@ try {
     Dispose-TrayIcon
     Write-PulseLog "INFO" "PulseLab session finished."
 }
+
