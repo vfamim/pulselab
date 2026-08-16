@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
-# Version    : 1.4.0
+# Version    : 1.5.0
 # Description: Coletor de eventos de pesquisa para oficinas pontuais com LEGO
 #              SPIKE. Produz respostas pseudonimizadas e uma linha do tempo
 #              append-only para observação distribuída e controle de qualidade.
@@ -16,7 +16,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Windows.Forms, System.Drawing, System.Security
 
 Add-Type @"
 using System;
@@ -62,7 +62,7 @@ public class Win32 {
 # ESTADO E CAMINHOS
 # =============================================================================
 
-$script:VERSION = "1.4.0"
+$script:VERSION = "1.5.0"
 $script:SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $localConfigInAgent = Join-Path $script:SCRIPT_DIR "config\config.json"
@@ -76,6 +76,8 @@ $script:LOG_FILE = Join-Path $script:DATA_DIR "pulselab.log"
 $script:OFFLINE_CACHE_DIR = Join-Path $script:DATA_DIR "cache"
 $script:OFFLINE_CACHE_FILE = Join-Path $script:OFFLINE_CACHE_DIR "research-queue.json"
 $script:INSTALLATION_FILE = Join-Path $script:DATA_DIR "installation.json"
+$script:SESSION_STATE_FILE = Join-Path $script:DATA_DIR "session_state.json"
+$script:AUTH_SESSION_FILE = Join-Path $script:DATA_DIR "device_session.dat"
 
 $script:SessionId = $null
 $script:DyadId = $null
@@ -91,7 +93,12 @@ $script:ClassCode = ""
 $script:ActivityId = ""
 $script:GroupSize = 2
 $script:SupabaseUrl = $null
+$script:SupabaseAnonKey = $null
 $script:SupabaseKey = $null
+$script:DeviceAccessToken = $null
+$script:DeviceRefreshToken = $null
+$script:DeviceTokenExpiresAt = 0L
+$script:DeviceAuthUid = $null
 $script:Config = $null
 $script:ConfigHash = $null
 $script:SpikeHandle = [IntPtr]::Zero
@@ -99,11 +106,18 @@ $script:TriggerEnding = $false
 $script:EndingRequestedAt = $null
 $script:NotifyIcon = $null
 $script:CollectionAuthorized = $false
+$script:SessionStartedAt = $null
 $script:ActivityStartedAt = $null
 $script:ActivityStopwatch = $null
+$script:ElapsedOffsetMs = 0L
 $script:NextHeartbeatElapsedMs = 0L
 $script:ParticipantComputerRole = "computer"
 $script:ParticipantAssemblyRole = "assembly"
+$script:InstructorRubric = $null
+$script:CompletedCheckpoints = @()
+$script:IsResumedSession = $false
+$script:AgentMutex = $null
+$script:ResumeActionChoice = "new"
 $script:DebugModeRequested = [bool]$DebugMode
 $script:ProductionTest = [bool]$ProductionTest
 
@@ -152,6 +166,258 @@ function Get-Sha256Hex {
     }
 }
 
+function Write-AtomicUtf8Json {
+    param(
+        [string]$Path,
+        $Data,
+        [int]$Depth = 10
+    )
+    $dir = [System.IO.Path]::GetDirectoryName($Path)
+    if (-not (Test-Path $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $tempPath = "$Path.$([Guid]::NewGuid().ToString('N')).tmp"
+    $json = $Data | ConvertTo-Json -Depth $Depth
+    [System.IO.File]::WriteAllText($tempPath, $json, [Text.Encoding]::UTF8)
+    try {
+        if (Test-Path $Path) {
+            [System.IO.File]::Replace($tempPath, $Path, $null)
+        } else {
+            [System.IO.File]::Move($tempPath, $Path)
+        }
+    } catch {
+        [System.IO.File]::Copy($tempPath, $Path, $true)
+        [System.IO.File]::Delete($tempPath)
+    }
+}
+
+function Protect-PulseSecret {
+    param(
+        [byte[]]$PlainBytes,
+        [byte[]]$Entropy = $null
+    )
+    if ($null -eq $PlainBytes -or $PlainBytes.Length -eq 0) { return $null }
+    try {
+        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue
+        return [System.Security.Cryptography.ProtectedData]::Protect(
+            $PlainBytes,
+            $Entropy,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+    } catch {
+        Write-PulseLog "WARN" "DPAPI Protect failed: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Unprotect-PulseSecret {
+    param(
+        [byte[]]$EncryptedBytes,
+        [byte[]]$Entropy = $null
+    )
+    if ($null -eq $EncryptedBytes -or $EncryptedBytes.Length -eq 0) { return $null }
+    try {
+        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue
+        return [System.Security.Cryptography.ProtectedData]::Unprotect(
+            $EncryptedBytes,
+            $Entropy,
+            [System.Security.Cryptography.DataProtectionScope]::CurrentUser
+        )
+    } catch {
+        Write-PulseLog "WARN" "DPAPI Unprotect failed: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Save-DeviceSession {
+    param(
+        [hashtable]$SessionData
+    )
+    try {
+        if (-not (Test-Path $script:DATA_DIR)) {
+            New-Item -ItemType Directory -Path $script:DATA_DIR -Force | Out-Null
+        }
+        $json = $SessionData | ConvertTo-Json -Depth 5 -Compress
+        $plainBytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $encryptedBytes = Protect-PulseSecret $plainBytes
+        if ($null -ne $encryptedBytes) {
+            $tempPath = "$($script:AUTH_SESSION_FILE).$([Guid]::NewGuid().ToString('N')).tmp"
+            [System.IO.File]::WriteAllBytes($tempPath, $encryptedBytes)
+            try {
+                if (Test-Path $script:AUTH_SESSION_FILE) {
+                    [System.IO.File]::Replace($tempPath, $script:AUTH_SESSION_FILE, $null)
+                } else {
+                    [System.IO.File]::Move($tempPath, $script:AUTH_SESSION_FILE)
+                }
+            } catch {
+                [System.IO.File]::Copy($tempPath, $script:AUTH_SESSION_FILE, $true)
+                [System.IO.File]::Delete($tempPath)
+            }
+            Write-PulseLog "DEBUG" "Device session saved with DPAPI protection."
+            return $true
+        }
+        return $false
+    } catch {
+        Write-PulseLog "WARN" "Could not save DPAPI device session: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Load-DeviceSession {
+    if (-not (Test-Path $script:AUTH_SESSION_FILE)) { return $null }
+    try {
+        $encryptedBytes = [System.IO.File]::ReadAllBytes($script:AUTH_SESSION_FILE)
+        if ($null -eq $encryptedBytes -or $encryptedBytes.Length -eq 0) { return $null }
+        $plainBytes = Unprotect-PulseSecret $encryptedBytes
+        if ($null -eq $plainBytes -or $plainBytes.Length -eq 0) { return $null }
+        $json = [System.Text.Encoding]::UTF8.GetString($plainBytes)
+        if ([string]::IsNullOrWhiteSpace($json)) { return $null }
+        $session = $json | ConvertFrom-Json
+        if (-not $session) { return $null }
+
+        if (-not ($session.PSObject.Properties.Name -contains "access_token") -or [string]::IsNullOrWhiteSpace([string]$session.access_token)) {
+            Write-PulseLog "WARN" "DPAPI session missing or empty access_token."
+            return $null
+        }
+        if (-not ($session.PSObject.Properties.Name -contains "refresh_token") -or [string]::IsNullOrWhiteSpace([string]$session.refresh_token)) {
+            Write-PulseLog "WARN" "DPAPI session missing or empty refresh_token."
+            return $null
+        }
+        if (-not ($session.PSObject.Properties.Name -contains "expires_at") -or [long]$session.expires_at -le 0) {
+            Write-PulseLog "WARN" "DPAPI session missing or invalid expires_at timestamp."
+            return $null
+        }
+        if (-not [string]::IsNullOrWhiteSpace($script:InstallationId)) {
+            if (-not ($session.PSObject.Properties.Name -contains "installation_id") -or [string]$session.installation_id -ne [string]$script:InstallationId) {
+                Write-PulseLog "WARN" "DPAPI session installation_id does not match current machine profile ($([string]$session.installation_id) != $($script:InstallationId))."
+                return $null
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($script:SiteId)) {
+            if (-not ($session.PSObject.Properties.Name -contains "site_id") -or [string]$session.site_id -ne [string]$script:SiteId) {
+                Write-PulseLog "WARN" "DPAPI session site_id does not match current site profile ($([string]$session.site_id) != $($script:SiteId))."
+                return $null
+            }
+        }
+
+        return $session
+    } catch {
+        Write-PulseLog "WARN" "Could not load DPAPI device session: $($_.Exception.Message)"
+        return $null
+    }
+}
+
+function Clear-DeviceSession {
+    try {
+        if (Test-Path $script:AUTH_SESSION_FILE) {
+            Remove-Item $script:AUTH_SESSION_FILE -Force -ErrorAction SilentlyContinue
+        }
+        $script:DeviceAccessToken = $null
+        $script:DeviceRefreshToken = $null
+        $script:DeviceTokenExpiresAt = 0L
+        $script:DeviceAuthUid = $null
+        Write-PulseLog "INFO" "Device session cleared."
+    } catch {
+        Write-PulseLog "WARN" "Could not clear device session: $($_.Exception.Message)"
+    }
+}
+
+function Invoke-DeviceSessionRefresh {
+    if ([string]::IsNullOrWhiteSpace($script:DeviceRefreshToken)) {
+        Write-PulseLog "DEBUG" "No refresh token available to refresh device session."
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl) -or [string]::IsNullOrWhiteSpace($script:SupabaseAnonKey)) {
+        Write-PulseLog "WARN" "Supabase URL or anon key missing; cannot refresh device session."
+        return $false
+    }
+
+    $endpoint = "$($script:SupabaseUrl)/auth/v1/token?grant_type=refresh_token"
+    $headers = @{
+        apikey = $script:SupabaseAnonKey
+        "Content-Type" = "application/json"
+    }
+    $body = @{
+        refresh_token = $script:DeviceRefreshToken
+    } | ConvertTo-Json -Compress
+
+    try {
+        $timeout = if ($script:Config -and $script:Config.PSObject.Properties.Name -contains "network_timeout_seconds") {
+            [int]$script:Config.network_timeout_seconds
+        } else {
+            10
+        }
+        $response = Invoke-RestMethod -Method Post -Uri $endpoint -Headers $headers -Body $body -ContentType "application/json" -TimeoutSec $timeout -ErrorAction Stop
+        if ($response -and $response.access_token) {
+            $script:DeviceAccessToken = [string]$response.access_token
+            if ($response.refresh_token) {
+                $script:DeviceRefreshToken = [string]$response.refresh_token
+            }
+            if ($response.expires_at) {
+                $script:DeviceTokenExpiresAt = [long]$response.expires_at
+            } elseif ($response.expires_in) {
+                $nowSec = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+                $script:DeviceTokenExpiresAt = $nowSec + [long]$response.expires_in
+            }
+            if ($response.user -and $response.user.id) {
+                $script:DeviceAuthUid = [string]$response.user.id
+            }
+
+            $sessionPayload = @{
+                access_token = $script:DeviceAccessToken
+                refresh_token = $script:DeviceRefreshToken
+                expires_at = $script:DeviceTokenExpiresAt
+                user_id = $script:DeviceAuthUid
+                installation_id = $script:InstallationId
+                site_id = $script:SiteId
+                updated_at = [DateTimeOffset]::UtcNow.ToString("o")
+            }
+            Save-DeviceSession $sessionPayload | Out-Null
+            Write-PulseLog "INFO" "Device session token refreshed successfully."
+            return $true
+        }
+        return $false
+    } catch {
+        Write-PulseLog "WARN" "Device session refresh failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
+function Test-DeviceSessionValid {
+    if ([string]::IsNullOrWhiteSpace($script:DeviceAccessToken) -or
+        [string]::IsNullOrWhiteSpace($script:DeviceRefreshToken) -or
+        $script:DeviceTokenExpiresAt -le 0) {
+        return $false
+    }
+
+    $nowSec = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if ($nowSec -ge $script:DeviceTokenExpiresAt) {
+        Write-PulseLog "INFO" "Device token is expired; performing mandatory session refresh."
+        if (-not (Invoke-DeviceSessionRefresh)) {
+            Write-PulseLog "WARN" "Mandatory device session refresh failed; session is invalid."
+            return $false
+        }
+    } elseif (($script:DeviceTokenExpiresAt - $nowSec) -lt 180) {
+        Write-PulseLog "INFO" "Device token near expiration; performing mandatory session refresh."
+        if (-not (Invoke-DeviceSessionRefresh)) {
+            Write-PulseLog "WARN" "Mandatory device session refresh failed; session is invalid."
+            return $false
+        }
+    }
+
+    return (
+        -not [string]::IsNullOrWhiteSpace($script:DeviceAccessToken) -and
+        $script:DeviceTokenExpiresAt -gt [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    )
+}
+
+function Get-DeviceAuthHeader {
+    if (-not (Test-DeviceSessionValid)) {
+        return $null
+    }
+    return "Bearer $($script:DeviceAccessToken)"
+}
+
 function Save-InstallationProfile {
     $profile = @{
         installation_id = $script:InstallationId
@@ -164,7 +430,7 @@ function Save-InstallationProfile {
         group_size = $script:GroupSize
         updated_at = [DateTimeOffset]::Now.ToString("o")
     }
-    $profile | ConvertTo-Json -Depth 4 | Set-Content $script:INSTALLATION_FILE -Encoding UTF8 -Force
+    Write-AtomicUtf8Json $script:INSTALLATION_FILE $profile 4
 }
 
 function Initialize-Installation {
@@ -212,8 +478,8 @@ function Initialize-Installation {
         } else {
             "CONFIGURE_SEDE"
         }
-        $script:RegionalHub = if ($local) { [string]$local.regional_hub } else { "CONFIGURE_REGIONAL" }
-        $script:SchoolCode = if ($local) { [string]$local.school_code } else { "CONFIGURE_ESCOLA" }
+        $script:RegionalHub = if ($local -and $local.PSObject.Properties.Name -contains "regional_hub") { [string]$local.regional_hub } else { "CONFIGURE_REGIONAL" }
+        $script:SchoolCode = if ($local -and $local.PSObject.Properties.Name -contains "school_code") { [string]$local.school_code } else { "CONFIGURE_ESCOLA" }
         $script:WorkshopCode = if ($local -and $local.PSObject.Properties.Name -contains "workshop_code") { [string]$local.workshop_code } else { "CONFIGURE_OFICINA" }
         $script:ClassCode = if ($local -and $local.PSObject.Properties.Name -contains "class_code") { [string]$local.class_code } else { "CONFIGURE_TURMA" }
         $script:ActivityId = if ($local -and $local.PSObject.Properties.Name -contains "activity_id") { [string]$local.activity_id } else { "atividade-01-spike" }
@@ -235,9 +501,188 @@ function Initialize-Session {
     $script:CollectionAuthorized = $false
     $script:TriggerEnding = $false
     $script:EndingRequestedAt = $null
+    $script:CompletedCheckpoints = @()
+    $script:IsResumedSession = $false
 
     New-Item -ItemType Directory -Path $script:OFFLINE_CACHE_DIR -Force | Out-Null
     Write-PulseLog "INFO" "Session initialized. version=$script:VERSION session_id=$script:SessionId dyad_id=$script:DyadId installation_id=$($script:InstallationId)"
+}
+
+function Save-SessionState {
+    param(
+        [string]$Phase = "in_progress",
+        [int]$CompletedCheckpoint = 0
+    )
+    try {
+        if (-not (Test-Path $script:DATA_DIR)) {
+            New-Item -ItemType Directory -Path $script:DATA_DIR -Force | Out-Null
+        }
+        if ($CompletedCheckpoint -gt 0 -and -not ($script:CompletedCheckpoints -contains $CompletedCheckpoint)) {
+            $script:CompletedCheckpoints = @($script:CompletedCheckpoints) + $CompletedCheckpoint
+        }
+        $configSnapshot = if ($script:Config) { $script:Config | ConvertTo-Json -Depth 10 } else { $null }
+        $state = @{
+            version = $script:VERSION
+            session_id = $script:SessionId
+            dyad_id = $script:DyadId
+            installation_id = $script:InstallationId
+            site_id = $script:SiteId
+            regional_hub = $script:RegionalHub
+            school_code = $script:SchoolCode
+            workshop_code = $script:WorkshopCode
+            class_code = $script:ClassCode
+            activity_id = $script:ActivityId
+            group_size = $script:GroupSize
+            participant_computer = $script:ParticipantComputer
+            participant_assembly = $script:ParticipantAssembly
+            participant_computer_role = $script:ParticipantComputerRole
+            participant_assembly_role = $script:ParticipantAssemblyRole
+            started_at = if ($script:SessionStartedAt) { $script:SessionStartedAt.ToString("o") } else { [DateTimeOffset]::Now.ToString("o") }
+            activity_started_at = if ($script:ActivityStartedAt) { $script:ActivityStartedAt.ToString("o") } else { [DateTimeOffset]::Now.ToString("o") }
+            completed_checkpoints = $script:CompletedCheckpoints
+            phase = $Phase
+            status = "in_progress"
+            config_hash = $script:ConfigHash
+            config_snapshot = $configSnapshot
+            protocol_version = [string]$script:Config.protocol_version
+            updated_at = [DateTimeOffset]::Now.ToString("o")
+        }
+        Write-AtomicUtf8Json $script:SESSION_STATE_FILE $state 5
+        Write-PulseLog "DEBUG" "Session state saved. phase=$Phase checkpoints=$($script:CompletedCheckpoints -join ',')"
+    } catch {
+        Write-PulseLog "WARN" "Could not save session state: $($_.Exception.Message)"
+    }
+}
+
+function Get-ResumableSession {
+    if (-not (Test-Path $script:SESSION_STATE_FILE)) { return $null }
+    try {
+        $raw = [System.IO.File]::ReadAllText($script:SESSION_STATE_FILE, [Text.Encoding]::UTF8)
+        if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
+        $state = $raw | ConvertFrom-Json
+        if (-not $state.session_id -or $state.status -ne "in_progress") { return $null }
+
+        $started = [DateTimeOffset]::Parse([string]$state.started_at)
+        $ageMinutes = ([DateTimeOffset]::Now - $started).TotalMinutes
+        if ($ageMinutes -gt 150 -or $ageMinutes -lt 0) {
+            Write-PulseLog "INFO" "Found expired session state ($([int]$ageMinutes) min old); clearing."
+            Clear-SessionState
+            return $null
+        }
+        return $state
+    } catch {
+        Write-PulseLog "WARN" "Could not read session state (possible corruption): $($_.Exception.Message)"
+        try {
+            $corruptedPath = "$($script:SESSION_STATE_FILE).corrupted.$([DateTimeOffset]::Now.ToUnixTimeSeconds()).json"
+            Move-Item $script:SESSION_STATE_FILE $corruptedPath -Force -ErrorAction SilentlyContinue
+        } catch {}
+        return $null
+    }
+}
+
+function Clear-SessionState {
+    try {
+        if (Test-Path $script:SESSION_STATE_FILE) {
+            Remove-Item $script:SESSION_STATE_FILE -Force -ErrorAction SilentlyContinue
+            Write-PulseLog "INFO" "Session state cleared."
+        }
+    } catch {}
+}
+
+function Show-WpfResumePrompt {
+    param($ResumableState)
+
+    $school = [Security.SecurityElement]::Escape([string]$ResumableState.school_code)
+    $class = [Security.SecurityElement]::Escape([string]$ResumableState.class_code)
+    $site = [Security.SecurityElement]::Escape([string]$ResumableState.site_id)
+    $startedTime = try { [DateTimeOffset]::Parse([string]$ResumableState.started_at).ToString("HH:mm") } catch { "Recente" }
+
+    $cpDone = if ($ResumableState.completed_checkpoints) { [int[]]$ResumableState.completed_checkpoints } else { @() }
+    $cpText = if ($cpDone.Count -gt 0) {
+        "Checkpoints concluidos: " + ($cpDone -join " min, ") + " min"
+    } else {
+        "Pre-oficina concluida (aguardando checkpoints)"
+    }
+    $cpTextEsc = [Security.SecurityElement]::Escape($cpText)
+
+    $xaml = @"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Recuperacao de Sessao" Height="420" Width="560"
+        WindowStartupLocation="CenterScreen" WindowStyle="ToolWindow" ResizeMode="NoResize"
+        Background="#150E2E" FontFamily="Segoe UI">
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+
+    <StackPanel Grid.Row="0" Margin="0,0,0,16">
+      <TextBlock Text="Recuperar Sessao Interrompida" Foreground="#5EEAD4" FontSize="20" FontWeight="Bold" Margin="0,0,0,6"/>
+      <TextBlock Text="Identificamos uma oficina iniciada anteriormente nesta maquina que foi interrompida antes da conclusao." Foreground="#C4B5FD" FontSize="13" TextWrapping="Wrap"/>
+    </StackPanel>
+
+    <Border Grid.Row="1" Background="#241B4B" CornerRadius="12" Padding="16" Margin="0,0,0,20" BorderBrush="#3D2D7A" BorderThickness="1">
+      <StackPanel>
+        <TextBlock Text="DADOS DA OFICINA DETECTADA:" Foreground="#A499B8" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+        <Grid Margin="0,0,0,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="110"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" Text="Escola / Sede:" Foreground="#D1C7E0" FontSize="13"/>
+          <TextBlock Grid.Column="1" Text="$school ($site)" Foreground="White" FontWeight="Bold" FontSize="13"/>
+        </Grid>
+        <Grid Margin="0,0,0,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="110"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" Text="Turma / Inicio:" Foreground="#D1C7E0" FontSize="13"/>
+          <TextBlock Grid.Column="1" Text="$class (Iniciada as $startedTime)" Foreground="White" FontWeight="Bold" FontSize="13"/>
+        </Grid>
+        <Grid Margin="0,0,0,6">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="110"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" Text="Progresso:" Foreground="#D1C7E0" FontSize="13"/>
+          <TextBlock Grid.Column="1" Text="$cpTextEsc" Foreground="#5EEAD4" FontWeight="SemiBold" FontSize="13"/>
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="2">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="14"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+      <Button Name="BtnNew" Grid.Column="0" Content="Iniciar Nova Oficina" Height="44" Background="#3D2D7A" Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+      <Button Name="BtnResume" Grid.Column="2" Content="Continuar Oficina" Height="44" Background="#00A7A0" Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+    </Grid>
+  </Grid>
+</Window>
+"@
+
+    $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
+
+    $btnNew = $window.FindName("BtnNew")
+    $btnResume = $window.FindName("BtnResume")
+
+    $script:ResumeActionChoice = "new"
+    $btnNew.add_Click({
+        $script:ResumeActionChoice = "new"
+        $window.Close()
+    })
+    $btnResume.add_Click({
+        $script:ResumeActionChoice = "resume"
+        $window.Close()
+    })
+
+    $window.ShowDialog() | Out-Null
+    return $script:ResumeActionChoice
 }
 
 function Get-RemoteConfig {
@@ -264,7 +709,7 @@ function Get-RemoteConfig {
             $remote = $remoteRaw | ConvertFrom-Json
             if (-not $remote.questions -or -not $remote.interval_marks_minutes -or
                 -not ($remote.PSObject.Properties.Name -contains "protocol_version")) {
-                throw "Remote config is not compatible with PulseLab 1.4.0."
+                throw "Remote config is not compatible with PulseLab 1.5.0."
             }
 
             # Remote protocol updates must not erase the identity embedded by a
@@ -301,7 +746,7 @@ function Get-RemoteConfig {
 
     if (-not $script:Config.questions -or -not $script:Config.interval_marks_minutes -or
         -not ($script:Config.PSObject.Properties.Name -contains "protocol_version")) {
-        throw "Config version is incompatible with PulseLab 1.4.0."
+        throw "Config version is incompatible with PulseLab 1.5.0."
     }
 
     $marks = [int[]]$script:Config.interval_marks_minutes
@@ -321,22 +766,63 @@ function Get-RemoteConfig {
 
 function Get-EnvCredentials {
     if ($script:Config.PSObject.Properties.Name -contains "supabase_url" -and
-        $script:Config.PSObject.Properties.Name -contains "supabase_key" -and
-        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_url) -and
-        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_key)) {
+        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_url)) {
         $script:SupabaseUrl = [string]$script:Config.supabase_url
-        $script:SupabaseKey = [string]$script:Config.supabase_key
-        Write-PulseLog "INFO" "Supabase credentials loaded from portable config."
-        return
+    } else {
+        $urlName = [string]$script:Config.supabase_url_env_var
+        $script:SupabaseUrl = [Environment]::GetEnvironmentVariable($urlName, "User")
     }
 
-    $urlName = [string]$script:Config.supabase_url_env_var
-    $keyName = [string]$script:Config.supabase_key_env_var
-    $script:SupabaseUrl = [Environment]::GetEnvironmentVariable($urlName, "User")
-    $script:SupabaseKey = [Environment]::GetEnvironmentVariable($keyName, "User")
+    if ($script:Config.PSObject.Properties.Name -contains "supabase_anon_key" -and
+        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_anon_key)) {
+        $script:SupabaseAnonKey = [string]$script:Config.supabase_anon_key
+    } elseif ($script:Config.PSObject.Properties.Name -contains "supabase_key" -and
+        -not [string]::IsNullOrWhiteSpace([string]$script:Config.supabase_key)) {
+        $script:SupabaseAnonKey = [string]$script:Config.supabase_key
+    } else {
+        $anonEnv = [Environment]::GetEnvironmentVariable("PULSELAB_ANON_KEY", "User")
+        if (-not [string]::IsNullOrWhiteSpace($anonEnv)) {
+            $script:SupabaseAnonKey = $anonEnv
+        } else {
+            $keyName = [string]$script:Config.supabase_key_env_var
+            $script:SupabaseAnonKey = [Environment]::GetEnvironmentVariable($keyName, "User")
+        }
+    }
+    $script:SupabaseKey = $script:SupabaseAnonKey
 
-    if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl) -or [string]::IsNullOrWhiteSpace($script:SupabaseKey)) {
+    if ([string]::IsNullOrWhiteSpace($script:SupabaseUrl) -or [string]::IsNullOrWhiteSpace($script:SupabaseAnonKey)) {
         throw "Missing Supabase credentials. Run the installer first."
+    }
+
+    $savedSession = Load-DeviceSession
+    if (-not $savedSession) {
+        throw "Device authentication missing or invalid for this installation. Execute enroll-device.ps1 with a valid single-use enrollment token before starting data collection."
+    }
+
+    $requiredSessionFields = @("access_token", "refresh_token", "expires_at", "installation_id", "site_id")
+    foreach ($field in $requiredSessionFields) {
+        if (-not ($savedSession.PSObject.Properties.Name -contains $field) -or
+            [string]::IsNullOrWhiteSpace([string]($savedSession.$field))) {
+            Clear-DeviceSession
+            throw "Device authentication session is incomplete. Re-enroll the device."
+        }
+    }
+    if ([string]$savedSession.installation_id -ne $script:InstallationId -or
+        [string]$savedSession.site_id -ne $script:SiteId) {
+        Clear-DeviceSession
+        throw "Device authentication does not match this installation/site. Re-enroll the device."
+    }
+
+    $script:DeviceAccessToken = [string]$savedSession.access_token
+    $script:DeviceRefreshToken = [string]$savedSession.refresh_token
+    $script:DeviceTokenExpiresAt = [long]$savedSession.expires_at
+    if ($savedSession.PSObject.Properties.Name -contains "user_id") {
+        $script:DeviceAuthUid = [string]$savedSession.user_id
+    }
+    Write-PulseLog "INFO" "Device session loaded from DPAPI protected storage."
+
+    if (-not (Test-DeviceSessionValid)) {
+        throw "Device authentication session is invalid or token refresh failed. Re-enroll the device."
     }
 }
 
@@ -414,6 +900,8 @@ function Get-SpikeWindowCapture {
         return $false
     }
 
+    $bitmap = $null
+    $graphics = $null
     try {
         $rect = New-Object Win32+RECT
         if (-not [Win32]::GetWindowRect($Handle, [ref]$rect)) { return $false }
@@ -432,13 +920,14 @@ function Get-SpikeWindowCapture {
         $parameters.Param[0] = New-Object Drawing.Imaging.EncoderParameter ([Drawing.Imaging.Encoder]::Quality), 60L
         $bitmap.Save($FilePath, $encoder, $parameters)
 
-        $graphics.Dispose()
-        $bitmap.Dispose()
         Write-PulseLog "INFO" "SPIKE window captured."
         return $true
     } catch {
         Write-PulseLog "ERROR" "SPIKE window capture failed: $($_.Exception.Message)"
         return $false
+    } finally {
+        if ($graphics) { $graphics.Dispose() }
+        if ($bitmap) { $bitmap.Dispose() }
     }
 }
 
@@ -451,11 +940,17 @@ function Upload-ScreenshotToSupabase {
 
     if ([string]::IsNullOrWhiteSpace($LocalFilePath) -or -not (Test-Path $LocalFilePath)) { return $null }
 
+    $authHeader = Get-DeviceAuthHeader
+    if ([string]::IsNullOrWhiteSpace($authHeader)) {
+        Write-PulseLog "WARN" "Device authentication missing or invalid (fail-closed); screenshot upload blocked."
+        return $null
+    }
+
     $objectPath = "$($script:InstallationId)/$($script:WorkshopCode)/$($script:SessionId)/checkpoint-$IntervalMark.jpg"
     $endpoint = "$($script:SupabaseUrl)/storage/v1/object/screenshots/$objectPath"
     $headers = @{
-        apikey = $script:SupabaseKey
-        Authorization = "Bearer $($script:SupabaseKey)"
+        apikey = $script:SupabaseAnonKey
+        Authorization = $authHeader
         "x-upsert" = "false"
     }
 
@@ -474,6 +969,19 @@ function Upload-ScreenshotToSupabase {
         if ($statusCode -eq 409) {
             Write-PulseLog "WARN" "Screenshot already exists; reusing private object path."
             return $objectPath
+        }
+        if ($statusCode -eq 401 -and -not [string]::IsNullOrWhiteSpace($script:DeviceRefreshToken)) {
+            Write-PulseLog "WARN" "Screenshot upload received 401 Unauthorized; attempting session refresh."
+            if (Invoke-DeviceSessionRefresh) {
+                try {
+                    $headers["Authorization"] = Get-DeviceAuthHeader
+                    Invoke-RestMethod -Method Post -Uri $endpoint -Headers $headers -Body $bytes -ContentType "image/jpeg" -TimeoutSec $timeout -ErrorAction Stop | Out-Null
+                    return $objectPath
+                } catch {
+                    Write-PulseLog "ERROR" "Screenshot upload retry after refresh failed: $($_.Exception.Message)"
+                    return $null
+                }
+            }
         }
         Write-PulseLog "ERROR" "Screenshot upload failed: $($_.Exception.Message)"
         return $null
@@ -505,12 +1013,18 @@ function Send-ResponseToSupabase {
     $allowedTables = @("research_events", "research_session_events", "responses")
     if ($allowedTables -notcontains $targetTable) { throw "Unsupported Supabase target table: $targetTable" }
 
+    $authHeader = Get-DeviceAuthHeader
+    if ([string]::IsNullOrWhiteSpace($authHeader)) {
+        Write-PulseLog "WARN" "Device authentication missing or invalid (fail-closed); database submission blocked."
+        return $false
+    }
+
     $isIdempotent = $clean.ContainsKey("event_id")
     $endpoint = "$($script:SupabaseUrl)/rest/v1/$targetTable"
     if ($isIdempotent) { $endpoint += "?on_conflict=event_id" }
     $headers = @{
-        apikey = $script:SupabaseKey
-        Authorization = "Bearer $($script:SupabaseKey)"
+        apikey = $script:SupabaseAnonKey
+        Authorization = $authHeader
         "Content-Type" = "application/json"
         Prefer = if ($isIdempotent) { "resolution=ignore-duplicates,return=minimal" } else { "return=minimal" }
     }
@@ -525,6 +1039,21 @@ function Send-ResponseToSupabase {
         Invoke-RestMethod -Method Post -Uri $endpoint -Headers $headers -Body $body -TimeoutSec $timeout -ErrorAction Stop | Out-Null
         return $true
     } catch {
+        $statusCode = $null
+        if ($_.Exception.Response) { $statusCode = [int]$_.Exception.Response.StatusCode }
+        if ($statusCode -eq 401 -and -not [string]::IsNullOrWhiteSpace($script:DeviceRefreshToken)) {
+            Write-PulseLog "WARN" "Database submission received 401 Unauthorized; attempting session refresh."
+            if (Invoke-DeviceSessionRefresh) {
+                try {
+                    $headers["Authorization"] = Get-DeviceAuthHeader
+                    Invoke-RestMethod -Method Post -Uri $endpoint -Headers $headers -Body $body -TimeoutSec $timeout -ErrorAction Stop | Out-Null
+                    return $true
+                } catch {
+                    Write-PulseLog "ERROR" "Database submission retry after refresh failed: $($_.Exception.Message)"
+                    return $false
+                }
+            }
+        }
         Write-PulseLog "ERROR" "Database submission failed: $($_.Exception.Message)"
         return $false
     }
@@ -535,14 +1064,24 @@ function Add-ToLocalQueue {
     try {
         $queue = @()
         if (Test-Path $script:OFFLINE_CACHE_FILE) {
-            $raw = Get-Content $script:OFFLINE_CACHE_FILE -Raw -Encoding UTF8
-            if (-not [string]::IsNullOrWhiteSpace($raw)) {
-                $existing = $raw | ConvertFrom-Json
-                $queue = if ($existing -is [array]) { $existing } else { @($existing) }
+            try {
+                $raw = [System.IO.File]::ReadAllText($script:OFFLINE_CACHE_FILE, [Text.Encoding]::UTF8)
+                if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                    $existing = $raw | ConvertFrom-Json
+                    $queue = if ($existing -is [array]) { $existing } else { @($existing) }
+                }
+            } catch {
+                Write-PulseLog "WARN" "Offline queue file corrupted; moving to quarantine."
+                $corruptedPath = "$($script:OFFLINE_CACHE_FILE).corrupted.$([DateTimeOffset]::Now.ToUnixTimeSeconds()).json"
+                Move-Item $script:OFFLINE_CACHE_FILE $corruptedPath -Force -ErrorAction SilentlyContinue
+                $queue = @()
             }
         }
         $queue += New-Object PSCustomObject -Property $Payload
-        $queue | ConvertTo-Json -Depth 10 | Set-Content $script:OFFLINE_CACHE_FILE -Encoding UTF8 -Force
+        if ($queue.Count -gt 500) {
+            $queue = $queue | Select-Object -Last 500
+        }
+        Write-AtomicUtf8Json $script:OFFLINE_CACHE_FILE $queue 10
         Write-PulseLog "WARN" "Event cached offline. count=$($queue.Count)"
     } catch {
         Write-PulseLog "ERROR" "Could not cache event: $($_.Exception.Message)"
@@ -579,9 +1118,16 @@ function Submit-Event {
 function Invoke-FlushCache {
     if (-not (Test-Path $script:OFFLINE_CACHE_FILE)) { return }
     try {
-        $raw = Get-Content $script:OFFLINE_CACHE_FILE -Raw -Encoding UTF8
+        $raw = [System.IO.File]::ReadAllText($script:OFFLINE_CACHE_FILE, [Text.Encoding]::UTF8)
         if ([string]::IsNullOrWhiteSpace($raw)) { return }
-        $items = $raw | ConvertFrom-Json
+        $items = try {
+            $raw | ConvertFrom-Json
+        } catch {
+            Write-PulseLog "WARN" "Corrupted offline queue in flush; moving to quarantine."
+            $corruptedPath = "$($script:OFFLINE_CACHE_FILE).corrupted.$([DateTimeOffset]::Now.ToUnixTimeSeconds()).json"
+            Move-Item $script:OFFLINE_CACHE_FILE $corruptedPath -Force -ErrorAction SilentlyContinue
+            return
+        }
         if (-not ($items -is [array])) { $items = @($items) }
 
         $remaining = @()
@@ -596,19 +1142,27 @@ function Invoke-FlushCache {
                 $payload["screenshot_path"] = $uploadedScreenshots[[string]$localPath]
                 $payload["local_screenshot_path"] = $null
             } elseif ($payload.ContainsKey("screenshot_path") -and [string]::IsNullOrWhiteSpace([string]$payload["screenshot_path"]) -and
-                -not [string]::IsNullOrWhiteSpace([string]$localPath) -and (Test-Path $localPath)) {
-                $objectPath = Upload-ScreenshotToSupabase $localPath ([int]$payload["interval_mark"])
-                if (-not $objectPath) {
-                    # Preserve the event and its local evidence together. Sending
-                    # the row now with a null screenshot_path would silently lose
-                    # the visual modality while leaving an orphan file on disk.
-                    $remaining += $item
-                    continue
+                -not [string]::IsNullOrWhiteSpace([string]$localPath)) {
+                if (Test-Path $localPath) {
+                    $objectPath = Upload-ScreenshotToSupabase $localPath ([int]$payload["interval_mark"])
+                    if (-not $objectPath) {
+                        # Preserve the event and its local evidence together.
+                        $remaining += $item
+                        continue
+                    }
+                    $payload["screenshot_path"] = $objectPath
+                    $payload["local_screenshot_path"] = $null
+                    $uploadedScreenshots[[string]$localPath] = $objectPath
+                    $filesToRemove += [string]$localPath
+                } else {
+                    Write-PulseLog "WARN" "Local screenshot file missing on disk: $localPath"
+                    Submit-SessionEvent "quality_issue" "warning" ([int]$payload["interval_mark"]) $null $null $null (Get-CurrentElapsedMs) $null @{
+                        code = "screenshot_missing_on_disk"
+                        path = $localPath
+                    }
+                    $payload["screenshot_path"] = $null
+                    $payload["local_screenshot_path"] = $null
                 }
-                $payload["screenshot_path"] = $objectPath
-                $payload["local_screenshot_path"] = $null
-                $uploadedScreenshots[[string]$localPath] = $objectPath
-                $filesToRemove += [string]$localPath
             }
 
             if (-not (Send-ResponseToSupabase $payload)) {
@@ -623,7 +1177,7 @@ function Invoke-FlushCache {
         if ($remaining.Count -eq 0) {
             Remove-Item $script:OFFLINE_CACHE_FILE -Force -ErrorAction SilentlyContinue
         } else {
-            $remaining | ConvertTo-Json -Depth 10 | Set-Content $script:OFFLINE_CACHE_FILE -Encoding UTF8 -Force
+            Write-AtomicUtf8Json $script:OFFLINE_CACHE_FILE $remaining 10
         }
     } catch {
         Write-PulseLog "ERROR" "Cache flush failed: $($_.Exception.Message)"
@@ -633,7 +1187,7 @@ function Invoke-FlushCache {
 function New-ResearchEvent {
     param(
         [string]$ParticipantId,
-        [ValidateSet("computer", "assembly")][string]$Role,
+        [ValidateSet("computer", "assembly", "individual", "member_3", "member_4")][string]$Role,
         [ValidateSet("pre", "checkpoint", "post")][string]$EventType,
         [Nullable[int]]$IntervalMark
     )
@@ -935,7 +1489,7 @@ function Get-ParticipantList {
     $list = @()
     $size = [Math]::Max(1, [Math]::Min(3, [int]$script:GroupSize))
     $letters = @("A", "B", "C")
-    $roles = @("computer", "assembly", "member_3")
+    $roles = @($script:ParticipantComputerRole, $script:ParticipantAssemblyRole, "member_3")
     if ($size -eq 1) {
         $roles = @("individual")
     }
@@ -943,10 +1497,19 @@ function Get-ParticipantList {
         $shortId = $script:SessionId.Substring(0, 8).ToUpperInvariant()
         $letter = $letters[$i]
         $role = $roles[$i]
+        $label = if ($size -eq 1) {
+            "Participante Único (A)"
+        } elseif ($size -eq 2) {
+            "Aluno $($i + 1) ($([string](Get-RoleLabel $role))/$letter)"
+        } else {
+            if ($i -eq 0) { "Aluno 1 ($([string](Get-RoleLabel $role))/A)" }
+            elseif ($i -eq 1) { "Aluno 2 ($([string](Get-RoleLabel $role))/B)" }
+            else { "Aluno 3 (Apoio/C)" }
+        }
         $list += @{
             Id = "$shortId-$letter"
             Letter = $letter
-            Label = "Participante $letter"
+            Label = $label
             Role = $role
         }
     }
@@ -1409,10 +1972,6 @@ function Show-WpfFinished {
     $timer.Stop()
 }
 
-# =============================================================================
-# TRAY E ORQUESTRAÇÃO
-# =============================================================================
-
 function Initialize-TrayIcon {
     $script:NotifyIcon = New-Object Windows.Forms.NotifyIcon
     $script:NotifyIcon.Icon = [Drawing.SystemIcons]::Application
@@ -1421,7 +1980,16 @@ function Initialize-TrayIcon {
     $menu = New-Object Windows.Forms.ContextMenu
     $reconfig = New-Object Windows.Forms.MenuItem "Reconfigurar Contexto da Máquina"
     $reconfig.add_Click({
-        Show-WpfSessionSetup | Out-Null
+        if ($script:CollectionAuthorized) {
+            [Windows.MessageBox]::Show(
+                "O contexto está congelado para a sessão ativa para garantir a integridade científica da coleta.",
+                "PulseLab",
+                [Windows.MessageBoxButton]::OK,
+                [Windows.MessageBoxImage]::Information
+            ) | Out-Null
+        } else {
+            Show-WpfSessionSetup | Out-Null
+        }
     })
     $finish = New-Object Windows.Forms.MenuItem "Concluir Oficina"
     $finish.add_Click({
@@ -1484,7 +2052,7 @@ function Save-CheckpointSurvey {
     )
 
     $promptedAt = [DateTimeOffset]::Now
-    $elapsedAtPrompt = if ($script:ActivityStopwatch) { [long]$script:ActivityStopwatch.ElapsedMilliseconds } else { 0L }
+    $elapsedAtPrompt = Get-CurrentElapsedMs
     $latenessMs = [Math]::Max(0, [int][Math]::Round(($promptedAt - $ScheduledAt).TotalMilliseconds))
     $result = Show-WpfCheckpoint $Label $Mark $AskCollaboration $IsLastParticipant $NextLabel
     $event = New-ResearchEvent $ParticipantId $Role "checkpoint" $Mark
@@ -1524,12 +2092,18 @@ function Save-CheckpointSurvey {
 function Save-PostSurvey {
     param(
         [string]$ParticipantId, [string]$Role, [string]$Label,
+        [Nullable[int]]$MissionPerformance = $null,
+        [Nullable[int]]$InstructorInterventions = $null,
+        [string]$PrimaryIssue = $null,
         [bool]$IsLastParticipant = $true, [string]$NextLabel = ""
     )
     $result = Show-WpfPostSurvey $Label $IsLastParticipant $NextLabel
     $event = New-ResearchEvent $ParticipantId $Role "post" $null
     $event["response_latency_ms"] = [int]$result.LatencyMs
-    if ($script:ActivityStopwatch) { $event["elapsed_ms"] = [long]$script:ActivityStopwatch.ElapsedMilliseconds }
+    $event["elapsed_ms"] = Get-CurrentElapsedMs
+    if ($null -ne $MissionPerformance) { $event["mission_performance"] = [int]$MissionPerformance }
+    if ($null -ne $InstructorInterventions) { $event["instructor_interventions"] = [int]$InstructorInterventions }
+    if (-not [string]::IsNullOrWhiteSpace($PrimaryIssue)) { $event["primary_issue"] = [string]$PrimaryIssue }
     if ($result.Status) {
         $event["post_understanding"] = [int]$result.Understanding
         $event["post_affects"] = [string[]]$result.Affects
@@ -1544,7 +2118,17 @@ function Save-PostSurvey {
 function Get-RoleLabel {
     param([string]$Role)
     if ($Role -eq "computer") { return "computador e programação" }
-    return "montagem e testes"
+    if ($Role -eq "assembly") { return "montagem e testes" }
+    if ($Role -eq "individual") { return "trabalho individual" }
+    if ($Role -eq "member_3") { return "suporte e testes" }
+    if ($Role -eq "member_4") { return "documentação e apoio" }
+    return $Role
+}
+
+function Get-CurrentElapsedMs {
+    if (-not $script:ActivityStartedAt) { return 0L }
+    $elapsed = [long][Math]::Max(0L, [long][Math]::Round(([DateTimeOffset]::Now - $script:ActivityStartedAt).TotalMilliseconds))
+    return $elapsed
 }
 
 function Get-CheckpointTargetMs {
@@ -1557,11 +2141,10 @@ function Get-CheckpointTargetMs {
 }
 
 function Invoke-HeartbeatIfDue {
-    if (-not $script:ActivityStopwatch) { return }
-    $elapsed = [long]$script:ActivityStopwatch.ElapsedMilliseconds
+    $elapsed = Get-CurrentElapsedMs
     if ($elapsed -lt $script:NextHeartbeatElapsedMs) { return }
 
-    $intervalSeconds = if ($script:Config.PSObject.Properties.Name -contains "heartbeat_interval_seconds") {
+    $intervalSeconds = if ($script:Config -and $script:Config.PSObject.Properties.Name -contains "heartbeat_interval_seconds") {
         [Math]::Max(15, [int]$script:Config.heartbeat_interval_seconds)
     } else {
         60
@@ -1579,9 +2162,9 @@ function Invoke-HeartbeatIfDue {
 }
 
 function Wait-UntilActivityTime {
-    param([long]$TargetElapsedMs)
+    param([DateTimeOffset]$ScheduledAt)
 
-    while ($script:ActivityStopwatch.ElapsedMilliseconds -lt $TargetElapsedMs -and -not $script:TriggerEnding) {
+    while ([DateTimeOffset]::Now -lt $ScheduledAt -and -not $script:TriggerEnding) {
         [Windows.Forms.Application]::DoEvents()
         Invoke-HeartbeatIfDue
         Start-Sleep -Milliseconds 100
@@ -1602,13 +2185,14 @@ function Invoke-ConfiguredRoleSwap {
     if (Show-WpfRoleSwap $labelA $labelB) {
         $script:ParticipantComputerRole = $nextComputerRole
         $script:ParticipantAssemblyRole = $nextAssemblyRole
-        $elapsed = if ($script:ActivityStopwatch) { [long]$script:ActivityStopwatch.ElapsedMilliseconds } else { 0L }
+        $elapsed = Get-CurrentElapsedMs
         Submit-SessionEvent "role_swapped" "info" $Mark $null $null $ActivityStage $elapsed $null @{
             participant_a_role = $script:ParticipantComputerRole
             participant_b_role = $script:ParticipantAssemblyRole
         }
+        Save-SessionState "role_swap_$Mark" $Mark
     } else {
-        $elapsed = if ($script:ActivityStopwatch) { [long]$script:ActivityStopwatch.ElapsedMilliseconds } else { 0L }
+        $elapsed = Get-CurrentElapsedMs
         Submit-SessionEvent "quality_issue" "warning" $Mark $null $null $ActivityStage $elapsed $null @{
             code = "role_swap_not_confirmed"
         }
@@ -1616,34 +2200,45 @@ function Invoke-ConfiguredRoleSwap {
 }
 
 function Start-ResearchLoop {
+    $participants = Get-ParticipantList
     $marks = [int[]]$script:Config.interval_marks_minutes
-    $script:ActivityStartedAt = [DateTimeOffset]::Now
+    if (-not $script:IsResumedSession -or -not $script:ActivityStartedAt) {
+        $script:ActivityStartedAt = [DateTimeOffset]::Now
+    }
     $script:ActivityStopwatch = [Diagnostics.Stopwatch]::StartNew()
     $heartbeatSeconds = if ($script:Config.PSObject.Properties.Name -contains "heartbeat_interval_seconds") {
         [Math]::Max(15, [int]$script:Config.heartbeat_interval_seconds)
     } else {
         60
     }
-    $script:NextHeartbeatElapsedMs = [long]$heartbeatSeconds * 1000L
+    $initialElapsed = Get-CurrentElapsedMs
+    $script:NextHeartbeatElapsedMs = $initialElapsed + ([long]$heartbeatSeconds * 1000L)
 
-    Submit-SessionEvent "activity_started" "info" $null $null $null $null 0L $null @{
-        interval_marks_minutes = $marks
-        screenshot_enabled = [bool]$script:Config.screenshot_enabled
+    if (-not $script:IsResumedSession) {
+        Submit-SessionEvent "activity_started" "info" $null $null $null $null $initialElapsed $null @{
+            interval_marks_minutes = $marks
+            screenshot_enabled = [bool]$script:Config.screenshot_enabled
+        }
+        Save-SessionState "activity"
     }
 
     foreach ($mark in $marks) {
         if ($script:TriggerEnding) { break }
+        if ($script:CompletedCheckpoints -contains $mark) {
+            Write-PulseLog "INFO" "Checkpoint mark $mark min already completed in resumed session; skipping."
+            continue
+        }
 
         $targetElapsedMs = Get-CheckpointTargetMs $mark
         $scheduledAt = $script:ActivityStartedAt.AddMilliseconds($targetElapsedMs)
-        Wait-UntilActivityTime $targetElapsedMs
+        Wait-UntilActivityTime $scheduledAt
         if ($script:TriggerEnding) { break }
 
         $script:SpikeHandle = Get-SpikeWindowHandle
         $telemetry = Get-ActiveTelemetry
         $fileSize = Get-LastSpikeFileSize
         $capturedAt = [DateTimeOffset]::Now
-        $elapsedAtCapture = [long]$script:ActivityStopwatch.ElapsedMilliseconds
+        $elapsedAtCapture = Get-CurrentElapsedMs
         $captureLatenessMs = [Math]::Max(0, [int][Math]::Round(($capturedAt - $scheduledAt).TotalMilliseconds))
         $activityStage = Get-CheckpointStage $mark
         $localScreenshot = $null
@@ -1707,9 +2302,15 @@ function Start-ResearchLoop {
         }
         Restore-SpikeFocus $script:SpikeHandle
 
-        $elapsedAfterResponses = [long]$script:ActivityStopwatch.ElapsedMilliseconds
+        $elapsedAfterResponses = Get-CurrentElapsedMs
         Submit-SessionEvent "checkpoint_completed" "info" $mark $null $null $activityStage $elapsedAfterResponses $scheduledAt $checkpointStatuses
+        Save-SessionState "checkpoint_$mark" $mark
         Invoke-FlushCache
+
+        # Real role swap after configured mark (e.g. mark 20)
+        if ($script:GroupSize -ge 2) {
+            Invoke-ConfiguredRoleSwap $mark $activityStage
+        }
     }
 
     if (-not $script:TriggerEnding) {
@@ -1721,26 +2322,48 @@ function Start-ResearchLoop {
         }
     }
 
-    $elapsedAtEnding = if ($script:ActivityStopwatch) { [long]$script:ActivityStopwatch.ElapsedMilliseconds } else { 0L }
+    $elapsedAtEnding = Get-CurrentElapsedMs
     Submit-SessionEvent "ending_requested" "info" $null $null $null $null $elapsedAtEnding $null @{
         requested_at = if ($script:EndingRequestedAt) { $script:EndingRequestedAt.ToString("o") } else { $null }
     }
 
+    # Mandatory Instructor Rubric
+    $rubricResult = Show-WpfInstructorRubric
+    if ($rubricResult -and $rubricResult.Status) {
+        Submit-SessionEvent "rubric_completed" "info" $null $null $null $null (Get-CurrentElapsedMs) $null @{
+            mission_performance = $rubricResult.Mission
+            instructor_interventions = $rubricResult.Interventions
+            primary_issue = $rubricResult.Issue
+        }
+    }
+
+    # Refresh participant list (with swapped roles if applicable)
+    $participants = Get-ParticipantList
     $postStatuses = @{ phase = "post" }
     for ($i = 0; $i -lt $participants.Count; $i++) {
         $p = $participants[$i]
         $isLast = ($i -eq $participants.Count - 1)
         $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
-        $st = Save-PostSurvey $p.Id $p.Role $p.Label $isLast $nextLabel
+        $missionVal = if ($rubricResult -and $rubricResult.Status) { $rubricResult.Mission } else { $null }
+        $intervVal = if ($rubricResult -and $rubricResult.Status) { $rubricResult.Interventions } else { $null }
+        $issueVal = if ($rubricResult -and $rubricResult.Status) { $rubricResult.Issue } else { $null }
+        $st = Save-PostSurvey $p.Id $p.Role $p.Label $missionVal $intervVal $issueVal $isLast $nextLabel
         $postStatuses["participant_$($p.Letter.ToLower())_status"] = $st
     }
-    Submit-SessionEvent "phase_completed" "info" $null $null $null "post" ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null $postStatuses
-    Submit-SessionEvent "session_completed" "info" $null $null $null $null ([long]$script:ActivityStopwatch.ElapsedMilliseconds) $null @{
-        checkpoint_count = $marks.Count
+    $elapsedAfterPost = Get-CurrentElapsedMs
+    Submit-SessionEvent "phase_completed" "info" $null $null $null "post" $elapsedAfterPost $null $postStatuses
+    Submit-SessionEvent "session_completed" "info" $null $null $null $null $elapsedAfterPost $null @{
+        checkpoint_count = $script:CompletedCheckpoints.Count
+        completed_checkpoints = $script:CompletedCheckpoints
+        expected_checkpoints = $marks
+        expected_checkpoints_count = $marks.Count
+        completion_reason = if ($script:TriggerEnding -and $script:CompletedCheckpoints.Count -lt $marks.Count) { "early_termination" } else { "finished_normally" }
+        rubric_completed = ($null -ne $rubricResult -and [bool]$rubricResult.Status)
     }
+    Clear-SessionState
     Invoke-FlushCache
     Show-WpfFinished
-    $script:ActivityStopwatch.Stop()
+    if ($script:ActivityStopwatch -and $script:ActivityStopwatch.IsRunning) { $script:ActivityStopwatch.Stop() }
     return $true
 }
 
@@ -1748,69 +2371,150 @@ function Start-ResearchLoop {
 # ENTRY POINT
 # =============================================================================
 
+$mutexCreated = $false
+$agentMutex = $null
+try {
+    $agentMutex = New-Object System.Threading.Mutex($true, "Global\PulseLab_Agent_Singleton_Mutex", [ref]$mutexCreated)
+} catch {
+    $mutexCreated = $false
+}
+if (-not $mutexCreated) {
+    Write-PulseLog "WARN" "Another instance of PulseLab agent is already running."
+    [Windows.MessageBox]::Show(
+        "Uma instância do PulseLab já está em execução neste computador.",
+        "PulseLab",
+        [Windows.MessageBoxButton]::OK,
+        [Windows.MessageBoxImage]::Warning
+    ) | Out-Null
+    exit 0
+}
+$script:AgentMutex = $agentMutex
+
 try {
     Initialize-Installation
     Initialize-Session
     Get-RemoteConfig
     Get-EnvCredentials
 
-    if (-not (Show-WpfSessionSetup)) {
-        Write-PulseLog "WARN" "Session setup canceled."
-        exit 0
-    }
-
-    Show-WpfGroupSizeSelection
-    $participants = Get-ParticipantList
-
-    $allAccepted = $true
-    foreach ($p in $participants) {
-        $accepted = Show-WpfAssent $p.Label
-        if (-not $accepted) {
-            $allAccepted = $false
-            break
+    $resumable = Get-ResumableSession
+    $resuming = $false
+    if ($resumable) {
+        $userChoice = Show-WpfResumePrompt $resumable
+        if ($userChoice -eq "resume") {
+            $resuming = $true
+            $script:IsResumedSession = $true
+            $script:SessionId = [string]$resumable.session_id
+            $script:DyadId = [string]$resumable.dyad_id
+            $script:InstallationId = [string]$resumable.installation_id
+            $script:SiteId = [string]$resumable.site_id
+            $script:RegionalHub = [string]$resumable.regional_hub
+            $script:SchoolCode = [string]$resumable.school_code
+            $script:WorkshopCode = [string]$resumable.workshop_code
+            $script:ClassCode = [string]$resumable.class_code
+            $script:ActivityId = [string]$resumable.activity_id
+            $script:GroupSize = [int]$resumable.group_size
+            $script:ParticipantComputer = [string]$resumable.participant_computer
+            $script:ParticipantAssembly = [string]$resumable.participant_assembly
+            if ($resumable.PSObject.Properties.Name -contains "participant_computer_role" -and -not [string]::IsNullOrWhiteSpace([string]$resumable.participant_computer_role)) {
+                $script:ParticipantComputerRole = [string]$resumable.participant_computer_role
+            }
+            if ($resumable.PSObject.Properties.Name -contains "participant_assembly_role" -and -not [string]::IsNullOrWhiteSpace([string]$resumable.participant_assembly_role)) {
+                $script:ParticipantAssemblyRole = [string]$resumable.participant_assembly_role
+            }
+            $script:SessionStartedAt = [DateTimeOffset]::Parse([string]$resumable.started_at)
+            $script:ActivityStartedAt = [DateTimeOffset]::Parse([string]$resumable.activity_started_at)
+            $script:CompletedCheckpoints = if ($resumable.completed_checkpoints) { [int[]]$resumable.completed_checkpoints } else { @() }
+            if ($resumable.PSObject.Properties.Name -contains "config_snapshot" -and -not [string]::IsNullOrWhiteSpace([string]$resumable.config_snapshot)) {
+                try {
+                    $savedCfg = [string]$resumable.config_snapshot | ConvertFrom-Json
+                    if ($savedCfg -and $savedCfg.questions -and $savedCfg.interval_marks_minutes) {
+                        $script:Config = $savedCfg
+                        if ($resumable.PSObject.Properties.Name -contains "config_hash" -and -not [string]::IsNullOrWhiteSpace([string]$resumable.config_hash)) {
+                            $script:ConfigHash = [string]$resumable.config_hash
+                        }
+                        Write-PulseLog "INFO" "Configuration snapshot restored from active session state."
+                    }
+                } catch {
+                    Write-PulseLog "WARN" "Could not restore config snapshot: $($_.Exception.Message)"
+                }
+            }
+            Write-PulseLog "INFO" "Session resumed. session_id=$script:SessionId checkpoints_done=$($script:CompletedCheckpoints -join ',')"
+        } else {
+            Clear-SessionState
         }
     }
 
-    if (-not $allAccepted) {
-        Write-PulseLog "INFO" "Research collection canceled because assent was not granted by all group members."
-        [Windows.MessageBox]::Show(
-            "A coleta de pesquisa foi encerrada. O grupo pode continuar participando normalmente da oficina.",
-            "PulseLab",
-            [Windows.MessageBoxButton]::OK,
-            [Windows.MessageBoxImage]::Information
-        ) | Out-Null
-        exit 0
+    if (-not $resuming) {
+        if (-not (Show-WpfSessionSetup)) {
+            Write-PulseLog "WARN" "Session setup canceled."
+            exit 0
+        }
+
+        Show-WpfGroupSizeSelection
+        $participants = Get-ParticipantList
+
+        $allAccepted = $true
+        foreach ($p in $participants) {
+            $accepted = Show-WpfAssent $p.Label
+            if (-not $accepted) {
+                $allAccepted = $false
+                break
+            }
+        }
+
+        if (-not $allAccepted) {
+            Write-PulseLog "INFO" "Research collection canceled because assent was not granted by all group members."
+            [Windows.MessageBox]::Show(
+                "A coleta de pesquisa foi encerrada. O grupo pode continuar participando normalmente da oficina.",
+                "PulseLab",
+                [Windows.MessageBoxButton]::OK,
+                [Windows.MessageBoxImage]::Information
+            ) | Out-Null
+            exit 0
+        }
+
+        $script:SessionStartedAt = [DateTimeOffset]::Now
+        $script:CollectionAuthorized = $true
+        Initialize-TrayIcon
+        Invoke-FlushCache
+        Submit-SessionEvent "session_started" "info" $null $null $null $null 0L $null @{
+            participant_count = $script:GroupSize
+            authorization_verified = $true
+            assent_completed = $true
+            expected_checkpoints = [int[]]$script:Config.interval_marks_minutes
+        }
+
+        $preStatuses = @{ phase = "pre" }
+        for ($i = 0; $i -lt $participants.Count; $i++) {
+            $p = $participants[$i]
+            $isLast = ($i -eq $participants.Count - 1)
+            $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
+            $st = Save-PreSurvey $p.Id $p.Role $p.Label $isLast $nextLabel
+            $preStatuses["participant_$($p.Letter.ToLower())_status"] = $st
+        }
+        Submit-SessionEvent "phase_completed" "info" $null $null $null "pre" 0L $null $preStatuses
+        Save-SessionState "activity"
+    } else {
+        $script:CollectionAuthorized = $true
+        Initialize-TrayIcon
+        Invoke-FlushCache
+        Submit-SessionEvent "phase_completed" "info" $null $null $null "resumed" 0L $null @{
+            resumed_from_state = $true
+            completed_checkpoints = $script:CompletedCheckpoints
+        }
     }
 
-    $script:CollectionAuthorized = $true
-    Initialize-TrayIcon
-    Invoke-FlushCache
-    Submit-SessionEvent "session_started" "info" $null $null $null $null 0L $null @{
-        participant_count = $script:GroupSize
-        authorization_verified = $true
-        assent_completed = $true
-        expected_checkpoints = [int[]]$script:Config.interval_marks_minutes
-    }
-
-    $preStatuses = @{ phase = "pre" }
-    for ($i = 0; $i -lt $participants.Count; $i++) {
-        $p = $participants[$i]
-        $isLast = ($i -eq $participants.Count - 1)
-        $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
-        $st = Save-PreSurvey $p.Id $p.Role $p.Label $isLast $nextLabel
-        $preStatuses["participant_$($p.Letter.ToLower())_status"] = $st
-    }
-    Submit-SessionEvent "phase_completed" "info" $null $null $null "pre" 0L $null $preStatuses
     Start-ResearchLoop | Out-Null
 } catch {
     Write-PulseLog "ERROR" "Fatal error: $($_.Exception.Message)"
     if ($script:CollectionAuthorized -and $script:Config -and $script:SupabaseUrl) {
         try {
-            $elapsed = if ($script:ActivityStopwatch) { [long]$script:ActivityStopwatch.ElapsedMilliseconds } else { 0L }
+            $elapsed = Get-CurrentElapsedMs
             Submit-SessionEvent "session_aborted" "error" $null $null $null $null $elapsed $null @{
                 reason = "fatal_error"
                 error_type = $_.Exception.GetType().Name
             }
+            Clear-SessionState
             Invoke-FlushCache
         } catch {
             Write-PulseLog "ERROR" "Could not record aborted session: $($_.Exception.Message)"
@@ -1819,6 +2523,13 @@ try {
 } finally {
     if ($script:ActivityStopwatch -and $script:ActivityStopwatch.IsRunning) { $script:ActivityStopwatch.Stop() }
     Dispose-TrayIcon
+    if ($script:AgentMutex) {
+        try {
+            $script:AgentMutex.ReleaseMutex()
+            $script:AgentMutex.Dispose()
+        } catch {}
+        $script:AgentMutex = $null
+    }
     Write-PulseLog "INFO" "PulseLab session finished."
 }
 

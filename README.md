@@ -4,21 +4,18 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
-## Novidades da Versão 1.4.0
+## Novidades da Versão 1.5.0
 
-- **Preparação persistente da instalação**: cada máquina recebe `installation_id` e reaproveita sede, regional, escola, oficina, turma, atividade e tamanho do grupo.
-- **Linha do tempo append-only**: início, heartbeats, checkpoints, pedidos de ajuda, trocas de papel, problemas de qualidade e encerramento são registrados em `research_session_events`.
-- **Resumo protegido de qualidade**: `research_session_quality` classifica sessões completas, em andamento, abortadas ou que precisam de revisão.
-- **Checkpoints absolutos**: os minutos 20 e 40 são calculados a partir do início real da atividade; o tempo gasto no primeiro questionário não adia intencionalmente o segundo.
-- **Rastreabilidade**: versão do protocolo e hash SHA-256 da configuração acompanham os eventos.
-- **Papéis dinâmicos**: a troca de programação e montagem pode ser solicitada e fica registrada.
-- **Telemetria minimizada**: o agente envia categorias de aplicativo, não títulos de janelas ou nomes brutos de processos.
-- **Evidência offline atômica**: uma resposta que depende de screenshot aguarda a imagem ficar sincronizável, evitando evidência órfã.
-- **Compatibilidade Supabase atual**: permissões de inserção na Data API são declaradas explicitamente no schema.
+- **Autenticação individual por dispositivo**: cada máquina usa JWT próprio, vinculado por RLS a `auth.uid()`, `installation_id` e `site_id`.
+- **Enrollment de uso único**: o coordenador emite um token aleatório com expiração; a Edge Function o consome antes de criar a conta do dispositivo.
+- **Segredos protegidos no Windows**: access/refresh tokens ficam cifrados por DPAPI em `%LOCALAPPDATA%\PulseLab\device_session.dat`.
+- **Motor corrigido**: grupos solo, dupla e trio, troca de papéis, rubrica obrigatória e retomada com tempo absoluto estão no fluxo executável.
+- **Fila offline robusta**: escrita atômica, mutex, quarentena e recuperação sem inflar cobertura acadêmica.
+- **Portal real**: autenticação Supabase, whitelist ativa e persistência de avaliações vinculadas à sessão.
+- **Instalador seguro**: pacote ZIP genérico, sem credenciais, sem pipe remoto e com manifestos SHA-256.
+- **CI ampliada**: Windows PowerShell 5.1, contratos Python/Node, build web e pgTAP/RLS com Supabase local.
 
-Os instrumentos individuais, assentimento, pré/pós-oficina e cache offline introduzidos na versão 1.3 continuam presentes.
-
-> A versão 1.4 é a primeira fundação do sistema distribuído. A ingestão ainda utiliza a chave pública e políticas de inserção anônima; autenticação individual de dispositivos e o painel central real permanecem como próximos incrementos antes de uma coleta acadêmica definitiva.
+A versão 1.5.0 é uma atualização de segurança incompatível com a ingestão anônima anterior. Aplique as migrations e publique a Edge Function antes de matricular máquinas.
 
 ---
 
@@ -62,7 +59,7 @@ pulselab/
 
 ## Simulador web no Linux
 
-O fluxo da versão 1.4 pode ser percorrido no navegador sem uma máquina Windows:
+O fluxo da versão 1.5.0 pode ser percorrido no navegador sem uma máquina Windows:
 
 ```bash
 cd web/agent-simulator
@@ -90,10 +87,10 @@ de avaliação está em
    - Criar, sem apagar a tabela legada, a tabela `research_events`.
    - Criar `research_session_events` para a linha do tempo e controle de qualidade.
    - Criar a view protegida `research_session_quality` para o futuro backend do painel.
-   - Adicionar os campos de rastreabilidade 1.4 a bancos já existentes.
+   - Adicionar os campos de rastreabilidade 1.5 a bancos já existentes.
    - Configurar `screenshots` como bucket privado.
    - Remover a política de leitura pública criada pela versão 1.2.
-   - Conceder explicitamente apenas `INSERT` ao agente anônimo; consultas devem ocorrer em backend autorizado.
+   - Conceder explicitamente apenas `INSERT` ao coletor com credenciais autenticadas; consultas e ingestão anônima não autorizada permanecem bloqueadas.
 
 > RLS é uma salvaguarda técnica, mas não substitui consentimento, assentimento, minimização, controle de acesso e política de retenção.
 
@@ -116,88 +113,49 @@ Sede, regional, escola, oficina, turma, atividade e tamanho do grupo são persis
 
 ---
 
-## Deploy e Configuração por Máquina (Única vez)
+## Instalação segura no Windows
 
-O fluxo recomendado é gerar um instalador standalone em uma máquina de preparação e copiar somente esse instalador para as máquinas das escolas. O arquivo `.env` fica exclusivamente na máquina de preparação e nunca deve ser copiado, versionado ou enviado ao GitHub.
+O pacote público não contém URL privada, token de enrollment, senha ou chave administrativa. A instalação é por usuário porque o DPAPI vincula a sessão à conta do Windows.
 
-> A chave usada pelo agente deve ser a chave pública `anon` do Supabase. Nunca use `service_role` em um instalador distribuído.
+### 1. Preparar o backend
 
-### 1. Preparar as credenciais na máquina de preparação
+1. Aplique as migrations de `supabase/migrations/`.
+2. Publique `supabase/functions/enroll-device`.
+3. Mantenha `SUPABASE_SERVICE_ROLE_KEY` somente nos secrets da Edge Function e no ambiente administrativo.
+4. Emita um token por máquina com `supabase/scripts/provision_device.py`; nunca envie a chave administrativa ao computador da oficina.
 
-Na raiz do projeto, crie um arquivo chamado `.env`:
+### 2. Baixar e validar
 
-```env
-PULSELAB_URL=https://SEU_PROJECT_REF.supabase.co
-PULSELAB_KEY=SUA_ANON_KEY
-```
-
-O `.env` já está coberto pelo `.gitignore`. Confirme antes de gerar o instalador:
-
-```bash
-git status --short --ignored .env
-```
-
-O resultado deve indicar que `.env` está ignorado. Não publique esse arquivo.
-
-### Opção A: Instalador Standalone Único (.bat) - Recomendado
-
-Gere um arquivo `Install-Pulselab-*.bat` autônomo que já contém as credenciais do Supabase, o agente e a configuração embutidos. O instrutor/técnico só precisa executar esse arquivo nas máquinas com dois cliques.
-
-#### 2. Gerar o Instalador
-Você pode gerar o instalador a partir de qualquer ambiente:
-
-- **No Linux/macOS (usando Python)**:
-  ```bash
-  # Gerar arquivo .bat solto ou arquivo .zip empacotado (--zip)
-  python3 installer/build-installer.py \
-      --site-id "JUAZEIRO-BA" \
-      --regional-hub "POLO-VALE-SAO-FRANCISCO" \
-      --school-code "ESCOLA-01" \
-      --zip \
-      --output "Install-Pulselab-Juazeiro-BA.zip"
-  ```
-
-- **No Windows (usando PowerShell)**:
-  ```powershell
-  # Gerar arquivo .bat solto ou pacote .zip empacotado (-ZipPackage)
-  .\installer\build-installer.ps1 `
-      -SiteId "JUAZEIRO-BA" `
-      -RegionalHub "POLO-VALE-SAO-FRANCISCO" `
-      -SchoolCode "ESCOLA-01" `
-      -ZipPackage `
-      -OutputPath ".\Install-Pulselab-Juazeiro-BA.zip"
-  ```
-
-Os dois scripts leem automaticamente `PULSELAB_URL` e `PULSELAB_KEY` do `.env`. A chave `PULSELAB_KEY` é a **chave pública (`anon`)** do Supabase. Graças ao RLS (Row Level Security) configurado no banco de dados, esta chave possui **permissão de acesso mínimo necessário (INSERT-only)**: ela permite que as máquinas registrem telemetria e enviem evidências, mas impede qualquer leitura, alteração ou exclusão dos dados coletados por outras máquinas.
-
-Os parâmetros de identidade alteram somente a cópia da configuração embutida no instalador; o `config/config.json` do projeto não é modificado. Ao utilizar a opção `--zip` / `-ZipPackage`, um arquivo `.zip` contendo o instalador `.bat` e o arquivo `INSTRUCOES.txt` será gerado, pronto para ser enviado às escolas via Google Drive, e-mail ou WhatsApp.
-
-#### 3. Executar na máquina do aluno
-1. Envie ou copie o pacote ZIP (`Install-Pulselab-*.zip`) ou o `.bat` para os responsáveis ou para um pendrive.
-2. Na máquina do aluno, extraia o ZIP e execute o arquivo `.bat` clicando **duas vezes** nele (sem necessidade de privilégios de Administrador).
-3. O instalador copiará os arquivos necessários de forma transparente para `C:\Users\Public\Pulselab\`, configurará as chaves no ambiente do usuário e criará o atalho na Área de Trabalho.
-4. Feche a janela do instalador após a mensagem de conclusão.
-
----
-
-### Alternativa: Instalação Manual (PowerShell)
-
-Caso prefira executar o setup manual passando as chaves via parâmetros na máquina do aluno:
-
-Execute o comando a seguir no computador do aluno, abrindo o PowerShell com permissões de usuário padrão (sem Administrador):
+- Site: `https://pulselab-robotica-edu.web.app/instalador/`
+- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.5.0`
 
 ```powershell
-$u="https://SEU_PROJECT_REF.supabase.co"; $k="SUA_ANON_KEY"; iex (irm "https://raw.githubusercontent.com/vfamim/pulselab/main/installer/install.ps1")
+Get-FileHash .\PulseLab-1.5.0-Windows.zip -Algorithm SHA256
 ```
 
----
+### 3. Instalar e matricular
 
-### O que os instaladores fazem na máquina?
-1. Copiam os arquivos necessários para execução (o standalone coloca em `C:\Users\Public\Pulselab`).
-2. Salvam a URL e a chave anônima do Supabase nas variáveis de ambiente do usuário (`PULSELAB_URL` e `PULSELAB_KEY`).
-3. Verificam se a máquina possui suporte nativo às dependências WPF/XAML.
-4. Removem atalhos legados de inicialização automática.
-5. Criam o atalho lúdico na Área de Trabalho com o nome **"Iniciar Pulselab - Oficina de Robótica"** para lançamento manual pelo instrutor.
+1. Extraia todo o ZIP.
+2. Execute `Instalar-PulseLab.bat` com dois cliques.
+3. Informe URL, chave pública `anon`, sede, regional e escola.
+4. Digite o token de enrollment no prompt mascarado.
+5. Abra o atalho **Iniciar PulseLab - Oficina de Robótica**.
+
+O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab\App`. A sessão autenticada fica fora da pasta da aplicação para sobreviver a atualizações. Reexecutar o pacote atualiza o aplicativo, mas não reativa automaticamente um dispositivo revogado.
+
+### Gerar o pacote reproduzível
+
+```bash
+python3 installer/build-installer.py \
+  --output instalador/downloads/PulseLab-1.5.0-Windows.zip
+```
+
+```powershell
+.\installer\build-installer.ps1 `
+  -OutputPath .\instalador\downloads\PulseLab-1.5.0-Windows.zip
+```
+
+Os dois builders geram um ZIP sem segredos, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
 
 ---
 
@@ -299,7 +257,8 @@ git switch main
 git pull --ff-only
 ```
 
-Confirme que o agente é a versão 1.4.0:
+
+Confirme que o agente é a versão 1.5.0:
 
 ```powershell
 Select-String .\agent\pulselab-agent.ps1 -Pattern 'Version    :'
@@ -325,8 +284,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\pulselab.ps1 -DebugMod
 
 `-DebugMode` usa o arquivo local, mantém os identificadores 20 e 40 e elimina a
 espera somente para essa execução. Nenhum valor precisa ser restaurado depois.
-O agente ainda exige credenciais do Supabase no arquivo local ou nas variáveis
-`PULSELAB_URL` e `PULSELAB_KEY`.
+O agente exige uma sessão de dispositivo válida protegida por DPAPI, além da URL e da chave pública `anon`.
 
 ## Verificações automatizadas
 

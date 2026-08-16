@@ -37,6 +37,10 @@
       {
         "source": "/instrutor/**",
         "destination": "/instrutor/index.html"
+      },
+      {
+        "source": "/instalador/**",
+        "destination": "/instalador/index.html"
       }
     ]
   }

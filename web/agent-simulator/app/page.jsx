@@ -56,20 +56,32 @@ const INITIAL_DYAD_ID = "00000000-0000-4000-8000-000000000002";
 
 const SCENARIOS = {
   standard: {
-    label: "Fluxo padrão",
-    description: "SPIKE detectado, evidência disponível e relógio dentro do limite."
+    label: "Fluxo padrão (Dupla)",
+    description: "SPIKE detectado, evidência disponível, troca de papéis e relógio dentro do limite."
+  },
+  solo: {
+    label: "Trabalho individual (Solo)",
+    description: "1 estudante trabalhando com papel individual e métricas adaptadas."
+  },
+  trio: {
+    label: "Trio de estudantes",
+    description: "3 estudantes no mesmo computador com papéis de programação, montagem e suporte."
   },
   late: {
     label: "Checkpoint atrasado",
-    description: "A captura ocorre 3 min e 5 s depois do horário previsto."
+    description: "A captura ocorre 3 min e 5 s depois do horário previsto (alerta de qualidade)."
   },
   missing_spike: {
     label: "SPIKE ausente",
-    description: "A janela não é encontrada e a captura visual falha."
+    description: "A janela do SPIKE não é encontrada e a captura visual falha."
   },
   offline: {
     label: "Queda de rede",
-    description: "Eventos ficam na fila local até a sincronização manual."
+    description: "Eventos ficam na fila local offline até a sincronização manual."
+  },
+  resumed: {
+    label: "Sessão recuperada",
+    description: "Retomada de sessão interrompida com offset de tempo e estado congelado."
   }
 };
 
@@ -237,8 +249,11 @@ export default function AgentSimulatorPage() {
   const [assentA, setAssentA] = useState(false);
   const [toast, setToast] = useState("");
   const [contextStorageReady, setContextStorageReady] = useState(false);
+  const [resumableSession, setResumableSession] = useState(null);
   const toastTimer = useRef(null);
   const sequence = useRef(0);
+
+  const ACTIVE_SESSION_STORAGE_KEY = "pulselab_simulator_active_session";
 
   useEffect(() => {
     const storageKey = "pulselab-simulator-installation-id";
@@ -263,6 +278,24 @@ export default function AgentSimulatorPage() {
         }));
       } catch (e) {}
     }
+
+    const activeSessionRaw = window.localStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    if (activeSessionRaw) {
+      try {
+        const parsedSession = JSON.parse(activeSessionRaw);
+        if (
+          parsedSession &&
+          parsedSession.status === "in_progress" &&
+          parsedSession.screen &&
+          parsedSession.screen !== "context" &&
+          parsedSession.screen !== "rubric_saved" &&
+          parsedSession.screen !== "declined"
+        ) {
+          setResumableSession(parsedSession);
+        }
+      } catch (e) {}
+    }
+
     setContextStorageReady(true);
   }, []);
 
@@ -275,6 +308,69 @@ export default function AgentSimulatorPage() {
       );
     } catch (e) {}
   }, [context, contextStorageReady]);
+
+  useEffect(() => {
+    if (!contextStorageReady) return;
+    if (
+      screen === "context" ||
+      screen === "rubric_saved" ||
+      screen === "declined"
+    ) {
+      window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      return;
+    }
+    try {
+      const snapshot = {
+        status: "in_progress",
+        screen,
+        context,
+        scenario,
+        sessionId,
+        dyadId,
+        startedAt,
+        timeline,
+        responses,
+        elapsedMs,
+        lastHeartbeatMinute,
+        currentMark,
+        roles,
+        preAnswers,
+        checkpointAnswers,
+        checkpointEvidence,
+        postAnswers,
+        rubric,
+        savedRubric,
+        assentA,
+        sequenceCount: sequence.current,
+        updated_at: new Date().toISOString()
+      };
+      window.localStorage.setItem(
+        ACTIVE_SESSION_STORAGE_KEY,
+        JSON.stringify(snapshot)
+      );
+    } catch (e) {}
+  }, [
+    screen,
+    context,
+    scenario,
+    sessionId,
+    dyadId,
+    startedAt,
+    timeline,
+    responses,
+    elapsedMs,
+    lastHeartbeatMinute,
+    currentMark,
+    roles,
+    preAnswers,
+    checkpointAnswers,
+    checkpointEvidence,
+    postAnswers,
+    rubric,
+    savedRubric,
+    assentA,
+    contextStorageReady
+  ]);
 
   useEffect(() => {
     return () => {
@@ -346,9 +442,9 @@ export default function AgentSimulatorPage() {
       activity_id: context.activity_id,
       computer_id: "SIMULADOR-WEB",
       protocol_version: "protocolo-pesquisa-v1",
-      config_version: "1.4.0",
+      config_version: "1.5.0",
       config_hash: CONFIG_HASH,
-      client_version: "web-simulator-1.0.0",
+      client_version: "web-simulator-1.5.0",
       occurred_at: new Date(startedAt + atMs).toISOString(),
       elapsed_ms: atMs,
       _delivery_state: deliveryState || (online ? "sent" : "queued"),
@@ -411,6 +507,14 @@ export default function AgentSimulatorPage() {
     ) {
       flash("Preencha os códigos e confirme a verificação das autorizações.");
       return;
+    }
+    const count = Math.max(1, Math.min(3, Number(context.group_size) || 2));
+    if (count === 1) {
+      setRoles({ A: "individual" });
+    } else if (count === 3) {
+      setRoles({ A: "computer", B: "assembly", C: "member_3" });
+    } else {
+      setRoles({ A: "computer", B: "assembly" });
     }
     setScreen("assent_a");
   }
@@ -681,29 +785,38 @@ export default function AgentSimulatorPage() {
 
     const completedElapsed = checkpointEvidence.captureMs + 65000;
     setElapsedMs(completedElapsed);
+    const checkpointDetails = {};
+    activeParticipants.forEach((key) => {
+      checkpointDetails[`participant_${key.toLowerCase()}_status`] = "recorded";
+    });
     emitTimeline("checkpoint_completed", {
       elapsedMs: completedElapsed,
       deliveryState: checkpointEvidence.deliveryState,
       intervalMark: currentMark,
       activityStage: checkpointEvidence.stage,
       scheduledAt: checkpointEvidence.scheduledAt,
-      details: {
-        participant_a_status: "recorded",
-        participant_b_status: "recorded"
-      }
+      details: checkpointDetails
     });
 
     if (currentMark === 20) {
-      setCurrentMark(40);
-      setScreen("activity");
+      if (activeParticipants.length > 1) {
+        setScreen("role_swap");
+      } else {
+        setCurrentMark(40);
+        setScreen("activity");
+      }
     } else {
-      setScreen("post_a");
+      setScreen("activity_end");
     }
   }
 
   function confirmRoleSwap(confirmed) {
     if (confirmed) {
-      const nextRoles = { A: roles.B, B: roles.A };
+      const nextRoles = {
+        ...roles,
+        A: roles.B || "assembly",
+        B: roles.A || "computer"
+      };
       setRoles(nextRoles);
       emitTimeline("role_swapped", {
         elapsedMs,
@@ -798,7 +911,8 @@ export default function AgentSimulatorPage() {
       return;
     }
 
-    const participantOffset = participant === "A" ? 35000 : 70000;
+    const participantOffset =
+      participant === "A" ? 35000 : participant === "B" ? 70000 : 105000;
     emitResponse(
       participant,
       "post",
@@ -884,7 +998,45 @@ export default function AgentSimulatorPage() {
     flash(`${queuedCount} evento(s) sincronizado(s).`);
   }
 
+  function handleResumeSession() {
+    if (!resumableSession) return;
+    sequence.current = resumableSession.sequenceCount || (resumableSession.timeline ? resumableSession.timeline.length : 0);
+    setSessionId(resumableSession.sessionId || createUuid());
+    setDyadId(resumableSession.dyadId || createUuid());
+    setStartedAt(resumableSession.startedAt || Date.now());
+    setContext(resumableSession.context || DEFAULT_CONTEXT);
+    setScenario(resumableSession.scenario || "standard");
+    setRoles(resumableSession.roles || { A: "computer", B: "assembly" });
+    setPreAnswers(resumableSession.preAnswers || PRE_DEFAULT);
+    setCheckpointAnswers(resumableSession.checkpointAnswers || CHECKPOINT_DEFAULT);
+    setCheckpointEvidence(resumableSession.checkpointEvidence || null);
+    setPostAnswers(resumableSession.postAnswers || POST_DEFAULT);
+    setRubric(resumableSession.rubric || RUBRIC_DEFAULT);
+    setSavedRubric(resumableSession.savedRubric || RUBRIC_DEFAULT);
+    setAssentA(resumableSession.assentA || false);
+    setElapsedMs(resumableSession.elapsedMs || 0);
+    setLastHeartbeatMinute(resumableSession.lastHeartbeatMinute || 0);
+    setCurrentMark(resumableSession.currentMark || 20);
+
+    const resumedTimeline = [...(resumableSession.timeline || [])];
+    const resumedResponses = [...(resumableSession.responses || [])];
+
+    setTimeline(resumedTimeline);
+    setResponses(resumedResponses);
+    setScreen(resumableSession.screen || "activity");
+    setResumableSession(null);
+    flash("Sessão anterior restaurada com sucesso!");
+  }
+
+  function handleDismissResume() {
+    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    setResumableSession(null);
+    flash("Sessão anterior descartada.");
+  }
+
   function resetSimulation() {
+    window.localStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    setResumableSession(null);
     sequence.current = 0;
     setScreen("context");
     setSessionId(createUuid());
@@ -957,6 +1109,54 @@ export default function AgentSimulatorPage() {
           </ActionRow>
         }
       >
+        {resumableSession && (
+          <div
+            style={{
+              background: "rgba(0, 167, 160, 0.15)",
+              border: "1.5px solid #00A7A0",
+              borderRadius: "14px",
+              padding: "16px 18px",
+              marginBottom: "20px",
+              boxShadow: "0 4px 16px rgba(0, 167, 160, 0.2)"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+              <span style={{ fontSize: "1.2rem" }}>🔄</span>
+              <strong style={{ color: "#5EEAD4", fontSize: "1rem" }}>
+                Sessão em Andamento Detectada
+              </strong>
+            </div>
+            <p style={{ fontSize: "0.84rem", color: "#C4B5FD", marginBottom: "14px", lineHeight: "1.4" }}>
+              Foi identificada uma oficina interrompida na escola{" "}
+              <strong style={{ color: "white" }}>
+                {resumableSession.context?.school_code || "Escola não definida"}
+              </strong>{" "}
+              (Sede: {resumableSession.context?.site_id || "N/D"}), turma{" "}
+              <strong style={{ color: "white" }}>
+                {resumableSession.context?.class_code || "Turma A"}
+              </strong>
+              .
+            </p>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={handleResumeSession}
+                style={{ padding: "8px 16px", fontSize: "0.85rem" }}
+              >
+                ▶️ Continuar Oficina Interrompida
+              </button>
+              <button
+                type="button"
+                className="button button--ghost"
+                onClick={handleDismissResume}
+                style={{ padding: "8px 16px", fontSize: "0.85rem" }}
+              >
+                🆕 Iniciar Nova Oficina
+              </button>
+            </div>
+          </div>
+        )}
         <div className="form-grid">
           <label>
             <span>Sede</span>
@@ -1730,7 +1930,7 @@ export default function AgentSimulatorPage() {
           </span>
           <span>
             <strong>PulseLab</strong>
-            <small>simulador do agente · v1.4</small>
+            <small>simulador do agente · v1.5.0</small>
           </span>
         </div>
         <div className="topbar__notice">
@@ -1771,7 +1971,15 @@ export default function AgentSimulatorPage() {
               <span>Cenário técnico</span>
               <select
                 value={scenario}
-                onChange={(event) => setScenario(event.target.value)}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setScenario(next);
+                  if (screen === "context") {
+                    if (next === "solo") setContext((c) => ({ ...c, group_size: 1 }));
+                    else if (next === "trio") setContext((c) => ({ ...c, group_size: 3 }));
+                    else if (next === "standard") setContext((c) => ({ ...c, group_size: 2 }));
+                  }
+                }}
               >
                 {Object.entries(SCENARIOS).map(([value, item]) => (
                   <option value={value} key={value}>

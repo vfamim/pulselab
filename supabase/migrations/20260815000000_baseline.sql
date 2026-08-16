@@ -398,6 +398,7 @@ WITH timeline AS (
         bool_or(event_type = 'session_aborted') AS has_aborted,
         coalesce(
             max(jsonb_array_length(details -> 'expected_checkpoints'))
+
                 FILTER (
                     WHERE event_type = 'session_started'
                       AND jsonb_typeof(details -> 'expected_checkpoints') = 'array'

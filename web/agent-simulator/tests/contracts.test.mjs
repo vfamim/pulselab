@@ -32,7 +32,7 @@ test("hash demonstrativo respeita o formato do schema", () => {
   assert.match(CONFIG_HASH, /^[0-9a-f]{64}$/);
 });
 
-test("contrato web cobre os tipos da linha do tempo 1.4", () => {
+test("contrato web cobre os tipos da linha do tempo 1.5", () => {
   assert.equal(TIMELINE_EVENT_TYPES.length, 13);
   assert.ok(TIMELINE_EVENT_TYPES.includes("quality_issue"));
   assert.ok(TIMELINE_EVENT_TYPES.includes("session_completed"));
@@ -120,4 +120,94 @@ test("pré-oficina do simulador não solicita nem envia idade", () => {
 
   assert.equal(pageSource.includes("Qual a sua idade?"), false);
   assert.equal(pageSource.includes("student_age"), false);
+});
+
+test("sessão solo (1 aluno) é completa com 1 pre, 2 checkpoints e 1 post", () => {
+  const soloTimeline = [
+    { event_type: "session_started", details: { participant_count: 1 } },
+    { event_type: "checkpoint_completed" },
+    { event_type: "checkpoint_completed" },
+    { event_type: "session_completed" }
+  ];
+  const soloResponses = [
+    { event_type: "pre" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "post" }
+  ];
+
+  assert.equal(
+    getQualityStatus({
+      timeline: soloTimeline,
+      responses: soloResponses,
+      participantCount: 1
+    }),
+    "complete"
+  );
+});
+
+test("sessão trio (3 alunos) exige cobertura completa de todos os integrantes", () => {
+  const trioTimeline = [
+    { event_type: "session_started", details: { participant_count: 3 } },
+    { event_type: "checkpoint_completed" },
+    { event_type: "checkpoint_completed" },
+    { event_type: "session_completed" }
+  ];
+  const partialTrioResponses = [
+    { event_type: "pre" },
+    { event_type: "pre" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "post" },
+    { event_type: "post" }
+  ];
+  const fullTrioResponses = [
+    { event_type: "pre" },
+    { event_type: "pre" },
+    { event_type: "pre" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "checkpoint" },
+    { event_type: "post" },
+    { event_type: "post" },
+    { event_type: "post" }
+  ];
+
+  assert.equal(
+    getQualityStatus({
+      timeline: trioTimeline,
+      responses: partialTrioResponses,
+      participantCount: 3
+    }),
+    "needs_review"
+  );
+
+  assert.equal(
+    getQualityStatus({
+      timeline: trioTimeline,
+      responses: fullTrioResponses,
+      participantCount: 3
+    }),
+    "complete"
+  );
+});
+
+test("simulador suporta transições alcançáveis para role_swap, activity_end e rubric", () => {
+  const pageSource = fs.readFileSync(
+    new URL("../app/page.jsx", import.meta.url),
+    "utf8"
+  );
+
+  assert.ok(pageSource.includes('setScreen("role_swap")'));
+  assert.ok(pageSource.includes('setScreen("activity_end")'));
+  assert.ok(pageSource.includes('setScreen("rubric")'));
+  assert.ok(pageSource.includes('emitTimeline("role_swapped"'));
+  assert.ok(pageSource.includes('emitTimeline("rubric_completed"'));
+  assert.ok(pageSource.includes('"individual"'));
+  assert.ok(pageSource.includes('"member_3"'));
 });

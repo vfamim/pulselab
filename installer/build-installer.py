@@ -1,271 +1,119 @@
 #!/usr/bin/env python3
-import os
-import sys
-import base64
+"""Build the generic, secret-free PulseLab Windows installer package."""
+
+from __future__ import annotations
+
 import argparse
+import hashlib
 import json
+import os
+from pathlib import Path
+import shutil
+import tempfile
+import zipfile
 
-def load_env(env_path):
-    env_vars = {}
-    if os.path.exists(env_path):
-        print(f"Lendo variaveis do arquivo .env em: {env_path}")
-        with open(env_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" in line:
-                    key, val = line.split("=", 1)
-                    key = key.strip()
-                    val = val.strip().strip("'\"")  # Remove aspas simples/duplas
-                    env_vars[key] = val
-    return env_vars
+VERSION = "1.5.0"
+REQUIRED_FILES = {
+    "agent/pulselab-agent.ps1": "agent/pulselab-agent.ps1",
+    "config/config.json": "config/config.json",
+    "supabase/scripts/enroll-device.ps1": "supabase/scripts/enroll-device.ps1",
+    "Install-PulseLab.ps1": "installer/install.ps1",
+}
 
-def main():
-    parser = argparse.ArgumentParser(description="Gera o instalador standalone .bat para o Pulselab")
-    parser.add_argument("--url", help="URL do Supabase")
-    parser.add_argument("--key", help="Anon Key do Supabase")
-    parser.add_argument("--output", help="Caminho do arquivo .bat de saida")
-    parser.add_argument("--site-id", help="Sede/cidade que ficara vinculada a instalacao")
-    parser.add_argument("--regional-hub", help="Polo ou regional da instalacao")
-    parser.add_argument("--school-code", help="Codigo da escola da instalacao")
-    parser.add_argument("--zip", action="store_true", help="Gerar pacote .zip pronto para envio com o instalador .bat e instrucoes")
-    args = parser.parse_args()
-
-    # Resolver diretorios do projeto
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    repo_root = os.path.abspath(os.path.join(script_dir, ".."))
-    
-    agent_path = os.path.join(repo_root, "agent", "pulselab-agent.ps1")
-    config_path = os.path.join(repo_root, "config", "config.json")
-
-    # Tentar carregar do .env se existir
-    env_file = os.path.join(repo_root, ".env")
-    dotenv = load_env(env_file)
-
-    # Obter credenciais (Arg > .env > OS env)
-    url = args.url or dotenv.get("PULSELAB_URL") or dotenv.get("SUPABASE_URL") or os.environ.get("PULSELAB_URL")
-    key = args.key or dotenv.get("PULSELAB_KEY") or dotenv.get("SUPABASE_KEY") or dotenv.get("SUPABASE_ANON_KEY") or os.environ.get("PULSELAB_KEY")
-
-    if not url or not key:
-        print("--- Gerador de Instalador Standalone Pulselab ---")
-        if not url:
-            url = input("Digite a URL do Supabase (ex: https://xxx.supabase.co): ").strip()
-        if not key:
-            key = input("Digite a Anon Key (Key publica) do Supabase: ").strip()
-
-    if not url or not key:
-        print("Erro: A URL e a Anon Key sao obrigatorias.")
-        sys.exit(1)
-
-    url = url.strip().strip("'\"")
-    key = key.strip().strip("'\"")
-
-    # Validacoes basicas
-    if not url.startswith("http"):
-        print("Erro: A URL do Supabase deve comecar com http:// ou https://")
-        sys.exit(1)
-
-    # Verificar arquivos de entrada
-    if not os.path.exists(agent_path):
-        print(f"Erro: Arquivo do agente nao encontrado em: {agent_path}")
-        sys.exit(1)
-    if not os.path.exists(config_path):
-        print(f"Erro: Arquivo de configuracao nao encontrado em: {config_path}")
-        sys.exit(1)
-
-    print("Lendo arquivos do projeto...")
-    with open(agent_path, "rb") as f:
-        agent_bytes = f.read()
-    agent_b64 = base64.b64encode(agent_bytes).decode("ascii")
-
-    with open(config_path, "rb") as f:
-        config_bytes = f.read()
-
-    identity_overrides = {
-        "site_id": args.site_id,
-        "regional_hub": args.regional_hub,
-        "school_code": args.school_code,
-        "supabase_url": url,
-        "supabase_key": key,
-    }
-    selected_overrides = {
-        field: value.strip()
-        for field, value in identity_overrides.items()
-        if value and value.strip()
-    }
-    if selected_overrides:
-        invalid_fields = [
-            field
-            for field, value in selected_overrides.items()
-            if value.upper().startswith("CONFIGURE_")
-        ]
-        if invalid_fields:
-            print(
-                "Erro: valores pre-configurados nao podem usar CONFIGURE_: "
-                + ", ".join(invalid_fields)
-            )
-            sys.exit(1)
-
-        packaged_config = json.loads(config_bytes.decode("utf-8-sig"))
-        packaged_config.update(selected_overrides)
-        config_bytes = (
-            json.dumps(packaged_config, ensure_ascii=False, indent=2) + "\n"
-        ).encode("utf-8")
-        print(
-            "Identidade pre-configurada no instalador: "
-            + ", ".join(f"{field}={value}" for field, value in selected_overrides.items())
-        )
-
-    config_b64 = base64.b64encode(config_bytes).decode("ascii")
-
-    # Definir saida padrao
-    output_path = args.output or os.path.join(repo_root, "Install-Pulselab.bat")
-
-    # Template do batch
-    batch_template = f"""@echo off
-set "BATCH_PATH=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:BATCH_PATH; iex ((Get-Content -LiteralPath $p -Raw) -split '(?ms)^#PS_START#')[1]"
-exit /b %errorlevel%
-#PS_START#
-$ErrorActionPreference = "Stop"
-
-function Write-InstallerLog {{
-    param([string]$Level, [string]$Message)
-    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    Write-Host "[$timestamp] [$Level] $Message"
-}}
-
-Write-InstallerLog "INFO" "Pulselab Standalone Installer"
-Write-InstallerLog "INFO" "----------------------------------------"
-
-# 1. Verificar assemblies WPF
-try {{
-    Write-InstallerLog "INFO" "Verificando dependencias do WPF/XAML..."
-    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
-    Write-InstallerLog "INFO" "WPF verificado com sucesso."
-}} catch {{
-    Write-InstallerLog "ERROR" "WPF/PresentationFramework nao disponivel nesta maquina."
-    Write-InstallerLog "ERROR" "Este aplicativo requer Windows 10/11 com ambiente desktop."
-    Read-Host "Pressione Enter para sair..."
-    exit 1
-}}
-
-# 2. Configurar credenciais
-$supabaseUrl = "{url}"
-$supabaseKey = "{key}"
-
-Write-InstallerLog "INFO" "Configurando credenciais do Supabase..."
-[System.Environment]::SetEnvironmentVariable("PULSELAB_URL", $supabaseUrl, "User")
-[System.Environment]::SetEnvironmentVariable("PULSELAB_KEY", $supabaseKey, "User")
-
-# 3. Criar pastas de instalacao
-$targetDir = "C:\\Users\\Public\\Pulselab"
-$agentDir = $targetDir
-$configDir = Join-Path $targetDir "config"
-$cacheDir = Join-Path $targetDir "cache"
-
-Write-InstallerLog "INFO" "Criando pastas em $targetDir..."
-$null = New-Item -ItemType Directory -Path $agentDir -Force
-$null = New-Item -ItemType Directory -Path $configDir -Force
-$null = New-Item -ItemType Directory -Path $cacheDir -Force
-
-# 4. Extrair script do agente
-$agentB64 = "{agent_b64}"
-$agentPath = Join-Path $agentDir "pulselab-agent.ps1"
-Write-InstallerLog "INFO" "Extraindo script do agente..."
-$agentBytes = [System.Convert]::FromBase64String($agentB64)
-[System.IO.File]::WriteAllBytes($agentPath, $agentBytes)
-
-# 5. Extrair arquivo de configuracao
-$configB64 = "{config_b64}"
-$configPath = Join-Path $configDir "config.json"
-Write-InstallerLog "INFO" "Extraindo arquivo de configuracao..."
-$configBytes = [System.Convert]::FromBase64String($configB64)
-[System.IO.File]::WriteAllBytes($configPath, $configBytes)
-
-# 6. Criar atalhos na Area de Trabalho e no Menu Iniciar
-$shortcutName = "Iniciar Pulselab - Oficina de Robotica.lnk"
-$desktopDir = [System.Environment]::GetFolderPath("Desktop")
-$startMenuDir = [System.Environment]::GetFolderPath("Programs")
-
-# Remover atalho legado de inicializacao automatica se existir
-$startupDir = [System.Environment]::GetFolderPath("Startup")
-$legacyShortcut = Join-Path $startupDir "Pulselab.lnk"
-if (Test-Path $legacyShortcut) {{
-    Write-InstallerLog "INFO" "Removendo atalho de inicializacao automatica antigo..."
-    Remove-Item $legacyShortcut -Force -ErrorAction SilentlyContinue
-}}
-
-Write-InstallerLog "INFO" "Criando atalhos na Area de Trabalho e no Menu Iniciar..."
-$locations = @($desktopDir, $startMenuDir) | Where-Object {{ -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) }}
-foreach ($locDir in $locations) {{
-    $shortcutPath = Join-Path $locDir $shortcutName
-    try {{
-        $wshell = New-Object -ComObject WScript.Shell
-        $shortcut = $wshell.CreateShortcut($shortcutPath)
-        $shortcut.TargetPath = "powershell.exe"
-        $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$agentPath`""
-        $shortcut.WorkingDirectory = $agentDir
-        $shortcut.WindowStyle = 7 # Minimized/Hidden
-        $shortcut.Description = "Iniciar Pulselab - Oficina de Robotica"
-        $shortcut.IconLocation = "%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe,0"
-        $shortcut.Save()
-        Write-InstallerLog "INFO" "Atalho criado com sucesso: $shortcutPath"
-    }} catch {{
-        Write-InstallerLog "ERROR" "Erro ao criar o atalho em $shortcutPath: $_"
-    }}
-}}
-
-Write-InstallerLog "INFO" "----------------------------------------"
-Write-InstallerLog "INFO" "Instalacao concluida com sucesso!"
-Write-InstallerLog "INFO" "O aplicativo pode ser iniciado pelos atalhos da Area de Trabalho ou Menu Iniciar."
-Write-InstallerLog "INFO" "----------------------------------------"
-Read-Host "Pressione Enter para finalizar..."
+BAT = r"""@echo off
+setlocal
+set "SCRIPT_DIR=%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Install-PulseLab.ps1"
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" pause
+exit /b %EXIT_CODE%
 """
 
-    if args.zip or output_path.lower().endswith(".zip"):
-        import zipfile
-        if output_path.lower().endswith(".zip"):
-            zip_path = output_path
-            bat_path = output_path[:-4] + ".bat"
-        else:
-            bat_path = output_path
-            zip_path = os.path.splitext(output_path)[0] + ".zip"
+INSTRUCTIONS = """PULSELAB {version} - INSTALADOR WINDOWS SEGURO
 
-        print(f"Escrevendo instalador standalone em: {bat_path}")
-        with open(bat_path, "w", encoding="utf-8", newline="\r\n") as f:
-            f.write(batch_template)
+REQUISITOS
+- Windows 10 ou 11 com Windows PowerShell 5.1.
+- URL e chave publica anon do projeto Supabase.
+- Token de enrollment de uso unico emitido pelo coordenador.
 
-        instructions_content = (
-            "====================================================================\r\n"
-            "               PULSELAB - INSTALADOR DA OFICINA\r\n"
-            "====================================================================\r\n\r\n"
-            "Este arquivo contem o instalador autonomo do PulseLab para esta sede.\r\n\r\n"
-            "COMO INSTALAR NAS MAQUINAS DAS ESCOLAS:\r\n"
-            "1. Extraia o conteudo deste arquivo ZIP em uma pasta ou pendrive.\r\n"
-            "2. Na maquina do aluno/oficina, de DOIS CLIQUES no arquivo .bat (ex: Install-Pulselab-*.bat).\r\n"
-            "3. Aguarde a mensagem de conclusao. Nao sao necessarios privilegios de Administrador.\r\n"
-            "4. Um atalho chamado 'Iniciar Pulselab - Oficina de Robotica' sera criado na Area de Trabalho.\r\n\r\n"
-            "====================================================================\r\n"
+INSTALACAO
+1. Confirme o SHA-256 publicado no site/release.
+2. Extraia todo o ZIP; nao execute de dentro do arquivo compactado.
+3. Clique duas vezes em Instalar-PulseLab.bat.
+4. Informe URL, anon key e identidade da instalacao.
+5. Digite o token de enrollment no prompt mascarado.
+6. Abra o atalho "Iniciar PulseLab - Oficina de Robotica".
+
+SEGURANCA
+- O pacote nao contem tokens, senhas ou service-role key.
+- A sessao do dispositivo e protegida por DPAPI no usuario do Windows.
+- Nao copie device_session.dat para outra conta ou computador.
+"""
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_package(repo_root: Path, output: Path) -> Path:
+    missing = [source for source in REQUIRED_FILES.values() if not (repo_root / source).is_file()]
+    if missing:
+        raise FileNotFoundError("Required installer inputs missing: " + ", ".join(missing))
+
+    config = json.loads((repo_root / "config/config.json").read_text(encoding="utf-8-sig"))
+    if config.get("version") != VERSION:
+        raise ValueError(f"config version must be {VERSION}, got {config.get('version')!r}")
+    for forbidden in ("device_access_token", "device_refresh_token", "service_role"):
+        if forbidden in json.dumps(config).lower():
+            raise ValueError(f"forbidden credential field in packaged config: {forbidden}")
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="pulselab-package-") as temp_name:
+        stage = Path(temp_name) / f"PulseLab-{VERSION}-Windows"
+        for archive_name, source_name in REQUIRED_FILES.items():
+            destination = stage / archive_name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(repo_root / source_name, destination)
+
+        (stage / "Instalar-PulseLab.bat").write_text(BAT, encoding="utf-8", newline="\r\n")
+        (stage / "INSTRUCOES.txt").write_text(
+            INSTRUCTIONS.format(version=VERSION), encoding="utf-8", newline="\r\n"
         )
+        (stage / "VERSION.txt").write_text(VERSION + "\n", encoding="ascii")
 
-        bat_filename = os.path.basename(bat_path)
-        print(f"Criando pacote .zip pronto para envio em: {zip_path}")
-        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            zf.write(bat_path, arcname=bat_filename)
-            zf.writestr("INSTRUCOES.txt", instructions_content)
+        manifest_lines = []
+        for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
+            relative = file_path.relative_to(stage).as_posix()
+            manifest_lines.append(f"{sha256(file_path)}  {relative}")
+        (stage / "SHA256SUMS.txt").write_text("\n".join(manifest_lines) + "\n", encoding="ascii")
 
-        # Se o usuario pediu .zip diretamente como output, podemos remover o .bat solto temporario
-        if output_path.lower().endswith(".zip") and os.path.exists(bat_path):
-            os.remove(bat_path)
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
+                archive.write(file_path, file_path.relative_to(stage.parent).as_posix())
 
-        print("Pacote .zip gerado com sucesso!")
-    else:
-        print(f"Escrevendo instalador standalone em: {output_path}")
-        with open(output_path, "w", encoding="utf-8", newline="\r\n") as f:
-            f.write(batch_template)
-        print("Instalador gerado com sucesso!")
+    checksum_path = output.with_suffix(output.suffix + ".sha256")
+    checksum_path.write_text(f"{sha256(output)}  {output.name}\n", encoding="ascii")
+    return output
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--output",
+        default=f"PulseLab-{VERSION}-Windows.zip",
+        help="Output ZIP path",
+    )
+    args = parser.parse_args()
+    repo_root = Path(__file__).resolve().parent.parent
+    package = build_package(repo_root, Path(args.output).resolve())
+    print(f"Package: {package}")
+    print(f"SHA-256: {sha256(package)}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="PulseLab - Instruções de Provisionamento e Enrollment Seguro de Dispositivos">
+  <title>PulseLab | Provisionamento e Enrollment Seguro (v1.5.0)</title>
+
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0a0718 0%, #150e2e 50%, #0d0922 100%);
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --accent-aqua: #00a7a0;
+      --accent-purple: #7c3aed;
+      --accent-hover: #008983;
+      --accent-gold: #f59e0b;
+      --text-main: #f3f0f8;
+      --text-muted: #a499b8;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 24px 16px 60px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 840px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+      padding-top: 8px;
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(124, 58, 237, 0.18);
+      border: 1px solid rgba(124, 58, 237, 0.4);
+      padding: 6px 16px;
+      border-radius: 24px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.82rem;
+      color: #c4b5fd;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .brand-mark span.dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 10px #10b981;
+      display: inline-block;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 6px;
+      letter-spacing: -0.02em;
+    }
+
+    p.subtitle {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 650px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-radius: 22px;
+      padding: 28px 24px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      position: relative;
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-subtitle {
+      font-size: 0.84rem;
+      color: var(--text-muted);
+      margin-bottom: 22px;
+      line-height: 1.45;
+    }
+
+    .security-notice {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .security-notice-icon {
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .security-notice-content h4 {
+      font-size: 0.95rem;
+      color: #fde68a;
+      margin-bottom: 4px;
+      font-weight: 700;
+    }
+
+    .security-notice-content p {
+      font-size: 0.82rem;
+      color: #f3f0f8;
+      line-height: 1.45;
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    @media (max-width: 680px) {
+      .steps-grid { grid-template-columns: 1fr; }
+    }
+
+    .step-card {
+      background: rgba(15, 11, 30, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px 16px;
+      position: relative;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      background: var(--accent-purple);
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      font-family: 'Outfit', sans-serif;
+    }
+
+    .step-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      color: #ffffff;
+      margin-bottom: 8px;
+    }
+
+    .step-text {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .code-box {
+      background: #080514;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 14px 16px;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.82rem;
+      color: #5eead4;
+      margin-top: 10px;
+      word-break: break-all;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-aqua);
+      border-color: var(--accent-aqua);
+    }
+
+    .footer-links {
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 20px;
+    }
+
+    .footer-links a {
+      color: var(--accent-aqua);
+      text-decoration: none;
+    }
+
+    .footer-links a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="brand-mark">
+        <span class="dot"></span> PulseLab Protocol v1.5.0
+      </div>
+      <h1>Provisionamento e Enrollment Seguro</h1>
+      <p class="subtitle">Procedimento operacional padronizado para matrícula e autenticação de máquinas escolares com DPAPI e tokens de uso único.</p>
+    </header>
+
+    <!-- CARD: DOWNLOAD OFICIAL E PACOTE WINDOWS -->
+    <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
+      <div class="card-title" style="color: #5eead4;">
+        <span>📦</span> Pacote Oficial PulseLab 1.5.0 para Windows
+      </div>
+      <div class="card-subtitle">
+        Pacote genérico e seguro de instalação para Windows 10 e 11. Não contém credenciais embutidas nem tokens pré-gravados.
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+        <a href="/instalador/downloads/PulseLab-1.5.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>⬇️</span> Baixar PulseLab-1.5.0-Windows.zip
+        </a>
+        <span style="font-size: 0.82rem; color: #c4b5fd;">
+          Versão: <strong>1.5.0</strong> · Formato: <strong>ZIP autônomo</strong>
+        </span>
+      </div>
+
+      <div style="margin-bottom: 12px;">
+        <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
+          Checksum SHA-256 Oficial:
+          <a href="/instalador/downloads/PulseLab-1.5.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
+        </label>
+        <div class="code-box">
+          <span style="font-size: 0.8rem;">4b200c65f6e59fbe295c0c69efa13c3ab53ce71069857bf1edc5e453b1fc5e41</span>
+          <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
+        </div>
+      </div>
+
+      <div style="background: rgba(124, 58, 237, 0.15); border: 1px solid rgba(124, 58, 237, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #e9d5ff;">
+        ⚠️ <strong>Atenção:</strong> A instalação exige um <strong>Token de Enrollment de uso único</strong> emitido pelo coordenador da pesquisa para vincular a máquina à sede e escola correspondentes.
+      </div>
+    </div>
+
+    <!-- CARD: SUSPENSÃO DE GERAÇÃO INSEGURA NO NAVEGADOR -->
+    <div class="card">
+      <div class="security-notice">
+        <div class="security-notice-icon">🛡️</div>
+        <div class="security-notice-content">
+          <h4>Geração Web de Executáveis e Pipe Direto (curl|iex) Suspensos</h4>
+          <p>
+            Por determinação de segurança operacional e integridade acadêmica, a compilação de scripts executáveis no navegador e a execução de comandos remotos via pipe direto (<code>curl | iex</code> / <code>irm | iex</code>) foram permanentemente suspensas. O PulseLab exige autenticação DPAPI por dispositivo e tokens de enrollment de uso único com hash SHA-256 no banco.
+          </p>
+        </div>
+      </div>
+
+      <div class="card-title">
+        <span>📋</span> Instruções de Instalação e Ativação
+      </div>
+      <div class="card-subtitle">
+        Siga as quatro etapas abaixo para instalar e matricular a máquina do laboratório:
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <div class="step-title">Baixar e Extrair</div>
+          <div class="step-text">
+            Baixe o arquivo <code>PulseLab-1.5.0-Windows.zip</code> acima, confira o hash SHA-256 e extraia todo o conteúdo em uma pasta local na máquina do aluno.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <div class="step-title">Executar Instalador</div>
+          <div class="step-text">
+            Dê dois cliques em <code>Instalar-PulseLab.bat</code>. O instalador solicitará a URL do Supabase, a chave pública anônima e os códigos operacionais (Sede, Polo e Escola).
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <div class="step-title">Digitar Token no Prompt Mascarado</div>
+          <div class="step-text">
+            Informe o <strong>Token de Enrollment</strong> emitido pelo coordenador. O valor é digitado em prompt mascarado e validado atomicamente no servidor.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">4</div>
+          <div class="step-title">Iniciar Oficina</div>
+          <div class="step-text">
+            As credenciais da sessão são salvas com proteção criptográfica DPAPI (<code>device_session.dat</code>). Use o atalho <em>"Iniciar PulseLab - Oficina de Robótica"</em> na Área de Trabalho.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <footer class="footer-links">
+      <p>
+        PulseLab Pesquisa Aplicada ·
+        <a href="/instrutor/">Portal do Instrutor</a> ·
+        <a href="/simulador/">Simulador dos Alunos</a> ·
+        <a href="/relatorio/">Relatório Acadêmico</a> ·
+        <a href="/">Página Principal</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    function copySnippet(btn) {
+      const codeSpan = btn.parentElement.querySelector('span');
+      if (!codeSpan) return;
+      navigator.clipboard.writeText(codeSpan.textContent).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = "Copiado!";
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

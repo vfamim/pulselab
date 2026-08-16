@@ -38,7 +38,8 @@ export function createUuid() {
 export function getQualityStatus({
   timeline,
   responses,
-  expectedCheckpointCount = 2
+  expectedCheckpointCount = 2,
+  participantCount
 }) {
   if (timeline.some((event) => event.event_type === "session_aborted")) {
     return "aborted";
@@ -54,18 +55,34 @@ export function getQualityStatus({
   const completedCheckpointCount = timeline.filter(
     (event) => event.event_type === "checkpoint_completed"
   ).length;
-  const preCount = responses.filter((event) => event.event_type === "pre").length;
-  const checkpointCount = responses.filter(
-    (event) => event.event_type === "checkpoint"
+  const preCompletedCount = responses.filter(
+    (event) => event.event_type === "pre" && (event.response_status === "completed" || !event.response_status)
   ).length;
-  const postCount = responses.filter((event) => event.event_type === "post").length;
+  const checkpointCompletedCount = responses.filter(
+    (event) => event.event_type === "checkpoint" && (event.response_status === "completed" || !event.response_status)
+  ).length;
+  const postCompletedCount = responses.filter(
+    (event) => event.event_type === "post" && (event.response_status === "completed" || !event.response_status)
+  ).length;
+
+  const sessionStarted = timeline.find(
+    (event) => event.event_type === "session_started"
+  );
+  const pCount =
+    participantCount ||
+    sessionStarted?.details?.participant_count ||
+    (preCompletedCount >= 3 ? 3 : preCompletedCount === 1 ? 1 : 2);
+
+  const minPre = Math.max(1, pCount);
+  const minCheckpoints = expectedCheckpointCount * pCount;
+  const minPost = Math.max(1, pCount);
 
   if (
     qualityIssueCount > 0 ||
     completedCheckpointCount < expectedCheckpointCount ||
-    preCount < 1 ||
-    checkpointCount < expectedCheckpointCount ||
-    postCount < 1
+    preCompletedCount < minPre ||
+    checkpointCompletedCount < minCheckpoints ||
+    postCompletedCount < minPost
   ) {
     return "needs_review";
   }

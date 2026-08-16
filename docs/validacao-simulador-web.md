@@ -3,7 +3,7 @@
 ## 1. Finalidade
 
 O simulador web permite que coordenação, instrutores e participantes percorram
-o fluxo do agente PulseLab 1.4 em Linux, macOS, Windows, tablet ou celular. Ele
+o fluxo do agente PulseLab 1.5.0 em Linux, macOS, Windows, tablet ou celular. Ele
 foi criado para validar o desenho do instrumento antes de ampliar o piloto para
 outras sedes.
 

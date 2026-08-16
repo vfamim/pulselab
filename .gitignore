@@ -13,7 +13,10 @@
 # Environment / secrets
 .env
 *.env
-
+instrutor/config.js
+device_session.dat
+tokens.json
+*.dat
 # Generated standalone installer contains the Supabase anon key
 Install-Pulselab*.bat
 

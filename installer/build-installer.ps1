@@ -1,299 +1,73 @@
-﻿[CmdletBinding()]
+﻿#Requires -Version 5.1
+# PulseLab 1.5.0 - secret-free Windows package builder
+
+[CmdletBinding()]
 param(
-    [Parameter(Mandatory = $false)]
-    [string]$SupabaseUrl = $null,
-
-    [Parameter(Mandatory = $false)]
-    [string]$SupabaseKey = $null,
-
-    [Parameter(Mandatory = $false)]
-    [string]$OutputPath = $null,
-
-    [Parameter(Mandatory = $false)]
-    [string]$SiteId = $null,
-
-    [Parameter(Mandatory = $false)]
-    [string]$RegionalHub = $null,
-
-    [Parameter(Mandatory = $false)]
-    [string]$SchoolCode = $null,
-
-    [switch]$ZipPackage
+    [string]$OutputPath = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-# Resolver caminhos do projeto
+$Version = "1.5.0"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
-
-$agentPath = Join-Path $repoRoot "agent\pulselab-agent.ps1"
-$configPath = Join-Path $repoRoot "config\config.json"
-$envPath = Join-Path $repoRoot ".env"
-
-# Dicionario para variaveis do .env
-$dotenv = @{}
-
-# Carregar arquivo .env se existir
-if (Test-Path $envPath) {
-    Write-Host "Lendo variaveis do arquivo .env em: $envPath"
-    Get-Content $envPath | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
-            $parts = $line.Split("=", 2)
-            $key = $parts[0].Trim()
-            $val = $parts[1].Trim().Trim("'").Trim('"')
-            $dotenv[$key] = $val
-        }
-    }
-}
-
-# Resolver URL (Parametro > .env > OS env)
-if ([string]::IsNullOrWhiteSpace($SupabaseUrl)) {
-    $SupabaseUrl = $dotenv["PULSELAB_URL"]
-    if ([string]::IsNullOrWhiteSpace($SupabaseUrl)) {
-        $SupabaseUrl = $dotenv["SUPABASE_URL"]
-    }
-    if ([string]::IsNullOrWhiteSpace($SupabaseUrl)) {
-        $SupabaseUrl = $env:PULSELAB_URL
-    }
-}
-
-# Resolver Key (Parametro > .env > OS env)
-if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
-    $SupabaseKey = $dotenv["PULSELAB_KEY"]
-    if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
-        $SupabaseKey = $dotenv["SUPABASE_KEY"]
-    }
-    if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
-        $SupabaseKey = $dotenv["SUPABASE_ANON_KEY"]
-    }
-    if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
-        $SupabaseKey = $env:PULSELAB_KEY
-    }
-}
-
-# Solicitar interativamente se ainda nao resolvido
-if ([string]::IsNullOrWhiteSpace($SupabaseUrl) -or [string]::IsNullOrWhiteSpace($SupabaseKey)) {
-    Write-Host "--- Gerador de Instalador Standalone Pulselab ---"
-    if ([string]::IsNullOrWhiteSpace($SupabaseUrl)) {
-        $SupabaseUrl = (Read-Host "Digite a URL do Supabase (ex: https://xxx.supabase.co)").Trim()
-    }
-    if ([string]::IsNullOrWhiteSpace($SupabaseKey)) {
-        $SupabaseKey = (Read-Host "Digite a Anon Key (Key publica) do Supabase").Trim()
-    }
-}
-
-if ([string]::IsNullOrWhiteSpace($SupabaseUrl) -or [string]::IsNullOrWhiteSpace($SupabaseKey)) {
-    Write-Error "Erro: A URL e a Anon Key sao obrigatorias."
-    exit 1
-}
-
-if (-not $SupabaseUrl.StartsWith("http")) {
-    Write-Error "Erro: A URL do Supabase deve comecar com http:// ou https://"
-    exit 1
-}
-
-if (-not (Test-Path $agentPath)) {
-    Write-Error "Erro: Arquivo do agente nao encontrado em: $agentPath"
-    exit 1
-}
-
-if (-not (Test-Path $configPath)) {
-    Write-Error "Erro: Arquivo de configuracao nao encontrado em: $configPath"
-    exit 1
-}
-
-Write-Host "Lendo arquivos do projeto..."
-$agentBytes = [System.IO.File]::ReadAllBytes($agentPath)
-$agentB64 = [System.Convert]::ToBase64String($agentBytes)
-
-$configBytes = [System.IO.File]::ReadAllBytes($configPath)
-
-$identityOverrides = @{
-    site_id = $SiteId
-    regional_hub = $RegionalHub
-    school_code = $SchoolCode
-    supabase_url = $SupabaseUrl
-    supabase_key = $SupabaseKey
-}
-$selectedOverrides = @{}
-foreach ($field in $identityOverrides.Keys) {
-    $value = [string]$identityOverrides[$field]
-    if (-not [string]::IsNullOrWhiteSpace($value)) {
-        $value = $value.Trim()
-        if ($value -match '^CONFIGURE_') {
-            Write-Error "Erro: o valor pre-configurado de '$field' nao pode usar CONFIGURE_."
-            exit 1
-        }
-        $selectedOverrides[$field] = $value
-    }
-}
-if ($selectedOverrides.Count -gt 0) {
-    $configText = [System.Text.Encoding]::UTF8.GetString($configBytes)
-    $configObj = $configText | ConvertFrom-Json
-    foreach ($field in $selectedOverrides.Keys) {
-        $configObj.$field = $selectedOverrides[$field]
-    }
-    $configText = ($configObj | ConvertTo-Json -Depth 10) + [Environment]::NewLine
-    $configBytes = [System.Text.Encoding]::UTF8.GetBytes($configText)
-    $presetSummary = ($selectedOverrides.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name)=$($_.Value)" }) -join ", "
-    Write-Host "Identidade pre-configurada no instalador: $presetSummary"
-}
-
-$configB64 = [System.Convert]::ToBase64String($configBytes)
-
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
-    $OutputPath = Join-Path $repoRoot "Install-Pulselab.bat"
+    $OutputPath = Join-Path $repoRoot "PulseLab-$Version-Windows.zip"
 }
+$OutputPath = [IO.Path]::GetFullPath($OutputPath)
 
-$batchTemplate = @"
-@echo off
-set "BATCH_PATH=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "`$p=`$env:BATCH_PATH; iex ((Get-Content -LiteralPath `$p -Raw) -split '(?ms)^#PS_START#')[1]"
-exit /b %errorlevel%
-#PS_START#
-`$ErrorActionPreference = "Stop"
-
-function Write-InstallerLog {
-    param([string]`$Level, [string]`$Message)
-    `$timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    Write-Host "[`$timestamp] [`$Level] `$Message"
-}
-
-Write-InstallerLog "INFO" "Pulselab Standalone Installer"
-Write-InstallerLog "INFO" "----------------------------------------"
-
-# 1. Verificar assemblies WPF
+$stageParent = Join-Path $env:TEMP "pulselab-package-$([Guid]::NewGuid().ToString('N'))"
+$stage = Join-Path $stageParent "PulseLab-$Version-Windows"
 try {
-    Write-InstallerLog "INFO" "Verificando dependencias do WPF/XAML..."
-    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
-    Write-InstallerLog "INFO" "WPF verificado com sucesso."
-} catch {
-    Write-InstallerLog "ERROR" "WPF/PresentationFramework nao disponivel nesta maquina."
-    Write-InstallerLog "ERROR" "Este aplicativo requer Windows 10/11 com ambiente desktop."
-    Read-Host "Pressione Enter para sair..."
-    exit 1
-}
+    New-Item -ItemType Directory -Path (Join-Path $stage "agent") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $stage "config") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $stage "supabase\scripts") -Force | Out-Null
 
-# 2. Configurar credenciais
-`$supabaseUrl = "$SupabaseUrl"
-`$supabaseKey = "$SupabaseKey"
+    Copy-Item (Join-Path $repoRoot "agent\pulselab-agent.ps1") (Join-Path $stage "agent\pulselab-agent.ps1") -Force
+    Copy-Item (Join-Path $repoRoot "config\config.json") (Join-Path $stage "config\config.json") -Force
+    Copy-Item (Join-Path $repoRoot "supabase\scripts\enroll-device.ps1") (Join-Path $stage "supabase\scripts\enroll-device.ps1") -Force
+    Copy-Item (Join-Path $repoRoot "installer\install.ps1") (Join-Path $stage "Install-PulseLab.ps1") -Force
 
-Write-InstallerLog "INFO" "Configurando credenciais do Supabase..."
-[System.Environment]::SetEnvironmentVariable("PULSELAB_URL", `$supabaseUrl, "User")
-[System.Environment]::SetEnvironmentVariable("PULSELAB_KEY", `$supabaseKey, "User")
-
-# 3. Criar pastas de instalacao
-`$targetDir = "C:\Users\Public\Pulselab"
-`$agentDir = `$targetDir
-`$configDir = Join-Path `$targetDir "config"
-`$cacheDir = Join-Path `$targetDir "cache"
-
-Write-InstallerLog "INFO" "Criando pastas em `$targetDir..."
-`$null = New-Item -ItemType Directory -Path `$agentDir -Force
-`$null = New-Item -ItemType Directory -Path `$configDir -Force
-`$null = New-Item -ItemType Directory -Path `$cacheDir -Force
-
-# 4. Extrair script do agente
-`$agentB64 = "$agentB64"
-`$agentPath = Join-Path `$agentDir "pulselab-agent.ps1"
-Write-InstallerLog "INFO" "Extraindo script do agente..."
-`$agentBytes = [System.Convert]::FromBase64String(`$agentB64)
-[System.IO.File]::WriteAllBytes(`$agentPath, `$agentBytes)
-
-# 5. Extrair arquivo de configuracao
-`$configB64 = "$configB64"
-`$configPath = Join-Path `$configDir "config.json"
-Write-InstallerLog "INFO" "Extraindo arquivo de configuracao..."
-`$configBytes = [System.Convert]::FromBase64String(`$configB64)
-[System.IO.File]::WriteAllBytes(`$configPath, `$configBytes)
-
-# 6. Criar atalhos na Area de Trabalho e no Menu Iniciar
-`$shortcutName = "Iniciar Pulselab - Oficina de Robotica.lnk"
-`$desktopDir = [System.Environment]::GetFolderPath("Desktop")
-`$startMenuDir = [System.Environment]::GetFolderPath("Programs")
-
-# Remover atalho legado de inicializacao automatica se existir
-`$startupDir = [System.Environment]::GetFolderPath("Startup")
-`$legacyShortcut = Join-Path `$startupDir "Pulselab.lnk"
-if (Test-Path `$legacyShortcut) {
-    Write-InstallerLog "INFO" "Removendo atalho de inicializacao automatica antigo..."
-    Remove-Item `$legacyShortcut -Force -ErrorAction SilentlyContinue
-}
-
-Write-InstallerLog "INFO" "Criando atalhos na Area de Trabalho e no Menu Iniciar..."
-`$locations = @(`$desktopDir, `$startMenuDir) | Where-Object { -not [string]::IsNullOrWhiteSpace(`$_) -and (Test-Path `$_) }
-foreach (`$locDir in `$locations) {
-    `$shortcutPath = Join-Path `$locDir `$shortcutName
-    try {
-        `$wshell = New-Object -ComObject WScript.Shell
-        `$shortcut = `$wshell.CreateShortcut(`$shortcutPath)
-        `$shortcut.TargetPath = "powershell.exe"
-        `$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"`$agentPath`""
-        `$shortcut.WorkingDirectory = `$agentDir
-        `$shortcut.WindowStyle = 7 # Minimized/Hidden
-        `$shortcut.Description = "Iniciar Pulselab - Oficina de Robotica"
-        `$shortcut.IconLocation = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-        `$shortcut.Save()
-        Write-InstallerLog "INFO" "Atalho criado com sucesso: `$shortcutPath"
-    } catch {
-        Write-InstallerLog "ERROR" "Erro ao criar o atalho em `$shortcutPath: `$_"
-    }
-}
-
-Write-InstallerLog "INFO" "----------------------------------------"
-Write-InstallerLog "INFO" "Instalacao concluida com sucesso!"
-Write-InstallerLog "INFO" "O aplicativo pode ser iniciado pelos atalhos da Area de Trabalho ou Menu Iniciar."
-Write-InstallerLog "INFO" "----------------------------------------"
-Read-Host "Pressione Enter para finalizar..."
-"@
-
-$isZip = $ZipPackage -or ($OutputPath -and $OutputPath.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase))
-if ($isZip) {
-    if ($OutputPath -and $OutputPath.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
-        $zipPath = $OutputPath
-        $batPath = $OutputPath.Substring(0, $OutputPath.Length - 4) + ".bat"
-    } else {
-        $batPath = $OutputPath
-        $zipPath = [System.IO.Path]::ChangeExtension($OutputPath, ".zip")
-    }
-
-    Write-Host "Escrevendo instalador standalone em: $batPath"
-    $utf8Encoding = New-Object System.Text.UTF8Encoding($true)
-    [System.IO.File]::WriteAllText($batPath, $batchTemplate, $utf8Encoding)
+    $batch = @'
+@echo off
+setlocal
+set "SCRIPT_DIR=%~dp0"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Install-PulseLab.ps1"
+set "EXIT_CODE=%ERRORLEVEL%"
+if not "%EXIT_CODE%"=="0" pause
+exit /b %EXIT_CODE%
+'@
+    [IO.File]::WriteAllText((Join-Path $stage "Instalar-PulseLab.bat"), $batch, (New-Object Text.UTF8Encoding($false)))
 
     $instructions = @"
-====================================================================
-               PULSELAB - INSTALADOR DA OFICINA
-====================================================================
+PULSELAB $Version - INSTALADOR WINDOWS SEGURO
 
-Este arquivo contem o instalador autonomo do PulseLab para esta sede.
+1. Confirme o SHA-256 publicado no site/release.
+2. Extraia todo o ZIP.
+3. Clique duas vezes em Instalar-PulseLab.bat.
+4. Informe URL, anon key e identidade operacional.
+5. Digite o token de enrollment no prompt mascarado.
 
-COMO INSTALAR NAS MAQUINAS DAS ESCOLAS:
-1. Extraia o conteudo deste arquivo ZIP em uma pasta ou pendrive.
-2. Na maquina do aluno/oficina, de DOIS CLIQUES no arquivo .bat (ex: Install-Pulselab-*.bat).
-3. Aguarde a mensagem de conclusao. Nao sao necessarios privilegios de Administrador.
-4. Um atalho chamado 'Iniciar Pulselab - Oficina de Robotica' sera criado na Area de Trabalho.
-
-====================================================================
+O pacote nao contem tokens, senhas ou chave administrativa privilegiada.
+A sessao do dispositivo e protegida por DPAPI no usuario do Windows.
 "@
-    $instructionsPath = Join-Path (Split-Path -Parent $batPath) "INSTRUCOES.txt"
-    [System.IO.File]::WriteAllText($instructionsPath, $instructions, $utf8Encoding)
+    [IO.File]::WriteAllText((Join-Path $stage "INSTRUCOES.txt"), $instructions, (New-Object Text.UTF8Encoding($true)))
+    [IO.File]::WriteAllText((Join-Path $stage "VERSION.txt"), "$Version`n", [Text.Encoding]::ASCII)
 
-    Write-Host "Criando pacote .zip em: $zipPath"
-    if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-    Compress-Archive -Path $batPath, $instructionsPath -DestinationPath $zipPath -Force
-
-    Remove-Item $instructionsPath -Force -ErrorAction SilentlyContinue
-    if ($OutputPath -and $OutputPath.EndsWith(".zip", [System.StringComparison]::OrdinalIgnoreCase)) {
-        Remove-Item $batPath -Force -ErrorAction SilentlyContinue
+    $manifest = Get-ChildItem -Path $stage -File -Recurse | Sort-Object FullName | ForEach-Object {
+        $relative = $_.FullName.Substring($stage.Length + 1).Replace('\', '/')
+        "$((Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant())  $relative"
     }
-    Write-Host "Pacote .zip gerado com sucesso!"
-} else {
-    Write-Host "Escrevendo instalador standalone em: $OutputPath"
-    $utf8NoBOM = New-Object System.Text.UTF8Encoding($true)
-    [System.IO.File]::WriteAllText($OutputPath, $batchTemplate, $utf8NoBOM)
-    Write-Host "Instalador gerado com sucesso!"
+    [IO.File]::WriteAllLines((Join-Path $stage "SHA256SUMS.txt"), $manifest, [Text.Encoding]::ASCII)
+
+    $outputDir = Split-Path -Parent $OutputPath
+    New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+    if (Test-Path $OutputPath) { Remove-Item $OutputPath -Force }
+    Compress-Archive -Path $stage -DestinationPath $OutputPath -CompressionLevel Optimal
+    $zipHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $OutputPath).Hash.ToLowerInvariant()
+    [IO.File]::WriteAllText("$OutputPath.sha256", "$zipHash  $([IO.Path]::GetFileName($OutputPath))`n", [Text.Encoding]::ASCII)
+    Write-Host "Package: $OutputPath"
+    Write-Host "SHA-256: $zipHash"
+} finally {
+    Remove-Item $stageParent -Recurse -Force -ErrorAction SilentlyContinue
 }

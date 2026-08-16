@@ -1,6 +1,6 @@
 /**
  * ==============================================================================
- * PULSELAB v1.4.0 - GERADOR AUTOMÁTICO DE SLIDES NO GOOGLE PRESENTATIONS
+ * PULSELAB v1.5.0 - GERADOR AUTOMÁTICO DE SLIDES NO GOOGLE PRESENTATIONS
  * ==============================================================================
  * Como aplicar este script na sua apresentação do Google Slides:
  * 1. Abra sua apresentação no Google Slides (ou crie uma em branco em slides.google.com).
@@ -52,7 +52,7 @@ function criarApresentacaoPulseLabOficial() {
   line1.getLineFill().setSolidFill(COLOR_PRIMARY);
   
   var meta1 = slide1.insertShape(SlidesApp.ShapeType.TEXT_BOX, 50, 270, 620, 40);
-  meta1.getText().setText("Versão 1.4.0  |  Oficinas LEGO® SPIKE™  |  LGPD & Ética by Design");
+  meta1.getText().setText("Versão 1.5.0  |  Oficinas LEGO® SPIKE™  |  LGPD & Ética by Design");
   meta1.getText().getTextStyle().setFontSize(13).setForegroundColor(COLOR_TEXT_SUB);
   
   slide1.getNotesPage().getSpeakerNotesShape().getText().setText("Hoje apresento o PulseLab, uma plataforma de observabilidade e Learning Analytics desenvolvida para abrir a caixa-preta do aprendizado em oficinas de robótica educacional.");

@@ -12,6 +12,8 @@
   
   <!-- Supabase JS Client CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Runtime config (opcional, gerado localmente a partir de config.template.js) -->
+  <script src="config.js" onerror="window.PULSELAB_INSTRUCTOR_CONFIG_MISSING = true;"></script>
 
   <style>
     :root {
@@ -43,7 +45,7 @@
 
     .container {
       width: 100%;
-      max-width: 520px;
+      max-width: 540px;
     }
 
     header {
@@ -226,6 +228,11 @@
       user-select: none;
     }
 
+    .option-btn:hover {
+      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.08);
+    }
+
     .option-btn strong {
       display: block;
       font-size: 1.1rem;
@@ -240,10 +247,10 @@
     }
 
     .option-btn.selected {
-      background: rgba(0, 167, 160, 0.2);
+      background: rgba(0, 167, 160, 0.25);
       border-color: var(--accent-aqua);
       color: #ffffff;
-      box-shadow: 0 0 12px rgba(0, 167, 160, 0.3);
+      box-shadow: 0 0 12px rgba(0, 167, 160, 0.35);
     }
 
     .submit-btn {
@@ -270,6 +277,7 @@
     .submit-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      transform: none;
     }
 
     .alert {
@@ -311,7 +319,6 @@
       text-decoration: underline;
     }
 
-    /* JANELA POPUP (MODAL) DE SUCESSO DO INSTRUTOR */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -320,7 +327,6 @@
       height: 100vh;
       background: rgba(10, 7, 22, 0.85);
       backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -366,13 +372,6 @@
       color: var(--success);
       font-size: 2.2rem;
       box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
-      animation: popIcon 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
-    }
-
-    @keyframes popIcon {
-      0% { transform: scale(0); }
-      70% { transform: scale(1.15); }
-      100% { transform: scale(1); }
     }
 
     .modal-title {
@@ -446,20 +445,20 @@
     </header>
 
     <div class="user-badge" id="userBadge">
-      <span>Instrutor Autenticado: <strong id="userEmail">vfamim@gmail.com</strong></span>
+      <span>Instrutor Autenticado: <strong id="userEmail"></strong></span>
       <button class="logout-btn" id="logoutBtn">Sair</button>
     </div>
 
     <main>
       <!-- CARD DE AUTENTICAÇÃO DO INSTRUTOR -->
       <div class="card" id="authCard">
-        <div class="auth-nav">
-          <button type="button" class="auth-nav-btn active" id="tabLoginBtn">Acesso Instrutor</button>
-          <button type="button" class="auth-nav-btn" id="tabForgotBtn">Esqueceu a Senha?</button>
+        <div class="auth-nav" role="tablist" aria-label="Navegação de Autenticação">
+          <button type="button" class="auth-nav-btn active" id="tabLoginBtn" role="tab" aria-selected="true" aria-controls="loginForm">Acesso Instrutor</button>
+          <button type="button" class="auth-nav-btn" id="tabForgotBtn" role="tab" aria-selected="false" aria-controls="forgotForm">Esqueceu a Senha?</button>
         </div>
 
-        <div class="alert alert-error" id="authErrorAlert"></div>
-        <div class="alert alert-success" id="authSuccessAlert"></div>
+        <div class="alert alert-error" id="authErrorAlert" role="alert"></div>
+        <div class="alert alert-success" id="authSuccessAlert" role="alert"></div>
 
         <!-- FORMULÁRIO DE LOGIN DO INSTRUTOR -->
         <form id="loginForm">
@@ -473,8 +472,8 @@
             <button type="button" class="forgot-link-btn" id="inlineForgotBtn">Esqueceu a senha?</button>
           </div>
           <button type="submit" class="submit-btn" id="loginBtn">Entrar no Painel do Instrutor</button>
-          <button type="button" class="submit-btn" id="testAccessBtn" style="background: rgba(124, 58, 237, 0.18); border: 1.5px solid var(--accent-purple); color: #d8b4fe; margin-top: 14px;">
-            🧪 Faça um Acesso de Teste (Simulação sem registro no banco)
+          <button type="button" class="submit-btn hidden" id="testAccessBtn" style="background: rgba(124, 58, 237, 0.18); border: 1.5px solid var(--accent-purple); color: #d8b4fe; margin-top: 14px; display: none;">
+            🧪 Modo Demonstração Local (Simulação sem gravação no banco)
           </button>
         </form>
 
@@ -483,9 +482,6 @@
           <div class="form-group">
             <label for="forgot_email">E-mail Cadastrado</label>
             <input type="email" id="forgot_email" placeholder="seu.email@escola.edu.br" required autocomplete="email" />
-            <small style="color: var(--text-muted); display: block; margin-top: 8px;">
-              Enviaremos um link de redefinição seguro para o seu e-mail cadastrado.
-            </small>
           </div>
           <button type="submit" class="submit-btn" id="forgotBtn">Enviar E-mail de Recuperação</button>
           <button type="button" class="forgot-link-btn" id="backToLoginBtn" style="text-align: center; margin-top: 14px;">← Voltar para a tela de login</button>
@@ -504,72 +500,84 @@
       <!-- CARD DE AVALIAÇÃO DA OFICINA (EXIBIDO APÓS AUTENTICAÇÃO) -->
       <div class="card hidden" id="evaluationCard">
         <form id="instructorForm">
-          <div class="alert alert-error" id="evalErrorAlert"></div>
+          <div class="alert alert-error" id="evalErrorAlert" role="alert"></div>
 
           <div class="form-group grid-2">
             <div>
               <label for="workshop_code">Código Oficina</label>
-              <input type="text" id="workshop_code" value="OFICINA-001" placeholder="OFICINA-001" required />
+              <input type="text" id="workshop_code" placeholder="Ex: OFICINA-001" required />
             </div>
             <div>
               <label for="class_code">Código Turma</label>
-              <input type="text" id="class_code" value="TURMA-A" placeholder="TURMA-A" required />
+              <input type="text" id="class_code" placeholder="Ex: TURMA-A" required />
+            </div>
+          </div>
+
+          <div class="form-group grid-2">
+            <div>
+              <label for="site_id">Sede / Escola <small>Opcional</small></label>
+              <input type="text" id="site_id" placeholder="Ex: ESCOLA-CENTRAL" />
+            </div>
+            <div>
+              <label for="session_id">ID da Sessão * <small>UUID da sessão gerado pelo agente</small></label>
+              <input type="text" id="session_id" placeholder="Ex: 550e8400-e29b-41d4-a716-446655440000" required pattern="^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" />
             </div>
           </div>
 
           <div class="form-group">
-            <label>Desempenho Geral da Missão
-              <small>Avaliação da turma/grupo na execução da tarefa de robótica</small>
+            <label id="missionLabel">Desempenho Geral da Missão *
+              <small>Avaliação do grupo na execução da tarefa de robótica</small>
             </label>
-            <div class="option-cards" id="missionOptions">
-              <div class="option-btn" data-value="0">
+            <div class="option-cards" id="missionOptions" role="group" aria-labelledby="missionLabel">
+              <div class="option-btn" data-value="0" role="button" tabindex="0" aria-pressed="false">
                 <strong>0</strong>
                 <span>Não executou</span>
               </div>
-              <div class="option-btn" data-value="1">
+              <div class="option-btn" data-value="1" role="button" tabindex="0" aria-pressed="false">
                 <strong>1</strong>
                 <span>Parcial</span>
               </div>
-              <div class="option-btn" data-value="2">
+              <div class="option-btn" data-value="2" role="button" tabindex="0" aria-pressed="false">
                 <strong>2</strong>
                 <span>Com ajuda</span>
               </div>
-              <div class="option-btn selected" data-value="3">
+              <div class="option-btn" data-value="3" role="button" tabindex="0" aria-pressed="false">
                 <strong>3</strong>
                 <span>Autônomo</span>
               </div>
             </div>
-            <input type="hidden" id="mission_performance" value="3" />
+            <input type="hidden" id="mission_performance" value="" required />
           </div>
 
           <div class="form-group">
-            <label>Nível de Intervenção do Instrutor
+            <label id="interventionLabel">Nível de Intervenção do Instrutor *
               <small>Quantidade aproximada de apoios necessários durante a aula</small>
             </label>
-            <div class="option-cards" id="interventionOptions">
-              <div class="option-btn selected" data-value="0">
+            <div class="option-cards" id="interventionOptions" role="group" aria-labelledby="interventionLabel">
+              <div class="option-btn" data-value="0" role="button" tabindex="0" aria-pressed="false">
                 <strong>0</strong>
                 <span>Nenhuma</span>
               </div>
-              <div class="option-btn" data-value="1">
+              <div class="option-btn" data-value="1" role="button" tabindex="0" aria-pressed="false">
                 <strong>1-2</strong>
                 <span>Poucas</span>
               </div>
-              <div class="option-btn" data-value="2">
+              <div class="option-btn" data-value="2" role="button" tabindex="0" aria-pressed="false">
                 <strong>3-4</strong>
                 <span>Médias</span>
               </div>
-              <div class="option-btn" data-value="3">
+              <div class="option-btn" data-value="3" role="button" tabindex="0" aria-pressed="false">
                 <strong>5+</strong>
                 <span>Muitas</span>
               </div>
             </div>
-            <input type="hidden" id="instructor_interventions" value="0" />
+            <input type="hidden" id="instructor_interventions" value="" required />
           </div>
 
           <div class="form-group">
-            <label for="primary_issue">Principal Desafio Observado</label>
+            <label for="primary_issue">Principal Desafio Observado *</label>
             <select id="primary_issue" required>
+              <option value="" disabled selected>Selecione a principal dificuldade...</option>
               <option value="none">Nenhum problema relevante</option>
               <option value="assembly">Dificuldade na montagem física</option>
               <option value="logic">Lógica de programação</option>
@@ -581,8 +589,8 @@
           </div>
 
           <div class="form-group">
-            <label for="notes">Observações Opcionais <small>Anotações salvas como objeto JSON com data, horário e e-mail</small></label>
-            <textarea id="notes" rows="3" placeholder="Ex: A turma reprogramou o sensor de cor com autonomia no final..."></textarea>
+            <label for="notes">Observações Opcionais <small>Anotações contextuais de campo</small></label>
+            <textarea id="notes" rows="3" placeholder="Ex: O grupo precisou de apoio no alinhamento das engrenagens..."></textarea>
           </div>
 
           <button type="submit" class="submit-btn" id="submitBtn">Enviar Avaliação do Instrutor</button>
@@ -591,7 +599,7 @@
     </main>
 
     <!-- JANELA POPUP (MODAL) DE CONFIRMAÇÃO DO REGISTRO -->
-    <div class="modal-overlay" id="successModal">
+    <div class="modal-overlay" id="successModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" aria-describedby="modalSubtitle">
       <div class="modal-card">
         <div class="modal-icon" id="modalIcon">✓</div>
         <h2 class="modal-title" id="modalTitle">Avaliação Registrada!</h2>
@@ -600,19 +608,19 @@
         <div class="modal-summary-box">
           <div class="modal-summary-item">
             <span class="modal-summary-label">Oficina</span>
-            <span class="modal-summary-value" id="modalValWorkshop">OFICINA-001</span>
+            <span class="modal-summary-value" id="modalValWorkshop">-</span>
           </div>
           <div class="modal-summary-item">
             <span class="modal-summary-label">Turma</span>
-            <span class="modal-summary-value" id="modalValClass">TURMA-A</span>
+            <span class="modal-summary-value" id="modalValClass">-</span>
           </div>
           <div class="modal-summary-item">
             <span class="modal-summary-label">Data e Hora</span>
-            <span class="modal-summary-value" id="modalValTime">29/07/2026 11:45</span>
+            <span class="modal-summary-value" id="modalValTime">-</span>
           </div>
           <div class="modal-summary-item">
             <span class="modal-summary-label">Instrutor</span>
-            <span class="modal-summary-value" id="modalValInstructor">prof@escola.edu.br</span>
+            <span class="modal-summary-value" id="modalValInstructor">-</span>
           </div>
         </div>
 
@@ -621,13 +629,31 @@
     </div>
 
     <footer class="footer-links">
-      <p>PulseLab Pesquisa Aplicada · <a href="/simulador/">Simulador dos Alunos</a> · <a href="/relatorio/">Relatório Acadêmico</a> · <a href="/">Página Principal</a></p>
+      <p>PulseLab Pesquisa Aplicada · <a href="/instalador/">Provisionamento seguro</a> · <a href="/simulador/">Simulador dos Alunos</a> · <a href="/relatorio/">Relatório Acadêmico</a> · <a href="/">Página Principal</a></p>
     </footer>
   </div>
 
   <script>
     let currentUser = null;
     let isSimulationMode = false;
+    let supabaseClient = null;
+    let lastActiveElement = null;
+
+    // Inicialização do cliente Supabase
+    function getSupabaseClient() {
+      if (supabaseClient) return supabaseClient;
+      const cfg = window.PULSELAB_INSTRUCTOR_CONFIG;
+      if (cfg && cfg.supabaseUrl && !cfg.supabaseUrl.includes('SEU-PROJETO') && cfg.supabaseAnonKey && !cfg.supabaseAnonKey.includes('SUA-ANON')) {
+        try {
+          supabaseClient = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+          return supabaseClient;
+        } catch (e) {
+          console.error("Falha ao inicializar Supabase:", e);
+          return null;
+        }
+      }
+      return null;
+    }
 
     function showAlert(elementId, message, type = 'error') {
       const el = document.getElementById(elementId);
@@ -638,7 +664,10 @@
     }
 
     function clearAlerts() {
-      document.querySelectorAll('.alert').forEach(a => a.style.display = 'none');
+      document.querySelectorAll('.alert').forEach(a => {
+        a.style.display = 'none';
+        a.textContent = '';
+      });
     }
 
     function showAuthView(viewName) {
@@ -654,41 +683,56 @@
       resetPasswordForm.classList.add('hidden');
 
       tabLoginBtn.classList.remove('active');
+      tabLoginBtn.setAttribute('aria-selected', 'false');
       tabForgotBtn.classList.remove('active');
+      tabForgotBtn.setAttribute('aria-selected', 'false');
 
       if (viewName === 'login') {
         loginForm.classList.remove('hidden');
         tabLoginBtn.classList.add('active');
+        tabLoginBtn.setAttribute('aria-selected', 'true');
+        document.getElementById('login_email').focus();
       } else if (viewName === 'forgot') {
         forgotForm.classList.remove('hidden');
         tabForgotBtn.classList.add('active');
+        tabForgotBtn.setAttribute('aria-selected', 'true');
+        document.getElementById('forgot_email').focus();
       } else if (viewName === 'reset') {
         resetPasswordForm.classList.remove('hidden');
+        document.getElementById('new_password').focus();
       }
     }
 
-    function openInstructorPanel(emailAddress, isTest = false) {
-      const email = emailAddress || 'instrutor@escola.edu.br';
+    function openInstructorPanel(user, isTest = false) {
+      currentUser = user;
       isSimulationMode = isTest;
-      currentUser = { email: email, id: isTest ? 'test-mode-id' : 'instructor-auth-id' };
 
       const badgeText = document.getElementById('userEmail');
       const submitBtn = document.getElementById('submitBtn');
 
+      badgeText.textContent = user.email || 'instrutor@pulselab.edu.br';
       if (isTest) {
-        badgeText.innerHTML = `${email} <span style="background: rgba(124, 58, 237, 0.3); color: #d8b4fe; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; margin-left: 6px;">Modo Simulação (Sem Registro)</span>`;
-        submitBtn.textContent = 'Simular Envio (Nenhum dado será salvo)';
+        const demoSpan = document.createElement('span');
+        demoSpan.style.cssText = 'background: rgba(124, 58, 237, 0.3); color: #d8b4fe; padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; margin-left: 6px;';
+        demoSpan.textContent = 'Modo Demonstração (Local)';
+        badgeText.appendChild(demoSpan);
+        submitBtn.textContent = 'Simular Envio (Modo Demonstração)';
       } else {
-        badgeText.textContent = email;
         submitBtn.textContent = 'Enviar Avaliação do Instrutor';
       }
 
       document.getElementById('userBadge').style.display = 'flex';
       document.getElementById('authCard').classList.add('hidden');
       document.getElementById('evaluationCard').classList.remove('hidden');
+      resetEvaluationForm();
+      document.getElementById('workshop_code').focus();
     }
 
-    function handleLogout() {
+    async function handleLogout() {
+      const client = getSupabaseClient();
+      if (client && !isSimulationMode) {
+        try { await client.auth.signOut(); } catch (e) {}
+      }
       currentUser = null;
       isSimulationMode = false;
       document.getElementById('userBadge').style.display = 'none';
@@ -697,13 +741,15 @@
       showAuthView('login');
     }
 
-    // Bind dos botões
+    // Botões de navegação
     document.getElementById('tabLoginBtn').addEventListener('click', () => showAuthView('login'));
     document.getElementById('tabForgotBtn').addEventListener('click', () => showAuthView('forgot'));
     document.getElementById('inlineForgotBtn').addEventListener('click', () => showAuthView('forgot'));
     document.getElementById('backToLoginBtn').addEventListener('click', () => showAuthView('login'));
     document.getElementById('logoutBtn').addEventListener('click', handleLogout);
-    document.getElementById('testAccessBtn').addEventListener('click', () => openInstructorPanel('instrutor-teste@pulselab.edu.br', true));
+    document.getElementById('testAccessBtn').addEventListener('click', () => {
+      openInstructorPanel({ email: 'instrutor.demo@pulselab.local', id: 'demo-local-id' }, true);
+    });
     document.getElementById('closeModalBtn').addEventListener('click', closeModal);
 
     // Opções de seleção interativa
@@ -713,10 +759,21 @@
       const buttons = container.querySelectorAll('.option-btn');
 
       buttons.forEach(btn => {
-        btn.addEventListener('click', () => {
-          buttons.forEach(b => b.classList.remove('selected'));
+        const selectAction = () => {
+          buttons.forEach(b => {
+            b.classList.remove('selected');
+            b.setAttribute('aria-pressed', 'false');
+          });
           btn.classList.add('selected');
+          btn.setAttribute('aria-pressed', 'true');
           hiddenInput.value = btn.getAttribute('data-value');
+        };
+        btn.addEventListener('click', selectAction);
+        btn.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            selectAction();
+          }
         });
       });
     }
@@ -724,53 +781,171 @@
     setupOptionGroup('missionOptions', 'mission_performance');
     setupOptionGroup('interventionOptions', 'instructor_interventions');
 
-    // Formulário de Login
-    document.getElementById('loginForm').addEventListener('submit', function(e) {
+    function resetEvaluationForm() {
+      document.getElementById('instructorForm').reset();
+      document.querySelectorAll('#missionOptions .option-btn, #interventionOptions .option-btn').forEach(btn => {
+        btn.classList.remove('selected');
+        btn.setAttribute('aria-pressed', 'false');
+      });
+      document.getElementById('mission_performance').value = '';
+      document.getElementById('instructor_interventions').value = '';
+      document.getElementById('primary_issue').selectedIndex = 0;
+      clearAlerts();
+    }
+
+    // Formulário de Login Real com Supabase Auth
+    document.getElementById('loginForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       clearAlerts();
-      const email = document.getElementById('login_email').value.trim() || 'vfamim@gmail.com';
-      openInstructorPanel(email, false);
+      const email = document.getElementById('login_email').value.trim();
+      const password = document.getElementById('login_password').value;
+      const loginBtn = document.getElementById('loginBtn');
+
+      const client = getSupabaseClient();
+      if (!client) {
+        showAlert('authErrorAlert', 'Ambiente não configurado para autenticação em nuvem. Configure o arquivo "instrutor/config.js" com a URL e anon public key do Supabase, ou utilize o "Modo Demonstração Local" abaixo.');
+        return;
+      }
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Verificando credenciais...';
+
+      try {
+        const { data, error } = await client.auth.signInWithPassword({ email, password });
+        if (error) {
+          showAlert('authErrorAlert', `Falha de autenticação: ${error.message}`);
+          return;
+        }
+        if (!data.user) {
+          showAlert('authErrorAlert', 'Usuário não encontrado.');
+          return;
+        }
+
+        // Validação da whitelist authorized_instructors
+        const { data: authorized, error: authError } = await client
+          .from('authorized_instructors')
+          .select('email, is_active')
+          .eq('email', data.user.email)
+          .maybeSingle();
+
+        if (authError || !authorized || !authorized.is_active) {
+          await client.auth.signOut();
+          showAlert('authErrorAlert', 'Acesso negado: Este e-mail não consta na lista de instrutores autorizados ou está inativo.');
+          return;
+        }
+
+        openInstructorPanel(data.user, false);
+      } catch (err) {
+        showAlert('authErrorAlert', `Erro inesperado na autenticação: ${err.message}`);
+      } finally {
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Entrar no Painel do Instrutor';
+      }
     });
 
     // Formulário de Esqueceu a Senha
-    document.getElementById('forgotForm').addEventListener('submit', function(e) {
+    document.getElementById('forgotForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       clearAlerts();
-      const email = document.getElementById('forgot_email').value.trim() || 'vfamim@gmail.com';
-      showAlert('authSuccessAlert', `E-mail de recuperação enviado para ${email}. Verifique sua caixa de entrada.`, 'success');
+      const email = document.getElementById('forgot_email').value.trim();
+      const forgotBtn = document.getElementById('forgotBtn');
+
+      const client = getSupabaseClient();
+      if (!client) {
+        showAlert('authErrorAlert', 'Ambiente não configurado com Supabase.');
+        return;
+      }
+
+      forgotBtn.disabled = true;
+      forgotBtn.textContent = 'Enviando link...';
+
+      try {
+        const { error } = await client.auth.resetPasswordForEmail(email, {
+          redirectTo: window.location.href
+        });
+        if (error) {
+          showAlert('authErrorAlert', `Erro ao solicitar recuperação: ${error.message}`);
+        } else {
+          showAlert('authSuccessAlert', `Instruções de recuperação enviadas para ${email}. Verifique seu e-mail.`, 'success');
+        }
+      } catch (err) {
+        showAlert('authErrorAlert', `Erro: ${err.message}`);
+      } finally {
+        forgotBtn.disabled = false;
+        forgotBtn.textContent = 'Enviar E-mail de Recuperação';
+      }
     });
 
     // Formulário de Nova Senha
-    document.getElementById('resetPasswordForm').addEventListener('submit', function(e) {
+    document.getElementById('resetPasswordForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       clearAlerts();
-      showAlert('authSuccessAlert', 'Senha atualizada com sucesso!', 'success');
-      showAuthView('login');
+      const password = document.getElementById('new_password').value;
+      const resetBtn = document.getElementById('resetPasswordBtn');
+
+      const client = getSupabaseClient();
+      if (!client) {
+        showAlert('authErrorAlert', 'Ambiente não configurado com Supabase.');
+        return;
+      }
+
+      resetBtn.disabled = true;
+      resetBtn.textContent = 'Atualizando...';
+
+      try {
+        const { error } = await client.auth.updateUser({ password });
+        if (error) {
+          showAlert('authErrorAlert', `Erro ao atualizar senha: ${error.message}`);
+        } else {
+          showAlert('authSuccessAlert', 'Senha atualizada com sucesso! Faça login com sua nova credencial.', 'success');
+          showAuthView('login');
+        }
+      } catch (err) {
+        showAlert('authErrorAlert', `Erro: ${err.message}`);
+      } finally {
+        resetBtn.disabled = false;
+        resetBtn.textContent = 'Atualizar Minha Senha';
+      }
     });
 
     // Envio do Formulário de Avaliação da Oficina
-    document.getElementById('instructorForm').addEventListener('submit', function(e) {
+    document.getElementById('instructorForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       clearAlerts();
+
+      const missionVal = document.getElementById('mission_performance').value;
+      const intervVal = document.getElementById('instructor_interventions').value;
+      const issueVal = document.getElementById('primary_issue').value;
+
+      const sessionIdRaw = document.getElementById('session_id').value.trim();
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (!sessionIdRaw || !uuidRegex.test(sessionIdRaw)) {
+        showAlert('evalErrorAlert', 'O ID da Sessão é obrigatório e deve ser um UUID válido gerado pelo agente (ex: 550e8400-e29b-41d4-a716-446655440000).');
+        return;
+      }
+
+      if (missionVal === '' || intervVal === '' || !issueVal) {
+        showAlert('evalErrorAlert', 'Preencha todos os campos obrigatórios (*) da avaliação antes de enviar.');
+        return;
+      }
+
       const submitBtn = document.getElementById('submitBtn');
       submitBtn.disabled = true;
-      submitBtn.textContent = isSimulationMode ? 'Simulando envio...' : 'Gravando avaliação...';
+      submitBtn.textContent = isSimulationMode ? 'Simulando envio...' : 'Gravando avaliação no banco...';
 
       const instructorEmail = currentUser ? currentUser.email : 'instrutor@pulselab.edu.br';
       const submittedAt = new Date().toISOString();
       const workshopCode = document.getElementById('workshop_code').value.trim();
       const classCode = document.getElementById('class_code').value.trim();
+      const siteId = document.getElementById('site_id').value.trim() || null;
       const notesText = document.getElementById('notes').value.trim();
 
       const notesJsonObject = {
         observation: notesText || 'Nenhuma observação informada',
         instructor_email: instructorEmail,
         submitted_at: submittedAt,
-        simulation_mode: isSimulationMode,
-        client_info: {
-          userAgent: navigator.userAgent,
-          screen_resolution: `${window.innerWidth}x${window.innerHeight}`
-        }
+        simulation_mode: isSimulationMode
       };
 
       const payload = {
@@ -778,43 +953,133 @@
         submitted_at: submittedAt,
         workshop_code: workshopCode,
         class_code: classCode,
-        mission_performance: Number(document.getElementById('mission_performance').value),
-        instructor_interventions: Number(document.getElementById('instructor_interventions').value),
-        primary_issue: document.getElementById('primary_issue').value,
+        site_id: siteId,
+        session_id: sessionIdRaw,
+        mission_performance: Number(missionVal),
+        instructor_interventions: Number(intervVal),
+        primary_issue: issueVal,
         notes: notesJsonObject
       };
 
-      console.log(isSimulationMode ? 'Simulação de envio (sem registro):' : 'Avaliação salva:', payload);
+      if (isSimulationMode) {
+        setTimeout(() => {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Simular Envio (Modo Demonstração)';
+          showSuccessModal(payload, true);
+        }, 300);
+        return;
+      }
 
-      setTimeout(() => {
+      const client = getSupabaseClient();
+      if (!client) {
         submitBtn.disabled = false;
-        submitBtn.textContent = isSimulationMode ? 'Simular Envio (Nenhum dado será salvo)' : 'Enviar Avaliação do Instrutor';
+        submitBtn.textContent = 'Enviar Avaliação do Instrutor';
+        showAlert('evalErrorAlert', 'Cliente Supabase desconectado. Verifique as configurações em config.js.');
+        return;
+      }
 
-        // Preenche dados da Janela Modal de Confirmação
-        document.getElementById('modalValWorkshop').textContent = workshopCode;
-        document.getElementById('modalValClass').textContent = classCode;
-        document.getElementById('modalValTime').textContent = new Date(submittedAt).toLocaleString('pt-BR');
-        document.getElementById('modalValInstructor').textContent = instructorEmail;
-
-        if (isSimulationMode) {
-          document.getElementById('modalTitle').textContent = 'Simulação Concluída!';
-          document.getElementById('modalSubtitle').textContent = 'O teste foi concluído com sucesso. Como este foi um Acesso de Teste, NENHUM DADO foi salvo no banco.';
-          document.getElementById('modalIcon').textContent = '🧪';
-        } else {
-          document.getElementById('modalTitle').textContent = 'Avaliação Registrada!';
-          document.getElementById('modalSubtitle').textContent = 'O formulário da oficina foi concluído e os dados foram salvos com sucesso no banco de dados.';
-          document.getElementById('modalIcon').textContent = '✓';
+      try {
+        const { error } = await client.from('instructor_evaluations').insert([payload]);
+        if (error) {
+          showAlert('evalErrorAlert', `Falha ao gravar avaliação: ${error.message}. Tente novamente.`);
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Enviar Avaliação do Instrutor';
+          return;
         }
 
-        // Exibe a Janela Popup (Modal)
-        document.getElementById('successModal').classList.add('active');
-      }, 400);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar Avaliação do Instrutor';
+        showSuccessModal(payload, false);
+      } catch (err) {
+        showAlert('evalErrorAlert', `Erro inesperado na gravação: ${err.message}`);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar Avaliação do Instrutor';
+      }
     });
+
+    function showSuccessModal(payload, isSim) {
+      lastActiveElement = document.activeElement;
+      document.getElementById('modalValWorkshop').textContent = payload.workshop_code;
+      document.getElementById('modalValClass').textContent = payload.class_code;
+      document.getElementById('modalValTime').textContent = new Date(payload.submitted_at).toLocaleString('pt-BR');
+      document.getElementById('modalValInstructor').textContent = payload.instructor_email;
+
+      if (isSim) {
+        document.getElementById('modalTitle').textContent = 'Demonstração Concluída!';
+        document.getElementById('modalSubtitle').textContent = 'O teste foi concluído com sucesso. Como este foi o Modo Demonstração, nenhum dado foi gravado no banco.';
+        document.getElementById('modalIcon').textContent = '🧪';
+      } else {
+        document.getElementById('modalTitle').textContent = 'Avaliação Registrada!';
+        document.getElementById('modalSubtitle').textContent = 'O formulário da oficina foi gravado com sucesso no banco de dados autenticado.';
+        document.getElementById('modalIcon').textContent = '✓';
+      }
+
+      const modal = document.getElementById('successModal');
+      modal.classList.add('active');
+      document.getElementById('closeModalBtn').focus();
+    }
 
     function closeModal() {
       document.getElementById('successModal').classList.remove('active');
-      document.getElementById('instructorForm').reset();
+      resetEvaluationForm();
+      if (lastActiveElement) {
+        lastActiveElement.focus();
+      } else {
+        document.getElementById('workshop_code').focus();
+      }
     }
+
+    // Acessibilidade do Modal: Fechar com Escape
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.getElementById('successModal').classList.contains('active')) {
+        closeModal();
+      }
+    });
+
+    function updateDemoVisibility() {
+      const cfg = window.PULSELAB_INSTRUCTOR_CONFIG || {};
+      const allowDemo = cfg.allowDemo === true;
+      const demoBtn = document.getElementById('testAccessBtn');
+      if (demoBtn) {
+        if (allowDemo) {
+          demoBtn.classList.remove('hidden');
+          demoBtn.style.display = 'block';
+        } else {
+          demoBtn.classList.add('hidden');
+          demoBtn.style.display = 'none';
+        }
+      }
+    }
+
+    // Listener para recuperação de sessão Supabase com revalidação de whitelist
+    window.addEventListener('DOMContentLoaded', async () => {
+      updateDemoVisibility();
+      const client = getSupabaseClient();
+      if (client) {
+        try {
+          const { data: { session } } = await client.auth.getSession();
+          if (session && session.user) {
+            // Revalidação estrita da whitelist ao restaurar sessão
+            const { data: authorized, error: authError } = await client
+              .from('authorized_instructors')
+              .select('email, is_active')
+              .eq('email', session.user.email)
+              .maybeSingle();
+
+            if (authError || !authorized || !authorized.is_active) {
+              await client.auth.signOut();
+              showAlert('authErrorAlert', 'Sessão revogada ou e-mail não consta na lista de instrutores autorizados.');
+              showAuthView('login');
+              return;
+            }
+
+            openInstructorPanel(session.user, false);
+          }
+        } catch (err) {
+          console.warn('Erro ao restaurar sessão do instrutor:', err);
+        }
+      }
+    });
   </script>
 </body>
 </html>

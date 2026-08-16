@@ -1,134 +1,52 @@
 ﻿#Requires -Version 5.1
-# =============================================================================
-# setup-startup.ps1
-# Version    : 1.4.0
-# Description: Pulselab one-time setup script. Configures user environment variables
-#              for Supabase credentials, verifies WPF assemblies, and creates a
-#              Windows Desktop shortcut to run the daemon manually under-demand.
-#
-# Usage      : .\setup-startup.ps1 -SupabaseUrl "https://..." -SupabaseKey "..."
-# Permissions: Runs as a standard user. No UAC/Admin required.
-# =============================================================================
+# PulseLab 1.5.0 - compatibility setup for a checked-out repository
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$SupabaseUrl,
-
-    [Parameter(Mandatory = $true)]
-    [string]$SupabaseKey,
-
-    [Parameter(Mandatory = $false)]
-    [string]$AgentPath = $null
+    [Parameter(Mandatory = $true)][string]$SupabaseUrl,
+    [Parameter(Mandatory = $true)][string]$SupabaseAnonKey,
+    [Parameter(Mandatory = $true)][string]$SiteId,
+    [Parameter(Mandatory = $true)][string]$RegionalHub,
+    [Parameter(Mandatory = $true)][string]$SchoolCode,
+    [string]$ComputerId = $env:COMPUTERNAME,
+    [string]$AgentPath = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-
-function Write-SetupLog {
-    param([string]$Level, [string]$Message)
-    $timestamp = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
-    Write-Host "[$timestamp] [$Level] $Message"
-}
-
-# =============================================================================
-# STEP 1: Resolve agent path and verify WPF dependencies
-# =============================================================================
-
-Write-SetupLog "INFO" "Pulselab setup starting. version=1.4.0"
-
-try {
-    Write-SetupLog "INFO" "Verifying WPF / XAML assemblies..."
-    Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
-    Write-SetupLog "INFO" "WPF dependencies verified successfully."
-} catch {
-    Write-SetupLog "ERROR" "WPF / PresentationFramework is not available on this machine. Error: $_"
-    exit 1
-}
-
+$repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 if ([string]::IsNullOrWhiteSpace($AgentPath)) {
-    $AgentPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "..\agent\pulselab-agent.ps1"
+    $AgentPath = Join-Path $repoRoot "agent\pulselab-agent.ps1"
+}
+$enrollPath = Join-Path $repoRoot "supabase\scripts\enroll-device.ps1"
+foreach ($path in @($AgentPath, $enrollPath)) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required file not found: $path" }
 }
 
-$AgentPath = Resolve-Path $AgentPath -ErrorAction SilentlyContinue
+Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
+[Environment]::SetEnvironmentVariable("PULSELAB_URL", $SupabaseUrl, "User")
+[Environment]::SetEnvironmentVariable("PULSELAB_ANON_KEY", $SupabaseAnonKey, "User")
+[Environment]::SetEnvironmentVariable("PULSELAB_KEY", $null, "User")
 
-if (-not $AgentPath -or -not (Test-Path $AgentPath)) {
-    Write-SetupLog "ERROR" "Agent script not found at resolved path: $AgentPath"
-    Write-SetupLog "ERROR" "Run setup-startup.ps1 from the installer/ directory, or pass -AgentPath explicitly."
-    exit 1
-}
+& $enrollPath `
+    -SupabaseUrl $SupabaseUrl `
+    -SupabaseAnonKey $SupabaseAnonKey `
+    -SiteId $SiteId `
+    -RegionalHub $RegionalHub `
+    -SchoolCode $SchoolCode `
+    -ComputerId $ComputerId
+if ($LASTEXITCODE -ne 0) { throw "Device enrollment failed." }
 
-Write-SetupLog "INFO" "Agent path resolved. path=$AgentPath"
-
-# =============================================================================
-# STEP 2: Set user-scoped environment variables (no UAC required)
-# =============================================================================
-
-# Clean credentials from surrounding quotes
-$SupabaseUrl = $SupabaseUrl.Trim().Trim('"').Trim("'")
-$SupabaseKey = $SupabaseKey.Trim().Trim('"').Trim("'")
-
-[System.Environment]::SetEnvironmentVariable("PULSELAB_URL", $SupabaseUrl, "User")
-[System.Environment]::SetEnvironmentVariable("PULSELAB_KEY", $SupabaseKey, "User")
-
-Write-SetupLog "INFO" "Environment variables set for current user. vars=PULSELAB_URL,PULSELAB_KEY"
-
-# Verify they can be read back
-$verifyUrl = [System.Environment]::GetEnvironmentVariable("PULSELAB_URL", "User")
-$verifyKey = [System.Environment]::GetEnvironmentVariable("PULSELAB_KEY", "User")
-
-if ($verifyUrl -ne $SupabaseUrl -or $verifyKey -ne $SupabaseKey) {
-    Write-SetupLog "ERROR" "Environment variable verification failed. Values do not match after write."
-    exit 1
-}
-
-Write-SetupLog "INFO" "Environment variables verified successfully."
-
-# =============================================================================
-# STEP 3: Create Windows Desktop & Start Menu shortcuts (.lnk) for On-Demand manual launch
-# Uses COM WSScript.Shell - available on all Windows versions, no UAC.
-# =============================================================================
-
-$shortcutName = "Iniciar Pulselab - Oficina de Robótica.lnk"
-$desktopDir   = [System.Environment]::GetFolderPath("Desktop")
-$startMenuDir = [System.Environment]::GetFolderPath("Programs")
-
-# Clean up any legacy automatic startup shortcut if present
-$startupDir     = [System.Environment]::GetFolderPath("Startup")
-$legacyShortcut = Join-Path $startupDir "Pulselab.lnk"
-if (Test-Path $legacyShortcut) {
-    Write-SetupLog "INFO" "Removing legacy automatic startup shortcut..."
-    Remove-Item $legacyShortcut -Force -ErrorAction SilentlyContinue
-}
-
-$shortcutLocations = @($desktopDir, $startMenuDir) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) }
-
-foreach ($locDir in $shortcutLocations) {
-    $shortcutPath = Join-Path $locDir $shortcutName
-    $wshell   = New-Object -ComObject WScript.Shell
-    $shortcut = $wshell.CreateShortcut($shortcutPath)
-
-    $shortcut.TargetPath       = "powershell.exe"
-    $shortcut.Arguments        = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
+$locations = @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("Programs")) |
+    Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) }
+foreach ($location in $locations) {
+    $shortcutPath = Join-Path $location "Iniciar PulseLab - Oficina de Robotica.lnk"
+    $shell = New-Object -ComObject WScript.Shell
+    $shortcut = $shell.CreateShortcut($shortcutPath)
+    $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
     $shortcut.WorkingDirectory = Split-Path -Parent $AgentPath
-    $shortcut.WindowStyle      = 7    # 7 = Minimized / Hidden
-    $shortcut.Description      = "Iniciar Pulselab - Oficina de Robótica"
-    $shortcut.IconLocation     = "%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe,0"
-
+    $shortcut.Description = "PulseLab 1.5.0 - Oficina de Robotica"
     $shortcut.Save()
-    Write-SetupLog "INFO" "Shortcut created at $shortcutPath"
 }
-
-# =============================================================================
-# STEP 4: Summary
-# =============================================================================
-
-Write-SetupLog "INFO" "---------------------------------------------"
-Write-SetupLog "INFO" "Setup complete. Pulselab is ready for on-demand use."
-Write-SetupLog "INFO" "  Daemon       : $AgentPath"
-Write-SetupLog "INFO" "  Shortcuts    : Desktop & Start Menu ('Iniciar Pulselab - Oficina de Robótica')"
-Write-SetupLog "INFO" "  Supabase URL : $($SupabaseUrl.Substring(0, [Math]::Min(30, $SupabaseUrl.Length)))..."
-Write-SetupLog "INFO" "---------------------------------------------"
-Write-SetupLog "INFO" "To start the session, double-click the shortcut on the Desktop or search in Start Menu:"
-Write-SetupLog "INFO" "  'Iniciar Pulselab - Oficina de Robótica'"
-Write-SetupLog "INFO" "---------------------------------------------"
+Write-Host "PulseLab 1.5.0 enrolled and configured for the current user." -ForegroundColor Green

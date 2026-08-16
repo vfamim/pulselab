@@ -1,7 +1,7 @@
 # Simulador web do agente PulseLab
 
 Aplicação navegável para validar linguagem, ordem das telas, instrumentos,
-eventos e regras de qualidade da versão 1.4 em Linux ou qualquer navegador.
+eventos e regras de qualidade da versão 1.5.0 em Linux ou qualquer navegador.
 
 O simulador não acessa APIs Win32, não captura a tela e não envia dados ao
 Supabase. Telemetria, relógio e conectividade são representações controladas
