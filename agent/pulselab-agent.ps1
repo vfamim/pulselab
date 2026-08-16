@@ -55,6 +55,9 @@ public class Win32 {
 
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool DestroyIcon(IntPtr hIcon);
 }
 "@
 
@@ -1972,9 +1975,64 @@ function Show-WpfFinished {
     $timer.Stop()
 }
 
+# =============================================================================
+# TRAY E ORQUESTRAÇÃO
+# =============================================================================
+
+function Get-PulseLabTrayIcon {
+    try {
+        $localLogoPath = Join-Path $PSScriptRoot "logo.png"
+        $localCirclePath = Join-Path $PSScriptRoot "logo-circle.png"
+        $srcBitmap = $null
+
+        if (Test-Path $localCirclePath) {
+            $srcBitmap = [System.Drawing.Image]::FromFile($localCirclePath)
+        } elseif (Test-Path $localLogoPath) {
+            $rawImg = [System.Drawing.Image]::FromFile($localLogoPath)
+            $size = 32
+            $dest = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+            $g = [System.Drawing.Graphics]::FromImage($dest)
+            $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+            $g.Clear([System.Drawing.Color]::Transparent)
+
+            $path = New-Object System.Drawing.Drawing2D.GraphicsPath
+            $path.AddEllipse(0, 0, $size - 1, $size - 1)
+            $g.SetClip($path)
+            $g.FillEllipse([System.Drawing.Brushes]::White, 0, 0, $size - 1, $size - 1)
+            $g.DrawImage($rawImg, 0, 0, $size, $size)
+            $g.ResetClip()
+
+            $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200, 0, 103, 177), 1.0)
+            $g.DrawEllipse($pen, 0, 0, $size - 1, $size - 1)
+            $pen.Dispose()
+            $g.Dispose()
+            $path.Dispose()
+            $rawImg.Dispose()
+            $srcBitmap = $dest
+        } else {
+            $b64 = "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"
+            $bytes = [System.Convert]::FromBase64String($b64)
+            $ms = New-Object System.IO.MemoryStream(,$bytes)
+            $srcBitmap = [System.Drawing.Image]::FromStream($ms)
+        }
+
+        if ($srcBitmap) {
+            $hIcon = $srcBitmap.GetHicon()
+            $icon = [System.Drawing.Icon]::FromHandle($hIcon).Clone()
+            [Win32]::DestroyIcon($hIcon) | Out-Null
+            $srcBitmap.Dispose()
+            return $icon
+        }
+    } catch {
+        Write-PulseLog "WARN" "Failed to generate custom circular tray icon, falling back to default: $_"
+    }
+    return [Drawing.SystemIcons]::Application
+}
 function Initialize-TrayIcon {
     $script:NotifyIcon = New-Object Windows.Forms.NotifyIcon
-    $script:NotifyIcon.Icon = [Drawing.SystemIcons]::Application
+    $script:NotifyIcon.Icon = Get-PulseLabTrayIcon
     $script:NotifyIcon.Text = "PulseLab - Oficina em andamento"
     $script:NotifyIcon.Visible = $true
     $menu = New-Object Windows.Forms.ContextMenu
@@ -2018,6 +2076,9 @@ function Show-HelpAlert {
 function Dispose-TrayIcon {
     if ($script:NotifyIcon) {
         $script:NotifyIcon.Visible = $false
+        if ($script:NotifyIcon.Icon -and $script:NotifyIcon.Icon -ne [Drawing.SystemIcons]::Application) {
+            $script:NotifyIcon.Icon.Dispose()
+        }
         $script:NotifyIcon.Dispose()
         $script:NotifyIcon = $null
     }

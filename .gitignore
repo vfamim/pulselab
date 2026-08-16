@@ -2,6 +2,8 @@
 
 # AI agent framework (internal tooling, not part of the project)
 .agent/
+.agents/
+skills-lock.json
 
 # Offline queue and student data (LGPD compliance)
 .cache/

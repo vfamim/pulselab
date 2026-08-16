@@ -274,6 +274,23 @@
         .flow-connector { position: relative; min-width: 34px; height: 2px; flex: 1; background: var(--border); }
         .flow-connector::after { content: ""; position: absolute; top: -4px; right: -1px; width: 8px; height: 8px; border-top: 2px solid var(--primary); border-right: 2px solid var(--primary); transform: rotate(45deg); }
 
+        .installer-section { padding: 90px 0; background: var(--surface); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+        .installer-card { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr); gap: 48px; align-items: center; }
+        .installer-card h2 { margin: 12px 0 14px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(2rem, 3.8vw, 2.7rem); line-height: 1.18; letter-spacing: -0.035em; }
+        .installer-card p { color: var(--muted); font-size: 1.02rem; margin-bottom: 24px; }
+        .installer-steps { display: grid; gap: 14px; margin-top: 20px; }
+        .installer-step { display: flex; align-items: flex-start; gap: 14px; padding: 14px 18px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #fff; box-shadow: var(--shadow-sm); }
+        .installer-step__num { width: 32px; height: 32px; border-radius: 50%; background: var(--primary-soft); color: var(--primary); display: grid; place-items: center; font-weight: 800; font-size: 0.88rem; flex-shrink: 0; }
+        .installer-step strong { display: block; font-size: 0.92rem; color: var(--foreground); }
+        .installer-step small { color: var(--muted); font-size: 0.8rem; }
+        .installer-box { padding: 32px 28px; border: 1px solid rgba(0, 103, 177, 0.18); border-radius: var(--radius-lg); background: #fff; box-shadow: var(--shadow-lg); text-align: center; display: grid; gap: 14px; }
+        .installer-box__badge { justify-self: center; padding: 5px 12px; border-radius: var(--radius-full); background: var(--primary-soft); color: var(--primary); font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+        .installer-box__icon { font-size: 2.8rem; line-height: 1; }
+        .installer-box h3 { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 1.3rem; font-weight: 800; }
+        .installer-box p { color: var(--muted); font-size: 0.88rem; margin: 0; }
+        .installer-box .button { width: 100%; }
+        .installer-box__meta { color: var(--muted); font-size: 0.74rem; }
+
         .research-section { padding: 0 0 104px; }
         .research-card { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr); gap: 48px; align-items: center; padding: 52px; overflow: hidden; border: 1px solid rgba(0, 103, 177, 0.20); border-radius: var(--radius-lg); background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: #fff; box-shadow: var(--shadow-lg); }
         .research-card h2 { margin: 13px 0 16px; font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1.18; letter-spacing: -0.035em; }
@@ -373,12 +390,13 @@
                     <li><a href="#projeto">Projeto-mãe</a></li>
                     <li><a href="#metodologia">Metodologia</a></li>
                     <li><a href="#experiencia">PulseLab</a></li>
+                    <li><a href="#instalador">Instalação</a></li>
                     <li><a href="#arquitetura">Arquitetura</a></li>
                     <li><a href="#pesquisa">Pesquisa</a></li>
                 </ul>
             </nav>
             <div class="nav-actions">
-                <a class="button button--secondary" href="/instalador/" target="_blank" rel="noopener noreferrer">Instalador</a>
+                <a class="button button--secondary" href="/Install-Pulselab.zip" download>Baixar Instalador</a>
                 <a class="button button--secondary" href="/instrutor/" target="_blank" rel="noopener noreferrer">Portal</a>
                 <a class="button button--primary" href="/simulador/" target="_blank" rel="noopener noreferrer">Abrir simulador</a>
             </div>
@@ -395,8 +413,8 @@
                         O PulseLab integra o projeto Robótica Educativa da UNIVASF como uma camada de pesquisa ética: acompanha a jornada dos estudantes, organiza evidências e ajuda a compreender como a aprendizagem acontece nas oficinas.
                     </p>
                     <div class="hero__actions">
-                        <a class="button button--primary" href="/simulador/" target="_blank" rel="noopener noreferrer">Explorar o simulador <span aria-hidden="true">→</span></a>
-                        <a class="button button--secondary" href="/instalador/">Gerar instalador</a>
+                        <a class="button button--primary" href="/Install-Pulselab.zip" download>Baixar Instalador Windows (.zip) <span aria-hidden="true">↓</span></a>
+                        <a class="button button--secondary" href="/simulador/" target="_blank" rel="noopener noreferrer">Explorar o simulador <span aria-hidden="true">→</span></a>
                         <a class="button button--secondary" href="/relatorio/">Relatório acadêmico</a>
                     </div>
                     <div class="hero__tags" aria-label="Áreas do projeto">
@@ -595,6 +613,55 @@
                         <figcaption>Portal do Instrutor e encerramento</figcaption>
                     </figure>
                 </article>
+            </div>
+        </section>
+
+        <section class="installer-section" id="instalador">
+            <div class="container">
+                <div class="installer-card">
+                    <div class="installer-card__copy">
+                        <span class="eyebrow">Instalação Plug &amp; Play</span>
+                        <h2>Instalação rápida em 2 cliques para as oficinas.</h2>
+                        <p>
+                            O pacote autônomo vem 100% pré-configurado. Não é necessário digitar tokens, abrir terminais ou conceder privilégios de administrador nas máquinas escolares.
+                        </p>
+                        <div class="installer-steps">
+                            <div class="installer-step">
+                                <span class="installer-step__num">1</span>
+                                <div>
+                                    <strong>Baixe e extraia o ZIP</strong>
+                                    <small>Faça o download do arquivo <code>Install-Pulselab.zip</code> no computador.</small>
+                                </div>
+                            </div>
+                            <div class="installer-step">
+                                <span class="installer-step__num">2</span>
+                                <div>
+                                    <strong>Dois cliques no instalador</strong>
+                                    <small>Execute o arquivo <code>Install-Pulselab.bat</code> com dois cliques (sem precisar de Administrador).</small>
+                                </div>
+                            </div>
+                            <div class="installer-step">
+                                <span class="installer-step__num">3</span>
+                                <div>
+                                    <strong>Pronto para a oficina</strong>
+                                    <small>O atalho <em>Iniciar Pulselab - Oficina de Robótica</em> é criado na Área de Trabalho.</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="installer-card__action">
+                        <div class="installer-box">
+                            <div class="installer-box__badge">Versão 1.4.0 · Windows 10/11</div>
+                            <div class="installer-box__icon" aria-hidden="true">📦</div>
+                            <h3>Pacote Autônomo PulseLab</h3>
+                            <p>Instalador standalone .bat pré-configurado e instruções de uso rápido.</p>
+                            <a class="button button--primary" href="/Install-Pulselab.zip" download>
+                                Baixar Pacote (.zip) <span aria-hidden="true">↓</span>
+                            </a>
+                            <small class="installer-box__meta">Arquivo seguro · ~35 KB · Sem necessidade de Admin</small>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 

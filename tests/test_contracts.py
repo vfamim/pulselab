@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import subprocess
@@ -1283,8 +1284,9 @@ class ProvisionDeviceToolExecutionTests(unittest.TestCase):
             }
             write_secure_output(out_file, sample_data)
             self.assertTrue(out_file.exists())
-            file_mode = oct(out_file.stat().st_mode & 0o777)
-            self.assertEqual(file_mode, "0o600")
+            if os.name != "nt":
+                file_mode = oct(out_file.stat().st_mode & 0o777)
+                self.assertEqual(file_mode, "0o600")
 
 
 if __name__ == "__main__":
