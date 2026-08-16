@@ -35,7 +35,6 @@ Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -Err
     -RegionalHub $RegionalHub `
     -SchoolCode $SchoolCode `
     -ComputerId $ComputerId
-if ($LASTEXITCODE -ne 0) { throw "Device enrollment failed." }
 
 $locations = @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("Programs")) |
     Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) }

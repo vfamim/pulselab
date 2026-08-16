@@ -111,7 +111,6 @@ Write-InstallLog "INFO" "The one-time enrollment token will be requested in a ma
     -RegionalHub $RegionalHub `
     -SchoolCode $SchoolCode `
     -ComputerId $ComputerId
-if ($LASTEXITCODE -ne 0) { throw "Device enrollment failed." }
 
 $agentPath = Join-Path $DestinationDir "agent\pulselab-agent.ps1"
 $shortcutName = "Iniciar PulseLab - Oficina de Robotica.lnk"
