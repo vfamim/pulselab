@@ -241,6 +241,19 @@ class AgentStaticTests(unittest.TestCase):
         )
         self.assertIn("ForegroundApp = $appCategory", self.agent)
 
+    def test_interaction_activity_tracker_is_present_and_privacy_preserving(self):
+        self.assertIn("class InputActivityTracker", self.agent)
+        self.assertIn("GetAndResetIntervalClicks", self.agent)
+        self.assertIn("GetAndResetIntervalKeystrokes", self.agent)
+        self.assertIn("mouse_clicks_interval", self.agent)
+        self.assertIn("keystrokes_interval", self.agent)
+        self.assertIn("mouse_clicks_total", self.agent)
+        self.assertIn("keystrokes_total", self.agent)
+        # Privacy-by-design guarantees: no key content logging, no coordinates logging
+        self.assertNotIn("vkCode", self.agent)
+        self.assertNotIn("KeyChar", self.agent)
+        self.assertNotIn("telemetry_keystrokes_raw", self.agent)
+
     def test_absolute_timing_and_persistent_installation_are_present(self):
         required_fragments = (
             "installation.json",

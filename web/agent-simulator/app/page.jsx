@@ -597,6 +597,10 @@ export default function AgentSimulatorPage() {
         details: {
           app_category: scenario === "missing_spike" ? "unknown" : "spike",
           idle_seconds: minute % 10 === 0 ? 18 : 4,
+          mouse_clicks_interval: scenario === "missing_spike" ? 0 : 22,
+          keystrokes_interval: scenario === "missing_spike" ? 0 : 7,
+          mouse_clicks_total: scenario === "missing_spike" ? 0 : minute * 15,
+          keystrokes_total: scenario === "missing_spike" ? 0 : minute * 5,
           spike_window_detected: scenario !== "missing_spike",
           ending_requested: false,
           compressed_simulation: true

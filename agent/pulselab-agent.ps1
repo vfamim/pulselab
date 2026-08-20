@@ -22,6 +22,7 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Diagnostics;
 
 public class Win32 {
     [DllImport("user32.dll")]
@@ -64,6 +65,108 @@ public class Win32 {
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool DestroyIcon(IntPtr hIcon);
+}
+
+public class InputActivityTracker {
+    private delegate IntPtr LowLevelProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelProc lpfn, IntPtr hMod, uint dwThreadId);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WH_MOUSE_LL = 14;
+
+    private const int WM_KEYDOWN = 0x0100;
+    private const int WM_SYSKEYDOWN = 0x0104;
+
+    private const int WM_LBUTTONDOWN = 0x0201;
+    private const int WM_RBUTTONDOWN = 0x0204;
+    private const int WM_MBUTTONDOWN = 0x0207;
+
+    private static IntPtr _keyboardHookId = IntPtr.Zero;
+    private static IntPtr _mouseHookId = IntPtr.Zero;
+
+    private static LowLevelProc _keyboardProc;
+    private static LowLevelProc _mouseProc;
+
+    private static long _intervalKeystrokes = 0;
+    private static long _intervalClicks = 0;
+    private static long _totalKeystrokes = 0;
+    private static long _totalClicks = 0;
+
+    public static void Start() {
+        try {
+            if (_keyboardHookId == IntPtr.Zero) {
+                _keyboardProc = KeyboardHookCallback;
+                using (Process curProcess = Process.GetCurrentProcess())
+                using (ProcessModule curModule = curProcess.MainModule) {
+                    _keyboardHookId = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardProc, GetModuleHandle(curModule.ModuleName), 0);
+                }
+            }
+            if (_mouseHookId == IntPtr.Zero) {
+                _mouseProc = MouseHookCallback;
+                using (Process curProcess = Process.GetCurrentProcess())
+                using (ProcessModule curModule = curProcess.MainModule) {
+                    _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, GetModuleHandle(curModule.ModuleName), 0);
+                }
+            }
+        } catch {}
+    }
+
+    public static void Stop() {
+        try {
+            if (_keyboardHookId != IntPtr.Zero) {
+                UnhookWindowsHookEx(_keyboardHookId);
+                _keyboardHookId = IntPtr.Zero;
+            }
+            if (_mouseHookId != IntPtr.Zero) {
+                UnhookWindowsHookEx(_mouseHookId);
+                _mouseHookId = IntPtr.Zero;
+            }
+        } catch {}
+    }
+
+    private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN)) {
+            System.Threading.Interlocked.Increment(ref _intervalKeystrokes);
+            System.Threading.Interlocked.Increment(ref _totalKeystrokes);
+        }
+        return CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
+    }
+
+    private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
+        if (nCode >= 0 && (wParam == (IntPtr)WM_LBUTTONDOWN || wParam == (IntPtr)WM_RBUTTONDOWN || wParam == (IntPtr)WM_MBUTTONDOWN)) {
+            System.Threading.Interlocked.Increment(ref _intervalClicks);
+            System.Threading.Interlocked.Increment(ref _totalClicks);
+        }
+        return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
+    }
+
+    public static int GetAndResetIntervalKeystrokes() {
+        return (int)System.Threading.Interlocked.Exchange(ref _intervalKeystrokes, 0);
+    }
+
+    public static int GetAndResetIntervalClicks() {
+        return (int)System.Threading.Interlocked.Exchange(ref _intervalClicks, 0);
+    }
+
+    public static long GetTotalKeystrokes() {
+        return System.Threading.Interlocked.Read(ref _totalKeystrokes);
+    }
+
+    public static long GetTotalClicks() {
+        return System.Threading.Interlocked.Read(ref _totalClicks);
+    }
 }
 "@
 
@@ -905,12 +1008,21 @@ function Get-ActiveTelemetry {
         $idle = [Math]::Round($elapsed / 1000)
     }
 
+    $intervalClicks = try { [InputActivityTracker]::GetAndResetIntervalClicks() } catch { 0 }
+    $intervalKeys = try { [InputActivityTracker]::GetAndResetIntervalKeystrokes() } catch { 0 }
+    $totalClicks = try { [InputActivityTracker]::GetTotalClicks() } catch { 0L }
+    $totalKeys = try { [InputActivityTracker]::GetTotalKeystrokes() } catch { 0L }
+
     return @{
         # Minimize telemetry at the source. Raw window titles and application
         # names can expose unrelated personal information.
         WindowTitle = $null
         ForegroundApp = $appCategory
         IdleSeconds = $idle
+        MouseClicksInterval = $intervalClicks
+        KeystrokesInterval = $intervalKeys
+        MouseClicksTotal = $totalClicks
+        KeystrokesTotal = $totalKeys
     }
 }
 
@@ -2165,6 +2277,7 @@ function Show-HelpAlert {
 }
 
 function Dispose-TrayIcon {
+    try { [InputActivityTracker]::Stop() } catch {}
     if ($script:NotifyIcon) {
         $script:NotifyIcon.Visible = $false
         if ($script:NotifyIcon.Icon -and $script:NotifyIcon.Icon -ne [Drawing.SystemIcons]::Application) {
@@ -2308,6 +2421,10 @@ function Invoke-HeartbeatIfDue {
     Submit-SessionEvent "heartbeat" "info" $null $null $null $null $elapsed $null @{
         app_category = [string]$telemetry.ForegroundApp
         idle_seconds = [int]$telemetry.IdleSeconds
+        mouse_clicks_interval = [int]$telemetry.MouseClicksInterval
+        keystrokes_interval = [int]$telemetry.KeystrokesInterval
+        mouse_clicks_total = [long]$telemetry.MouseClicksTotal
+        keystrokes_total = [long]$telemetry.KeystrokesTotal
         spike_window_detected = $spikeDetected
         ending_requested = [bool]$script:TriggerEnding
     }
@@ -2413,6 +2530,10 @@ function Start-ResearchLoop {
         Submit-SessionEvent "checkpoint_started" "info" $mark $null $null $activityStage $elapsedAtCapture $scheduledAt @{
             app_category = [string]$telemetry.ForegroundApp
             idle_seconds = [int]$telemetry.IdleSeconds
+            mouse_clicks_interval = [int]$telemetry.MouseClicksInterval
+            keystrokes_interval = [int]$telemetry.KeystrokesInterval
+            mouse_clicks_total = [long]$telemetry.MouseClicksTotal
+            keystrokes_total = [long]$telemetry.KeystrokesTotal
             spike_window_detected = ($script:SpikeHandle -ne [IntPtr]::Zero)
             screenshot_captured = $screenshotCaptured
             screenshot_uploaded = (-not [string]::IsNullOrWhiteSpace($privatePath))
@@ -2627,6 +2748,7 @@ try {
 
         $script:SessionStartedAt = [DateTimeOffset]::Now
         $script:CollectionAuthorized = $true
+        try { [InputActivityTracker]::Start() } catch {}
         Initialize-TrayIcon
         Invoke-FlushCache
         Submit-SessionEvent "session_started" "info" $null $null $null $null 0L $null @{
@@ -2648,6 +2770,7 @@ try {
         Save-SessionState "activity"
     } else {
         $script:CollectionAuthorized = $true
+        try { [InputActivityTracker]::Start() } catch {}
         Initialize-TrayIcon
         Invoke-FlushCache
         Submit-SessionEvent "phase_completed" "info" $null $null $null "resumed" 0L $null @{
@@ -2673,6 +2796,7 @@ try {
         }
     }
 } finally {
+    try { [InputActivityTracker]::Stop() } catch {}
     if ($script:ActivityStopwatch -and $script:ActivityStopwatch.IsRunning) { $script:ActivityStopwatch.Stop() }
     Dispose-TrayIcon
     if ($script:AgentMutex) {
