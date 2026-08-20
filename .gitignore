@@ -2,7 +2,13 @@
 
 # AI agent framework (internal tooling, not part of the project)
 .agent/
-scripts/git-cmd.ps1
+scripts/
+
+# Test directories and non-runtime test scripts
+tests/
+supabase/tests/
+web/agent-simulator/tests/
+Executar-Testes.bat
 
 # Offline queue and student data (LGPD compliance)
 .cache/
@@ -18,6 +24,17 @@ instrutor/config.js
 device_session.dat
 tokens.json
 *.dat
+
+# Slide and presentation files
+*.pptx
+*.gs
+texto_explicativo_slides_pulselab.md
+
+# Temporary root archives
+*.zip
+*.zip.sha256
+!instalador/downloads/*.zip
+!instalador/downloads/*.zip.sha256
 
 # OS artifacts
 Thumbs.db
