@@ -1,9 +1,8 @@
-# Pulselab - .gitignore
+﻿# Pulselab - .gitignore
 
 # AI agent framework (internal tooling, not part of the project)
 .agent/
-.agents/
-skills-lock.json
+scripts/git-cmd.ps1
 
 # Offline queue and student data (LGPD compliance)
 .cache/
@@ -19,8 +18,6 @@ instrutor/config.js
 device_session.dat
 tokens.json
 *.dat
-# Generated standalone installer contains the Supabase anon key
-Install-Pulselab*.bat
 
 # OS artifacts
 Thumbs.db
@@ -43,4 +40,3 @@ dist/
 .vite/
 .wrangler/
 .firebase/
-

@@ -1,7 +1,6 @@
 import base64
 import hashlib
 import json
-import os
 import re
 import sqlite3
 import subprocess
@@ -240,19 +239,6 @@ class AgentStaticTests(unittest.TestCase):
             self.agent,
         )
         self.assertIn("ForegroundApp = $appCategory", self.agent)
-
-    def test_interaction_activity_tracker_is_present_and_privacy_preserving(self):
-        self.assertIn("class InputActivityTracker", self.agent)
-        self.assertIn("GetAndResetIntervalClicks", self.agent)
-        self.assertIn("GetAndResetIntervalKeystrokes", self.agent)
-        self.assertIn("mouse_clicks_interval", self.agent)
-        self.assertIn("keystrokes_interval", self.agent)
-        self.assertIn("mouse_clicks_total", self.agent)
-        self.assertIn("keystrokes_total", self.agent)
-        # Privacy-by-design guarantees: no key content logging, no coordinates logging
-        self.assertNotIn("vkCode", self.agent)
-        self.assertNotIn("KeyChar", self.agent)
-        self.assertNotIn("telemetry_keystrokes_raw", self.agent)
 
     def test_absolute_timing_and_persistent_installation_are_present(self):
         required_fragments = (
@@ -1297,9 +1283,8 @@ class ProvisionDeviceToolExecutionTests(unittest.TestCase):
             }
             write_secure_output(out_file, sample_data)
             self.assertTrue(out_file.exists())
-            if os.name != "nt":
-                file_mode = oct(out_file.stat().st_mode & 0o777)
-                self.assertEqual(file_mode, "0o600")
+            file_mode = oct(out_file.stat().st_mode & 0o777)
+            self.assertEqual(file_mode, "0o600")
 
 
 if __name__ == "__main__":

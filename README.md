@@ -12,8 +12,7 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 - **Motor corrigido**: grupos solo, dupla e trio, troca de papéis, rubrica obrigatória e retomada com tempo absoluto estão no fluxo executável.
 - **Fila offline robusta**: escrita atômica, mutex, quarentena e recuperação sem inflar cobertura acadêmica.
 - **Portal real**: autenticação Supabase, whitelist ativa e persistência de avaliações vinculadas à sessão.
-- **Ícone visual circular na bandeja do sistema**: durante a oficina, o agente exibe na System Tray (ao lado do relógio do Windows) a logomarca circular oficial do projeto Robótica Educativa com menu contextual para reconfiguração e encerramento.
-- **Distribuição web simplificada**: pacote de instalação disponibilizado diretamente na página inicial e no portal do instrutor para download em 1 clique.
+- **Instalador seguro**: pacote ZIP genérico, sem credenciais, sem pipe remoto e com manifestos SHA-256.
 - **CI ampliada**: Windows PowerShell 5.1, contratos Python/Node, build web e pgTAP/RLS com Supabase local.
 
 A versão 1.5.0 é uma atualização de segurança incompatível com a ingestão anônima anterior. Aplique as migrations e publique a Edge Function antes de matricular máquinas.
@@ -127,8 +126,8 @@ O pacote público não contém URL privada, token de enrollment, senha ou chave 
 
 ### 2. Baixar e validar
 
-- Site oficial: [https://pulselab-robotica-edu.web.app](https://pulselab-robotica-edu.web.app) (Download direto na página inicial ou em `/instalador/`)
-- GitHub Release: `https://github.com/vfamim/pulselab/releases`
+- Site: `https://pulselab-robotica-edu.web.app/instalador/`
+- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.5.0`
 
 ```powershell
 Get-FileHash .\PulseLab-1.5.0-Windows.zip -Algorithm SHA256

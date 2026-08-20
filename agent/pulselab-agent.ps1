@@ -22,17 +22,10 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Diagnostics;
 
 public class Win32 {
     [DllImport("user32.dll")]
     public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool BringWindowToTop(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
     [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
@@ -62,111 +55,6 @@ public class Win32 {
 
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool DestroyIcon(IntPtr hIcon);
-}
-
-public class InputActivityTracker {
-    private delegate IntPtr LowLevelProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelProc lpfn, IntPtr hMod, uint dwThreadId);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-    private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-    private const int WH_KEYBOARD_LL = 13;
-    private const int WH_MOUSE_LL = 14;
-
-    private const int WM_KEYDOWN = 0x0100;
-    private const int WM_SYSKEYDOWN = 0x0104;
-
-    private const int WM_LBUTTONDOWN = 0x0201;
-    private const int WM_RBUTTONDOWN = 0x0204;
-    private const int WM_MBUTTONDOWN = 0x0207;
-
-    private static IntPtr _keyboardHookId = IntPtr.Zero;
-    private static IntPtr _mouseHookId = IntPtr.Zero;
-
-    private static LowLevelProc _keyboardProc;
-    private static LowLevelProc _mouseProc;
-
-    private static long _intervalKeystrokes = 0;
-    private static long _intervalClicks = 0;
-    private static long _totalKeystrokes = 0;
-    private static long _totalClicks = 0;
-
-    public static void Start() {
-        try {
-            if (_keyboardHookId == IntPtr.Zero) {
-                _keyboardProc = KeyboardHookCallback;
-                using (Process curProcess = Process.GetCurrentProcess())
-                using (ProcessModule curModule = curProcess.MainModule) {
-                    _keyboardHookId = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardProc, GetModuleHandle(curModule.ModuleName), 0);
-                }
-            }
-            if (_mouseHookId == IntPtr.Zero) {
-                _mouseProc = MouseHookCallback;
-                using (Process curProcess = Process.GetCurrentProcess())
-                using (ProcessModule curModule = curProcess.MainModule) {
-                    _mouseHookId = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, GetModuleHandle(curModule.ModuleName), 0);
-                }
-            }
-        } catch {}
-    }
-
-    public static void Stop() {
-        try {
-            if (_keyboardHookId != IntPtr.Zero) {
-                UnhookWindowsHookEx(_keyboardHookId);
-                _keyboardHookId = IntPtr.Zero;
-            }
-            if (_mouseHookId != IntPtr.Zero) {
-                UnhookWindowsHookEx(_mouseHookId);
-                _mouseHookId = IntPtr.Zero;
-            }
-        } catch {}
-    }
-
-    private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-        if (nCode >= 0 && (wParam == (IntPtr)WM_KEYDOWN || wParam == (IntPtr)WM_SYSKEYDOWN)) {
-            System.Threading.Interlocked.Increment(ref _intervalKeystrokes);
-            System.Threading.Interlocked.Increment(ref _totalKeystrokes);
-        }
-        return CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
-    }
-
-    private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-        if (nCode >= 0 && (wParam == (IntPtr)WM_LBUTTONDOWN || wParam == (IntPtr)WM_RBUTTONDOWN || wParam == (IntPtr)WM_MBUTTONDOWN)) {
-            System.Threading.Interlocked.Increment(ref _intervalClicks);
-            System.Threading.Interlocked.Increment(ref _totalClicks);
-        }
-        return CallNextHookEx(_mouseHookId, nCode, wParam, lParam);
-    }
-
-    public static int GetAndResetIntervalKeystrokes() {
-        return (int)System.Threading.Interlocked.Exchange(ref _intervalKeystrokes, 0);
-    }
-
-    public static int GetAndResetIntervalClicks() {
-        return (int)System.Threading.Interlocked.Exchange(ref _intervalClicks, 0);
-    }
-
-    public static long GetTotalKeystrokes() {
-        return System.Threading.Interlocked.Read(ref _totalKeystrokes);
-    }
-
-    public static long GetTotalClicks() {
-        return System.Threading.Interlocked.Read(ref _totalClicks);
-    }
 }
 "@
 
@@ -701,25 +589,6 @@ function Clear-SessionState {
     } catch {}
 }
 
-function Set-PulseWindowForeground {
-    param($Window)
-    try {
-        if ($null -eq $Window) { return }
-        $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($Window)).Handle
-        if ($hwnd -ne [IntPtr]::Zero) {
-            $HWND_TOPMOST = [IntPtr](-1)
-            [Win32]::SetWindowPos($hwnd, $HWND_TOPMOST, 0, 0, 0, 0, 0x0043) | Out-Null
-            [Win32]::BringWindowToTop($hwnd) | Out-Null
-            [Win32]::SetForegroundWindow($hwnd) | Out-Null
-        }
-        $Window.Activate() | Out-Null
-        $Window.Topmost = $true
-        $Window.Focus() | Out-Null
-    } catch {
-        Write-PulseLog "WARN" "Could not set window foreground: $($_.Exception.Message)"
-    }
-}
-
 function Show-WpfResumePrompt {
     param($ResumableState)
 
@@ -739,62 +608,75 @@ function Show-WpfResumePrompt {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Recuperacao de Sessao" Height="420" Width="560"
-        WindowStartupLocation="CenterScreen" WindowStyle="ToolWindow" ResizeMode="NoResize"
-        ShowInTaskbar="True" Topmost="True"
-        Background="#150E2E" FontFamily="Segoe UI">
-  <Grid Margin="24">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-      <RowDefinition Height="Auto"/>
-    </Grid.RowDefinitions>
-
-    <StackPanel Grid.Row="0" Margin="0,0,0,16">
-      <TextBlock Text="Recuperar Sessao Interrompida" Foreground="#5EEAD4" FontSize="20" FontWeight="Bold" Margin="0,0,0,6"/>
-      <TextBlock Text="Identificamos uma oficina iniciada anteriormente nesta maquina que foi interrompida antes da conclusao." Foreground="#C4B5FD" FontSize="13" TextWrapping="Wrap"/>
-    </StackPanel>
-
-    <Border Grid.Row="1" Background="#241B4B" CornerRadius="12" Padding="16" Margin="0,0,0,20" BorderBrush="#3D2D7A" BorderThickness="1">
-      <StackPanel>
-        <TextBlock Text="DADOS DA OFICINA DETECTADA:" Foreground="#A499B8" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
-        <Grid Margin="0,0,0,6">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="110"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" Text="Escola / Sede:" Foreground="#D1C7E0" FontSize="13"/>
-          <TextBlock Grid.Column="1" Text="$school ($site)" Foreground="White" FontWeight="Bold" FontSize="13"/>
-        </Grid>
-        <Grid Margin="0,0,0,6">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="110"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" Text="Turma / Inicio:" Foreground="#D1C7E0" FontSize="13"/>
-          <TextBlock Grid.Column="1" Text="$class (Iniciada as $startedTime)" Foreground="White" FontWeight="Bold" FontSize="13"/>
-        </Grid>
-        <Grid Margin="0,0,0,6">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="110"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
-          <TextBlock Grid.Column="0" Text="Progresso:" Foreground="#D1C7E0" FontSize="13"/>
-          <TextBlock Grid.Column="1" Text="$cpTextEsc" Foreground="#5EEAD4" FontWeight="SemiBold" FontSize="13"/>
-        </Grid>
+        Title="PulseLab - Recuperacao de Sessao" Height="450" Width="600"
+        WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#5EEAD4" BorderThickness="2.5" Padding="28">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#201545" BorderBrush="#3D2D7A" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="SESSÃO INTERROMPIDA ENCONTRADA" Foreground="#5EEAD4" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Recuperar Sessão Anterior?" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="Identificamos uma oficina iniciada nesta máquina que foi interrompida antes da conclusão." Foreground="#A499B8" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
       </StackPanel>
-    </Border>
-
-    <Grid Grid.Row="2">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="14"/>
-        <ColumnDefinition Width="*"/>
-      </Grid.ColumnDefinitions>
-      <Button Name="BtnNew" Grid.Column="0" Content="Iniciar Nova Oficina" Height="44" Background="#3D2D7A" Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
-      <Button Name="BtnResume" Grid.Column="2" Content="Continuar Oficina" Height="44" Background="#00A7A0" Foreground="White" FontWeight="Bold" Cursor="Hand" BorderThickness="0"/>
+      <Border Grid.Row="1" Background="#201642" CornerRadius="14" Padding="18" Margin="0,0,0,18" BorderBrush="#3D2D7A" BorderThickness="1.5">
+        <StackPanel>
+          <TextBlock Text="DADOS DA OFICINA DETECTADA" Foreground="#5EEAD4" FontSize="11" FontWeight="Bold" Margin="0,0,0,12"/>
+          <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Escola / Sede:" Foreground="#A499B8" FontSize="13"/>
+            <TextBlock Grid.Column="1" Text="$school ($site)" Foreground="White" FontWeight="Bold" FontSize="13"/>
+          </Grid>
+          <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Turma / Início:" Foreground="#A499B8" FontSize="13"/>
+            <TextBlock Grid.Column="1" Text="$class (Iniciada às $startedTime)" Foreground="White" FontWeight="Bold" FontSize="13"/>
+          </Grid>
+          <Grid Margin="0,0,0,8">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="130"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="Progresso:" Foreground="#A499B8" FontSize="13"/>
+            <TextBlock Grid.Column="1" Text="$cpTextEsc" Foreground="#5EEAD4" FontWeight="Bold" FontSize="13"/>
+          </Grid>
+        </StackPanel>
+      </Border>
+      <Grid Grid.Row="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="14"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Button Name="BtnNew" Grid.Column="0" Content="Iniciar Nova Oficina" Style="{StaticResource ModernBtn}" Background="#241B4B" Height="48"/>
+        <Button Name="BtnResume" Grid.Column="2" Content="Continuar Oficina" Style="{StaticResource ModernBtn}" Background="#00A7A0" Height="48"/>
+      </Grid>
     </Grid>
-  </Grid>
+  </Border>
 </Window>
 "@
 
@@ -812,9 +694,6 @@ function Show-WpfResumePrompt {
         $script:ResumeActionChoice = "resume"
         $window.Close()
     })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
 
     $window.ShowDialog() | Out-Null
     return $script:ResumeActionChoice
@@ -1008,21 +887,12 @@ function Get-ActiveTelemetry {
         $idle = [Math]::Round($elapsed / 1000)
     }
 
-    $intervalClicks = try { [InputActivityTracker]::GetAndResetIntervalClicks() } catch { 0 }
-    $intervalKeys = try { [InputActivityTracker]::GetAndResetIntervalKeystrokes() } catch { 0 }
-    $totalClicks = try { [InputActivityTracker]::GetTotalClicks() } catch { 0L }
-    $totalKeys = try { [InputActivityTracker]::GetTotalKeystrokes() } catch { 0L }
-
     return @{
         # Minimize telemetry at the source. Raw window titles and application
         # names can expose unrelated personal information.
         WindowTitle = $null
         ForegroundApp = $appCategory
         IdleSeconds = $idle
-        MouseClicksInterval = $intervalClicks
-        KeystrokesInterval = $intervalKeys
-        MouseClicksTotal = $totalClicks
-        KeystrokesTotal = $totalKeys
     }
 }
 
@@ -1476,62 +1346,98 @@ function Show-WpfSessionSetup {
     $installationSummaryXaml = [Security.SecurityElement]::Escape($installationSummary)
     $sessionSummaryXaml = [Security.SecurityElement]::Escape($sessionSummary)
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Contexto da oficina"
-        Width="540" Height="680" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#171128" BorderBrush="#6D5BD0" BorderThickness="3" Padding="24">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Contexto da oficina"
+        Width="580" Height="720" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="ModernInput" TargetType="TextBox">
+      <Setter Property="Background" Value="#17102E"/>
+      <Setter Property="Foreground" Value="#FFFFFF"/>
+      <Setter Property="BorderBrush" Value="#3D2D7A"/>
+      <Setter Property="BorderThickness" Value="1.5"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Padding" Value="10,6"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Margin" Value="0,4,0,10"/>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#7C3AED" BorderThickness="2.5" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <StackPanel Grid.Row="0" Margin="0,0,0,14">
-        <TextBlock Text="INICIAR OFICINA" Foreground="#A99AF5" FontSize="20" FontWeight="Bold"/>
-        <TextBlock Text="Confira o contexto. As informações serão salvas nesta máquina." Foreground="#D1CCE2" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"/>
+        <Border HorizontalAlignment="Left" Background="#201545" BorderBrush="#3D2D7A" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="PREPARAÇÃO DA OFICINA" Foreground="#A78BFA" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Contexto e Identificação" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="Confira os códigos operacionais desta máquina antes de iniciar a oficina." Foreground="#A499B8" FontSize="12" Margin="0,3,0,0"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-          <Border Background="#27203D" CornerRadius="10" Padding="12" Margin="0,0,0,12">
+        <StackPanel Margin="0,0,6,0">
+          <Border Background="#201642" CornerRadius="12" Padding="14" Margin="0,0,0,14" BorderBrush="#3D2D7A" BorderThickness="1.5">
             <StackPanel>
-              <TextBlock Text="$installationSummaryXaml" Foreground="White" TextWrapping="Wrap" FontSize="13"/>
-              <TextBlock Text="$sessionSummaryXaml" Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="12" Margin="0,6,0,0"/>
+              <TextBlock Text="$installationSummaryXaml" Foreground="White" TextWrapping="Wrap" FontSize="12"/>
+              <TextBlock Text="$sessionSummaryXaml" Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="11" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
-          <TextBlock Name="TxtMissingIntro" Text="Revise os dados abaixo. O PulseLab reutilizará estes valores na próxima execução:" Foreground="#A99AF5" FontSize="12" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <TextBlock Name="TxtMissingIntro" Text="Revise os dados abaixo (serão salvos para as próximas oficinas):" Foreground="#A78BFA" FontSize="12" FontWeight="Bold" Margin="0,0,0,8"/>
           <StackPanel Name="PnlSite">
-            <TextBlock Text="Sede / cidade" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtSite" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+            <TextBlock Text="Sede / Cidade" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtSite" Style="{StaticResource ModernInput}"/>
           </StackPanel>
           <StackPanel Name="PnlRegional">
-            <TextBlock Text="Polo ou regional" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtRegional" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+            <TextBlock Text="Polo / Regional" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtRegional" Style="{StaticResource ModernInput}"/>
           </StackPanel>
           <StackPanel Name="PnlSchool">
-            <TextBlock Text="Código da escola" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtSchool" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+            <TextBlock Text="Código da Escola" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtSchool" Style="{StaticResource ModernInput}"/>
           </StackPanel>
           <StackPanel Name="PnlWorkshop">
-            <TextBlock Text="Código desta oficina" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtWorkshop" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+            <TextBlock Text="Código da Oficina" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtWorkshop" Style="{StaticResource ModernInput}"/>
           </StackPanel>
           <StackPanel Name="PnlClass">
-            <TextBlock Text="Código da turma" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtClass" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+            <TextBlock Text="Código da Turma" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtClass" Style="{StaticResource ModernInput}"/>
           </StackPanel>
           <StackPanel Name="PnlActivity">
-            <TextBlock Text="Código da atividade" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtActivity" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14"/>
+            <TextBlock Text="Código da Atividade" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtActivity" Style="{StaticResource ModernInput}"/>
           </StackPanel>
           <StackPanel Name="PnlGroupSize">
-            <TextBlock Text="Integrantes por computador/grupo (1 a 3)" Foreground="White" FontWeight="Bold"/>
-            <TextBox Name="TxtGroupSize" Height="36" Margin="0,5,0,10" Padding="8" FontSize="14" Text="2"/>
+            <TextBlock Text="Integrantes por Computador (1 a 3)" Foreground="#E2DBED" FontSize="12" FontWeight="SemiBold"/>
+            <TextBox Name="TxtGroupSize" Style="{StaticResource ModernInput}" Text="2"/>
           </StackPanel>
         </StackPanel>
       </ScrollViewer>
-      <StackPanel Grid.Row="2">
-        <CheckBox Name="ChkConsent" Content="Confirmo que as autorizações e o consentimento aplicáveis foram verificados." Foreground="White" FontSize="12" Margin="0,12,0,12"/>
-        <Border Background="#27203D" CornerRadius="8" Padding="10" Margin="0,0,0,12">
-          <TextBlock Text="Não use nomes de estudantes. Os dados ficam salvos localmente no computador." Foreground="#C9C3D8" TextWrapping="Wrap" FontSize="11"/>
+      <StackPanel Grid.Row="2" Margin="0,8,0,12">
+        <CheckBox Name="ChkConsent" Content="Confirmo que as autorizações e o consentimento foram verificados." Foreground="White" FontSize="12" Margin="0,6,0,8"/>
+        <Border Background="#201642" CornerRadius="8" Padding="10" BorderBrush="#3D2D7A" BorderThickness="1">
+          <TextBlock Text="🔒 Não use nomes de estudantes. Os dados são salvos com pseudônimos no computador." Foreground="#A499B8" TextWrapping="Wrap" FontSize="11"/>
         </Border>
       </StackPanel>
-      <Button Name="BtnStart" Grid.Row="3" Content="Confirmar e iniciar" Height="46" Background="#6D5BD0" Foreground="White" FontSize="16" FontWeight="Bold" IsEnabled="False"/>
+      <Button Name="BtnStart" Grid.Row="3" Content="Confirmar e Iniciar Oficina" Style="{StaticResource ModernBtn}" Height="46" Background="#7C3AED" Foreground="White" FontSize="15" FontWeight="Bold" IsEnabled="False"/>
     </Grid>
   </Border>
 </Window>
@@ -1586,32 +1492,98 @@ function Show-WpfSessionSetup {
         $window.DialogResult = $true
         $window.Close()
     })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     return ($window.ShowDialog() -eq $true)
 }
 
 function Show-WpfGroupSizeSelection {
     $script:GroupSize = [Math]::Max(1, [Math]::Min(3, $script:GroupSize))
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Quantidade de alunos"
-        Width="500" Height="320" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Quantidade de alunos"
+        Width="580" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CardRadio" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#E2DBED"/>
+      <Setter Property="Margin" Value="4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border Name="CardBorder" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="14" Padding="12,14">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#5EEAD4"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#2A1E54"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#5EEAD4"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#094A46"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#00A7A0" BorderThickness="2.5" Padding="28">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Margin="0,0,0,15">
-        <TextBlock Text="INTEGRANTES NO COMPUTADOR" Foreground="#57E0D5" FontSize="20" FontWeight="Bold"/>
-        <TextBlock Text="Quantos alunos estão trabalhando neste computador nesta aula? (Máximo 3)" Foreground="#D2CCDF" FontSize="13" TextWrapping="Wrap" Margin="0,6,0,0"/>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#201545" BorderBrush="#3D2D7A" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="COMPOSIÇÃO DO GRUPO" Foreground="#5EEAD4" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Integrantes no Computador" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="Quantos alunos estão trabalhando nesta máquina hoje?" Foreground="#A499B8" FontSize="13" Margin="0,3,0,0"/>
       </StackPanel>
-      <StackPanel Grid.Row="1" VerticalAlignment="Center">
-        <RadioButton Name="Rad1" GroupName="SizeGroup" Content="1 Aluno (Trabalho Solo)" Foreground="White" FontSize="15" Margin="0,6"/>
-        <RadioButton Name="Rad2" GroupName="SizeGroup" Content="2 Alunos (Dupla)" Foreground="White" FontSize="15" Margin="0,6" IsChecked="True"/>
-        <RadioButton Name="Rad3" GroupName="SizeGroup" Content="3 Alunos (Trio)" Foreground="White" FontSize="15" Margin="0,6"/>
-      </StackPanel>
-      <Button Name="BtnConfirm" Grid.Row="2" Content="Confirmar e continuar" Height="46" Background="#00A7A0" Foreground="White" FontSize="16" FontWeight="Bold"/>
+      <UniformGrid Grid.Row="1" Columns="3" Margin="0,0,0,18">
+        <RadioButton Name="Rad1" GroupName="SizeGroup" Style="{StaticResource CardRadio}">
+          <StackPanel HorizontalAlignment="Center">
+            <TextBlock Text="👤" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+            <TextBlock Text="1 Aluno" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Trabalho Solo" FontSize="11" Foreground="#A499B8" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Name="Rad2" GroupName="SizeGroup" Style="{StaticResource CardRadio}" IsChecked="True">
+          <StackPanel HorizontalAlignment="Center">
+            <TextBlock Text="👥" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+            <TextBlock Text="2 Alunos" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Dupla (Padrão)" FontSize="11" Foreground="#A499B8" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </RadioButton>
+        <RadioButton Name="Rad3" GroupName="SizeGroup" Style="{StaticResource CardRadio}">
+          <StackPanel HorizontalAlignment="Center">
+            <TextBlock Text="👥👤" FontSize="28" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+            <TextBlock Text="3 Alunos" FontSize="14" FontWeight="Bold" HorizontalAlignment="Center"/>
+            <TextBlock Text="Trio" FontSize="11" Foreground="#A499B8" HorizontalAlignment="Center"/>
+          </StackPanel>
+        </RadioButton>
+      </UniformGrid>
+      <Button Name="BtnConfirm" Grid.Row="2" Content="Confirmar e Continuar" Style="{StaticResource ModernBtn}" Height="46" Background="#00A7A0" Foreground="White" FontSize="15" FontWeight="Bold"/>
     </Grid>
   </Border>
 </Window>
@@ -1630,10 +1602,6 @@ function Show-WpfGroupSizeSelection {
         $window.DialogResult = $true
         $window.Close()
     })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     $window.ShowDialog() | Out-Null
 }
 
@@ -1672,24 +1640,54 @@ function Show-WpfAssent {
     param([string]$RoleLabel)
     $roleLabelXaml = [Security.SecurityElement]::Escape($RoleLabel)
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Convite para participar"
-        Width="570" Height="430" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#15102A" BorderBrush="#57E0D5" BorderThickness="3" Padding="28">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Convite para participar"
+        Width="600" Height="460" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#5EEAD4" BorderThickness="2.5" Padding="28">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0">
-        <TextBlock Text="CONVITE PARA A PESQUISA" Foreground="#57E0D5" FontSize="22" FontWeight="Bold"/>
-        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,7,0,0"/>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#201545" BorderBrush="#3D2D7A" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="ETAPA 2 DE 6 · ASSENTIMENTO" Foreground="#5EEAD4" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Convite para Participar da Pesquisa" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <Border HorizontalAlignment="Left" Background="#241B4B" CornerRadius="12" Padding="12,4" Margin="0,6,0,0">
+          <TextBlock Text="$roleLabelXaml" Foreground="#5EEAD4" FontSize="13" FontWeight="Bold"/>
+        </Border>
       </StackPanel>
-      <StackPanel Grid.Row="1" VerticalAlignment="Center">
-        <TextBlock Text="Durante a oficina, o PulseLab fará perguntas curtas e registrará sinais do computador, como uso do SPIKE, tempo sem mexer e imagens da janela do projeto quando autorizadas. Você pode escolher participar ou não." Foreground="White" FontSize="15" TextWrapping="Wrap" Margin="0,0,0,14"/>
-        <TextBlock Text="Se escolher não participar, você continuará fazendo a oficina normalmente. Isso não muda sua nota, seu atendimento ou sua participação na aula." Foreground="#D2CCDF" FontSize="14" TextWrapping="Wrap"/>
-      </StackPanel>
+      <Border Grid.Row="1" Background="#201642" CornerRadius="14" Padding="18" Margin="0,0,0,18" BorderBrush="#3D2D7A" BorderThickness="1.5">
+        <StackPanel VerticalAlignment="Center">
+          <TextBlock Text="Durante a oficina, o PulseLab fará perguntas curtas e registrará sinais do computador, como uso do SPIKE e tempo da atividade. Você pode escolher participar ou não." Foreground="White" FontSize="14" TextWrapping="Wrap" Margin="0,0,0,12"/>
+          <TextBlock Text="✨ Se escolher não participar, você continuará fazendo a oficina normalmente. Isso não altera suas notas ou atividades." Foreground="#C4B5FD" FontSize="13" TextWrapping="Wrap"/>
+        </StackPanel>
+      </Border>
       <Grid Grid.Row="2">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="12"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Button Name="BtnNo" Grid.Column="0" Content="Não quero participar" Height="48" Background="#3B344B" Foreground="White"/>
-        <Button Name="BtnYes" Grid.Column="2" Content="Quero participar" Height="48" Background="#00A7A0" Foreground="White" FontWeight="Bold"/>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnNo" Grid.Column="0" Content="Não quero participar" Style="{StaticResource ModernBtn}" Height="48" Background="#241B4B" Foreground="#E2DBED"/>
+        <Button Name="BtnYes" Grid.Column="2" Content="Quero participar" Style="{StaticResource ModernBtn}" Height="48" Background="#00A7A0" Foreground="White" FontWeight="Bold"/>
       </Grid>
     </Grid>
   </Border>
@@ -1702,10 +1700,6 @@ function Show-WpfAssent {
     $result = @{ Accepted = $false }
     $window.FindName("BtnYes").add_Click({ $result.Accepted = $true; $window.DialogResult = $true; $window.Close() })
     $window.FindName("BtnNo").add_Click({ $result.Accepted = $false; $window.DialogResult = $false; $window.Close() })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     $window.ShowDialog() | Out-Null
     return [bool]$result.Accepted
 }
@@ -1725,39 +1719,133 @@ function Show-WpfPreSurvey {
     }
     $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
-        Width="630" Height="560" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Antes da oficina"
+        Width="660" Height="620" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CardRadio" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#E2DBED"/>
+      <Setter Property="Margin" Value="4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border Name="CardBorder" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="12" Padding="8,10">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#5EEAD4"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#2A1E54"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#5EEAD4"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#094A46"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#00A7A0" BorderThickness="2.5" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Margin="0,0,0,15">
-        <TextBlock Text="ANTES DE COMEÇAR" Foreground="#57E0D5" FontSize="23" FontWeight="Bold"/>
-        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="$subtextXaml" Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#201545" BorderBrush="#3D2D7A" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="ETAPA 3 DE 6 · PRÉ-OFICINA" Foreground="#5EEAD4" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Antes de Começar" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <Border HorizontalAlignment="Left" Background="#241B4B" CornerRadius="10" Padding="10,4" Margin="0,6,0,4">
+          <TextBlock Text="$roleLabelXaml" Foreground="#5EEAD4" FontSize="13" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="$subtextXaml" Foreground="#A499B8" FontSize="12"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-          <TextBlock Text="$priorRoboticsXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,8,0,20">
-            <RadioButton Name="Prior1" GroupName="Prior" Content="Nunca" Foreground="White" Margin="0,4"/>
-            <RadioButton Name="Prior2" GroupName="Prior" Content="Uma vez" Foreground="White" Margin="0,4"/>
-            <RadioButton Name="Prior3" GroupName="Prior" Content="Algumas vezes" Foreground="White" Margin="0,4"/>
-            <RadioButton Name="Prior4" GroupName="Prior" Content="Muitas vezes" Foreground="White" Margin="0,4"/>
-          </StackPanel>
-          <TextBlock Text="$selfEfficacyXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,8,0,0">
-            <RadioButton Name="Self1" GroupName="Self" Content="Discordo muito" Foreground="White" Margin="0,4"/>
-            <RadioButton Name="Self2" GroupName="Self" Content="Discordo" Foreground="White" Margin="0,4"/>
-            <RadioButton Name="Self3" GroupName="Self" Content="Concordo" Foreground="White" Margin="0,4"/>
-            <RadioButton Name="Self4" GroupName="Self" Content="Concordo muito" Foreground="White" Margin="0,4"/>
-          </StackPanel>
+        <StackPanel Margin="0,0,4,0">
+          <TextBlock Text="$priorRoboticsXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="4" Margin="0,0,0,20">
+            <RadioButton Name="Prior1" GroupName="Prior" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="1" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Nunca" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Prior2" GroupName="Prior" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="2" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Uma vez" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Prior3" GroupName="Prior" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="3" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Algumas vezes" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Prior4" GroupName="Prior" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="4" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Muitas vezes" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+          </UniformGrid>
+          <TextBlock Text="$selfEfficacyXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="4" Margin="0,0,0,8">
+            <RadioButton Name="Self1" GroupName="Self" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="1" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Discordo muito" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Self2" GroupName="Self" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="2" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Discordo" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Self3" GroupName="Self" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="3" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Concordo" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Self4" GroupName="Self" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="4" FontSize="16" FontWeight="Bold" Foreground="#5EEAD4" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Concordo muito" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+          </UniformGrid>
         </StackPanel>
       </ScrollViewer>
-      <Grid Grid.Row="2" Margin="0,15,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
-        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
-        <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Height="46" Background="#00A7A0" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+      <Grid Grid.Row="2" Margin="0,16,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Style="{StaticResource ModernBtn}" Height="46" Background="#241B4B"/>
+        <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Style="{StaticResource ModernBtn}" Height="46" Background="#00A7A0" IsEnabled="False"/>
       </Grid>
     </Grid>
   </Border>
@@ -1786,9 +1874,6 @@ function Show-WpfPreSurvey {
         $window.Close()
     })
     $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
     $window.ShowDialog() | Out-Null
     $watch.Stop()
     return $result
@@ -1811,54 +1896,256 @@ function Show-WpfCheckpoint {
     }
     $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Checkpoint"
-        Width="650" Height="740" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#15102A" BorderBrush="#FF686B" BorderThickness="3" Padding="26">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Checkpoint"
+        Width="680" Height="780" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CardRadio" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#E2DBED"/>
+      <Setter Property="Margin" Value="4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border Name="CardBorder" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="12" Padding="8,10">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#FF686B"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#2A1E54"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#FF686B"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#4A1828"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="OptionRowRadio" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#E2DBED"/>
+      <Setter Property="Margin" Value="0,4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border Name="RowBorder" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="12" Padding="14,10">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="RowBorder" Property="BorderBrush" Value="#5EEAD4"/>
+                <Setter TargetName="RowBorder" Property="Background" Value="#2A1E54"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="RowBorder" Property="BorderBrush" Value="#5EEAD4"/>
+                <Setter TargetName="RowBorder" Property="Background" Value="#094A46"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="DangerOptionRadio" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#FFA0A3"/>
+      <Setter Property="Margin" Value="0,4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border Name="RowBorder" Background="#291427" BorderBrush="#5A243D" BorderThickness="1.5" CornerRadius="12" Padding="14,10">
+              <ContentPresenter VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="RowBorder" Property="BorderBrush" Value="#FF686B"/>
+                <Setter TargetName="RowBorder" Property="Background" Value="#381834"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="RowBorder" Property="BorderBrush" Value="#FF686B"/>
+                <Setter TargetName="RowBorder" Property="Background" Value="#5A1A24"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#FF686B" BorderThickness="2.5" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Margin="0,0,0,14">
-        <TextBlock Text="CHECKPOINT · $IntervalMark MIN" Foreground="#FF8B8E" FontSize="22" FontWeight="Bold"/>
-        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="$subtextXaml" Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#2A162B" BorderBrush="#5A243D" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="ETAPA 4 DE 6 · CHECKPOINT $IntervalMark MIN" Foreground="#FF8B8E" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Como está a atividade agora?" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <Border HorizontalAlignment="Left" Background="#241B4B" CornerRadius="10" Padding="10,4" Margin="0,6,0,4">
+          <TextBlock Text="$roleLabelXaml" Foreground="#FF8B8E" FontSize="13" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="$subtextXaml" Foreground="#A499B8" FontSize="12"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-          <TextBlock Text="O que você mais fez desde o último checkpoint?" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,7,0,17">
-            <RadioButton Name="SelfRoleComputer" GroupName="SelfRole" Content="Computador / Programação" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="SelfRoleAssembly" GroupName="SelfRole" Content="Montagem das peças do robô" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="SelfRoleBoth" GroupName="SelfRole" Content="Ambos / Fizemos juntos" Foreground="White" Margin="0,3"/>
+        <StackPanel Margin="0,0,4,0">
+          <TextBlock Text="O que você mais fez desde o último checkpoint?" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="3" Margin="0,0,0,20">
+            <RadioButton Name="SelfRoleComputer" GroupName="SelfRole" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="💻" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,3"/>
+                <TextBlock Text="Computador" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Programação" FontSize="10" Foreground="#A499B8" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="SelfRoleAssembly" GroupName="SelfRole" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="🔧" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,3"/>
+                <TextBlock Text="Montagem" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Peças do robô" FontSize="10" Foreground="#A499B8" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="SelfRoleBoth" GroupName="SelfRole" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="👥" FontSize="24" HorizontalAlignment="Center" Margin="0,0,0,3"/>
+                <TextBlock Text="Ambos" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+                <TextBlock Text="Fizemos juntos" FontSize="10" Foreground="#A499B8" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+          </UniformGrid>
+
+          <TextBlock Text="$mentalEffortXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="4" Margin="0,0,0,20">
+            <RadioButton Name="Effort1" GroupName="Effort" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="1" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Muito pouco" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Effort2" GroupName="Effort" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="2" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Pouco" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Effort3" GroupName="Effort" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="3" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Bastante" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Effort4" GroupName="Effort" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="4" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Muito" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+          </UniformGrid>
+
+          <TextBlock Text="$progressStateXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <StackPanel Margin="0,0,0,20">
+            <RadioButton Name="Progress1" GroupName="Progress" Style="{StaticResource OptionRowRadio}">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="5" Background="#5EEAD4" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Avançando sem ajuda" FontSize="14" FontWeight="Bold" Foreground="White"/>
+                  <TextBlock Text="Estamos conseguindo seguir sem ajuda." FontSize="12" Foreground="#A499B8" Margin="0,2,0,0"/>
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+            <RadioButton Name="Progress2" GroupName="Progress" Style="{StaticResource OptionRowRadio}">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="5" Background="#FFD166" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Avançando, mas com dúvida" FontSize="14" FontWeight="Bold" Foreground="White"/>
+                  <TextBlock Text="Estamos progredindo, mas ainda inseguros." FontSize="12" Foreground="#A499B8" Margin="0,2,0,0"/>
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+            <RadioButton Name="Progress3" GroupName="Progress" Style="{StaticResource OptionRowRadio}">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="5" Background="#FFA066" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Tentando, mas sem conseguir avançar" FontSize="14" FontWeight="Bold" Foreground="White"/>
+                  <TextBlock Text="Já tentamos caminhos, mas continuamos no mesmo ponto." FontSize="12" Foreground="#A499B8" Margin="0,2,0,0"/>
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+            <RadioButton Name="Progress4" GroupName="Progress" Style="{StaticResource DangerOptionRadio}">
+              <Grid>
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="10" Height="10" CornerRadius="5" Background="#FF686B" Margin="0,0,12,0"/>
+                <StackPanel Grid.Column="1">
+                  <TextBlock Text="Precisamos de ajuda agora" FontSize="14" FontWeight="Bold" Foreground="#FFA0A3"/>
+                  <TextBlock Text="Queremos chamar o instrutor para nos apoiar." FontSize="12" Foreground="#D199A0" Margin="0,2,0,0"/>
+                </StackPanel>
+              </Grid>
+            </RadioButton>
           </StackPanel>
-          <TextBlock Text="$mentalEffortXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,7,0,17">
-            <RadioButton Name="Effort1" GroupName="Effort" Content="Muito pouco" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Effort2" GroupName="Effort" Content="Pouco" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Effort3" GroupName="Effort" Content="Bastante" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Effort4" GroupName="Effort" Content="Muito" Foreground="White" Margin="0,3"/>
-          </StackPanel>
-          <TextBlock Text="$progressStateXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,7,0,17">
-            <RadioButton Name="Progress1" GroupName="Progress" Content="Avançando sem ajuda" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Progress2" GroupName="Progress" Content="Avançando, mas com dúvida" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Progress3" GroupName="Progress" Content="Tentando, mas sem conseguir avançar" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Progress4" GroupName="Progress" Content="Precisamos de ajuda agora" Foreground="#FFB5B6" FontWeight="Bold" Margin="0,3"/>
-          </StackPanel>
-          <StackPanel Name="CollabPanel" Visibility="$collabVisibility">
-            <TextBlock Text="$collaborationXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-            <StackPanel Margin="10,7,0,12">
-              <RadioButton Name="Collab1" GroupName="Collab" Content="Nunca" Foreground="White" Margin="0,3"/>
-              <RadioButton Name="Collab2" GroupName="Collab" Content="Algumas vezes" Foreground="White" Margin="0,3"/>
-              <RadioButton Name="Collab3" GroupName="Collab" Content="Quase sempre" Foreground="White" Margin="0,3"/>
-              <RadioButton Name="Collab4" GroupName="Collab" Content="Sempre" Foreground="White" Margin="0,3"/>
-            </StackPanel>
+
+          <StackPanel Name="CollabPanel" Visibility="$collabVisibility" Margin="0,0,0,16">
+            <TextBlock Text="$collaborationXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+            <UniformGrid Columns="4">
+              <RadioButton Name="Collab1" GroupName="Collab" Style="{StaticResource CardRadio}">
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="1" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                  <TextBlock Text="Nunca" FontSize="12" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Name="Collab2" GroupName="Collab" Style="{StaticResource CardRadio}">
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="2" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                  <TextBlock Text="Algumas vezes" FontSize="12" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Name="Collab3" GroupName="Collab" Style="{StaticResource CardRadio}">
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="3" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                  <TextBlock Text="Quase sempre" FontSize="12" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </RadioButton>
+              <RadioButton Name="Collab4" GroupName="Collab" Style="{StaticResource CardRadio}">
+                <StackPanel HorizontalAlignment="Center">
+                  <TextBlock Text="4" FontSize="16" FontWeight="Bold" Foreground="#FF8B8E" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                  <TextBlock Text="Sempre" FontSize="12" HorizontalAlignment="Center"/>
+                </StackPanel>
+              </RadioButton>
+            </UniformGrid>
           </StackPanel>
         </StackPanel>
       </ScrollViewer>
-      <Grid Grid.Row="2" Margin="0,12,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
-        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
-        <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Height="46" Background="#FF686B" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+      <Grid Grid.Row="2" Margin="0,16,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Style="{StaticResource ModernBtn}" Height="46" Background="#241B4B"/>
+        <Button Name="BtnSave" Grid.Column="2" Content="Salvar minha resposta" Style="{StaticResource ModernBtn}" Height="46" Background="#FF686B" IsEnabled="False"/>
       </Grid>
     </Grid>
   </Border>
@@ -1905,21 +2192,6 @@ function Show-WpfCheckpoint {
     })
     $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
 
-    try {
-        [System.Media.SystemSounds]::Asterisk.Play()
-    } catch {}
-    if ($script:NotifyIcon) {
-        try {
-            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Checkpoint"
-            $script:NotifyIcon.BalloonTipText = "Momento do Checkpoint ($IntervalMark min). Por favor, respondam à pergunta no computador."
-            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
-            $script:NotifyIcon.ShowBalloonTip(5000)
-        } catch {}
-    }
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     $timer = New-Object Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromSeconds([int]$script:Config.timeout_seconds)
     $timer.add_Tick({ $timer.Stop(); $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
@@ -1933,21 +2205,69 @@ function Show-WpfRoleSwap {
     $participantALabelXaml = [Security.SecurityElement]::Escape($ParticipantALabel)
     $participantBLabelXaml = [Security.SecurityElement]::Escape($ParticipantBLabel)
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Troca de papéis"
-        Width="560" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#15102A" BorderBrush="#FFD166" BorderThickness="3" Padding="28">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Troca de papéis"
+        Width="580" Height="400" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#FFD166" BorderThickness="2.5" Padding="28">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0">
-        <TextBlock Text="TROQUEM OS PAPÉIS" Foreground="#FFD166" FontSize="23" FontWeight="Bold"/>
-        <TextBlock Text="A troca ajuda as duas pessoas a experimentar partes diferentes da atividade." Foreground="#D2CCDF" FontSize="13" TextWrapping="Wrap" Margin="0,7,0,0"/>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#2F2312" BorderBrush="#5E4317" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="ETAPA 4 DE 6 · EQUILÍBRIO DE PARTICIPAÇÃO" Foreground="#FFD166" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Troquem os Papéis" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="A troca ajuda os dois integrantes a experimentar partes diferentes da atividade." Foreground="#A499B8" FontSize="13" TextWrapping="Wrap" Margin="0,4,0,0"/>
       </StackPanel>
-      <StackPanel Grid.Row="1" VerticalAlignment="Center">
-        <TextBlock Text="$participantALabelXaml" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,5"/>
-        <TextBlock Text="$participantBLabelXaml" Foreground="White" FontSize="16" FontWeight="Bold" Margin="0,5"/>
-      </StackPanel>
-      <Button Name="BtnConfirm" Grid.Row="2" Content="Papéis trocados · continuar" Height="48" Background="#B78600" Foreground="White" FontWeight="Bold"/>
+      <Grid Grid.Row="1" VerticalAlignment="Center" Margin="0,10,0,16">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="60"/>
+          <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Border Grid.Column="0" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="14" Padding="16,14">
+          <StackPanel HorizontalAlignment="Center">
+            <Border Width="34" Height="34" CornerRadius="17" Background="#3D2D7A" HorizontalAlignment="Center" Margin="0,0,0,8">
+              <TextBlock Text="A" Foreground="#FFD166" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="$participantALabelXaml" Foreground="White" FontSize="13" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+        <Border Grid.Column="1" Width="38" Height="38" CornerRadius="19" Background="#3A2800" BorderBrush="#FFD166" BorderThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Center">
+          <TextBlock Text="⇄" Foreground="#FFD166" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <Border Grid.Column="2" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="14" Padding="16,14">
+          <StackPanel HorizontalAlignment="Center">
+            <Border Width="34" Height="34" CornerRadius="17" Background="#3D2D7A" HorizontalAlignment="Center" Margin="0,0,0,8">
+              <TextBlock Text="B" Foreground="#FFD166" FontWeight="Bold" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <TextBlock Text="$participantBLabelXaml" Foreground="White" FontSize="13" FontWeight="Bold" TextAlignment="Center" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+      <Button Name="BtnConfirm" Grid.Row="2" Content="Papéis trocados · Continuar" Style="{StaticResource ModernBtn}" Height="48" Background="#B78600" Foreground="White" FontWeight="Bold"/>
     </Grid>
   </Border>
 </Window>
@@ -1957,53 +2277,66 @@ function Show-WpfRoleSwap {
         $window.DialogResult = $true
         $window.Close()
     })
-
-    try {
-        [System.Media.SystemSounds]::Exclamation.Play()
-    } catch {}
-    if ($script:NotifyIcon) {
-        try {
-            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Troca de Papéis"
-            $script:NotifyIcon.BalloonTipText = "Atenção: momento de trocar os papéis no computador e na montagem."
-            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Warning
-            $script:NotifyIcon.ShowBalloonTip(5000)
-        } catch {}
-    }
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     return ($window.ShowDialog() -eq $true)
 }
 
 function Show-WpfInstructorRubric {
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Registro do instrutor"
-        Width="560" Height="500" WindowStartupLocation="CenterScreen" ShowInTaskbar="True" Topmost="True">
-  <Grid Margin="26">
-    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-    <StackPanel Grid.Row="0" Margin="0,0,0,18">
-      <TextBlock Text="REGISTRO DO INSTRUTOR" Foreground="#4C35A3" FontSize="22" FontWeight="Bold"/>
-      <TextBlock Text="Avalie a dupla antes de chamar os participantes para o encerramento." Foreground="#555" TextWrapping="Wrap"/>
-    </StackPanel>
-    <StackPanel Grid.Row="1">
-      <TextBlock Text="Desempenho da missão" FontWeight="Bold"/>
-      <ComboBox Name="Mission" Height="36" Margin="0,6,0,16">
-        <ComboBoxItem Content="0 · Não executou a missão"/><ComboBoxItem Content="1 · Executou parcialmente"/>
-        <ComboBoxItem Content="2 · Concluiu com muita ajuda"/><ComboBoxItem Content="3 · Concluiu com pouca ou nenhuma ajuda"/>
-      </ComboBox>
-      <TextBlock Text="Quantidade aproximada de intervenções" FontWeight="Bold"/>
-      <ComboBox Name="Interventions" Height="36" Margin="0,6,0,16">
-        <ComboBoxItem Content="0"/><ComboBoxItem Content="1"/><ComboBoxItem Content="2"/><ComboBoxItem Content="3 ou mais"/>
-      </ComboBox>
-      <TextBlock Text="Principal dificuldade observada" FontWeight="Bold"/>
-      <ComboBox Name="Issue" Height="36" Margin="0,6,0,16">
-        <ComboBoxItem Content="Nenhuma"/><ComboBoxItem Content="Montagem"/><ComboBoxItem Content="Lógica de programação"/>
-        <ComboBoxItem Content="Sensor"/><ComboBoxItem Content="Problema técnico"/><ComboBoxItem Content="Colaboração"/><ComboBoxItem Content="Outra"/>
-      </ComboBox>
-    </StackPanel>
-    <Button Name="BtnSave" Grid.Row="2" Content="Salvar avaliação da dupla" Height="44" Background="#4C35A3" Foreground="White" IsEnabled="False"/>
-  </Grid>
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Registro do instrutor"
+        Width="580" Height="520" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#7C3AED" BorderThickness="2.5" Padding="28">
+    <Grid>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#201545" BorderBrush="#3D2D7A" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="ETAPA 5 DE 6 · SOMENTE INSTRUTOR" Foreground="#A78BFA" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Registro do Instrutor" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <TextBlock Text="Avalie a dupla antes de chamar os participantes para o encerramento." Foreground="#A499B8" FontSize="12" Margin="0,3,0,0"/>
+      </StackPanel>
+      <StackPanel Grid.Row="1">
+        <TextBlock Text="Desempenho da missão" Foreground="White" FontWeight="Bold" FontSize="13" Margin="0,0,0,4"/>
+        <ComboBox Name="Mission" Height="38" Margin="0,0,0,16" Background="#17102E" Foreground="Black">
+          <ComboBoxItem Content="0 · Não executou a missão"/><ComboBoxItem Content="1 · Executou parcialmente"/>
+          <ComboBoxItem Content="2 · Concluiu com muita ajuda"/><ComboBoxItem Content="3 · Concluiu com pouca ou nenhuma ajuda"/>
+        </ComboBox>
+        <TextBlock Text="Quantidade aproximada de intervenções" Foreground="White" FontWeight="Bold" FontSize="13" Margin="0,0,0,4"/>
+        <ComboBox Name="Interventions" Height="38" Margin="0,0,0,16" Background="#17102E" Foreground="Black">
+          <ComboBoxItem Content="0"/><ComboBoxItem Content="1"/><ComboBoxItem Content="2"/><ComboBoxItem Content="3 ou mais"/>
+        </ComboBox>
+        <TextBlock Text="Principal dificuldade observada" Foreground="White" FontWeight="Bold" FontSize="13" Margin="0,0,0,4"/>
+        <ComboBox Name="Issue" Height="38" Margin="0,0,0,16" Background="#17102E" Foreground="Black">
+          <ComboBoxItem Content="Nenhuma"/><ComboBoxItem Content="Montagem"/><ComboBoxItem Content="Lógica de programação"/>
+          <ComboBoxItem Content="Sensor"/><ComboBoxItem Content="Problema técnico"/><ComboBoxItem Content="Colaboração"/><ComboBoxItem Content="Outra"/>
+        </ComboBox>
+      </StackPanel>
+      <Button Name="BtnSave" Grid.Row="2" Content="Salvar Avaliação da Dupla" Style="{StaticResource ModernBtn}" Height="46" Background="#7C3AED" Foreground="White" IsEnabled="False"/>
+    </Grid>
+  </Border>
 </Window>
 "@
     $window = [Windows.Markup.XamlReader]::Load((New-Object Xml.XmlNodeReader ([xml]$xaml)))
@@ -2020,10 +2353,6 @@ function Show-WpfInstructorRubric {
         $window.DialogResult = $true
         $window.Close()
     })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     $window.ShowDialog() | Out-Null
     return $result
 }
@@ -2044,49 +2373,201 @@ function Show-WpfPostSurvey {
     }
     $subtextXaml = [Security.SecurityElement]::Escape($subtext)
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Encerramento"
-        Width="660" Height="710" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="22" Background="#171128" BorderBrush="#8B62E8" BorderThickness="3" Padding="26">
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Encerramento"
+        Width="680" Height="740" WindowStartupLocation="CenterScreen" WindowStyle="None"
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CardRadio" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#E2DBED"/>
+      <Setter Property="Margin" Value="4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border Name="CardBorder" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="12" Padding="8,10">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#8B62E8"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#2A1E54"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#8B62E8"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#382062"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="CardCheckbox" TargetType="CheckBox">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="#E2DBED"/>
+      <Setter Property="Margin" Value="4"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <Border Name="CardBorder" Background="#201642" BorderBrush="#3D2D7A" BorderThickness="1.5" CornerRadius="12" Padding="12,10">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#8B62E8"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#2A1E54"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CardBorder" Property="BorderBrush" Value="#8B62E8"/>
+                <Setter TargetName="CardBorder" Property="Background" Value="#382062"/>
+                <Setter Property="Foreground" Value="#FFFFFF"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#8B62E8" BorderThickness="2.5" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Margin="0,0,0,14">
-        <TextBlock Text="ENCERRAMENTO" Foreground="#B9A0FF" FontSize="23" FontWeight="Bold"/>
-        <TextBlock Text="$roleLabelXaml" Foreground="White" FontSize="16" Margin="0,5,0,0"/>
-        <TextBlock Text="$subtextXaml" Foreground="#BDB8D0" FontSize="12" Margin="0,5,0,0"/>
+      <StackPanel Grid.Row="0" Margin="0,0,0,16">
+        <Border HorizontalAlignment="Left" Background="#251745" BorderBrush="#4A2D87" BorderThickness="1" CornerRadius="8" Padding="10,4" Margin="0,0,0,8">
+          <TextBlock Text="ETAPA 5 DE 6 · ENCERRAMENTO" Foreground="#B9A0FF" FontSize="11" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="Como foi a experiência hoje?" Foreground="White" FontSize="22" FontWeight="Bold"/>
+        <Border HorizontalAlignment="Left" Background="#241B4B" CornerRadius="10" Padding="10,4" Margin="0,6,0,4">
+          <TextBlock Text="$roleLabelXaml" Foreground="#B9A0FF" FontSize="13" FontWeight="Bold"/>
+        </Border>
+        <TextBlock Text="$subtextXaml" Foreground="#A499B8" FontSize="12"/>
       </StackPanel>
       <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-        <StackPanel>
-          <TextBlock Text="$postUnderstandingXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,7,0,17">
-            <RadioButton Name="Understand1" GroupName="Understand" Content="Discordo muito" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Understand2" GroupName="Understand" Content="Discordo" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Understand3" GroupName="Understand" Content="Concordo" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Understand4" GroupName="Understand" Content="Concordo muito" Foreground="White" Margin="0,3"/>
-          </StackPanel>
-          <TextBlock Text="$postAffectXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <UniformGrid Columns="2" Margin="10,7,0,5">
-            <CheckBox Name="AffectCurious" Content="Curioso" Foreground="White" Margin="0,4"/>
-            <CheckBox Name="AffectConfident" Content="Confiante" Foreground="White" Margin="0,4"/>
-            <CheckBox Name="AffectExcited" Content="Animado" Foreground="White" Margin="0,4"/>
-            <CheckBox Name="AffectFrustrated" Content="Frustrado" Foreground="White" Margin="0,4"/>
-            <CheckBox Name="AffectTired" Content="Cansado" Foreground="White" Margin="0,4"/>
-            <CheckBox Name="AffectIndifferent" Content="Indiferente" Foreground="White" Margin="0,4"/>
+        <StackPanel Margin="0,0,4,0">
+          <TextBlock Text="$postUnderstandingXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="4" Margin="0,0,0,20">
+            <RadioButton Name="Understand1" GroupName="Understand" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="1" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Discordo muito" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Understand2" GroupName="Understand" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="2" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Discordo" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Understand3" GroupName="Understand" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="3" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Concordo" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Understand4" GroupName="Understand" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="4" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Concordo muito" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
           </UniformGrid>
-          <TextBlock Name="AffectHint" Text="Escolha uma ou duas opções." Foreground="#BDB8D0" FontSize="12" Margin="10,0,0,17"/>
-          <TextBlock Text="$postReturnXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap"/>
-          <StackPanel Margin="10,7,0,10">
-            <RadioButton Name="Return1" GroupName="Return" Content="Não" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Return2" GroupName="Return" Content="Talvez não" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Return3" GroupName="Return" Content="Talvez sim" Foreground="White" Margin="0,3"/>
-            <RadioButton Name="Return4" GroupName="Return" Content="Sim" Foreground="White" Margin="0,3"/>
-          </StackPanel>
+
+          <TextBlock Text="$postAffectXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="3" Margin="0,0,0,4">
+            <CheckBox Name="AffectCurious" Style="{StaticResource CardCheckbox}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="🔍" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Curioso" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </CheckBox>
+            <CheckBox Name="AffectConfident" Style="{StaticResource CardCheckbox}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="💪" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Confiante" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </CheckBox>
+            <CheckBox Name="AffectExcited" Style="{StaticResource CardCheckbox}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="⚡" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Animado" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </CheckBox>
+            <CheckBox Name="AffectFrustrated" Style="{StaticResource CardCheckbox}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="😤" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Frustrado" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </CheckBox>
+            <CheckBox Name="AffectTired" Style="{StaticResource CardCheckbox}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="🥱" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Cansado" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </CheckBox>
+            <CheckBox Name="AffectIndifferent" Style="{StaticResource CardCheckbox}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="😐" FontSize="20" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Indiferente" FontSize="13" FontWeight="Bold" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </CheckBox>
+          </UniformGrid>
+          <TextBlock Name="AffectHint" Text="Escolha uma ou duas opções." Foreground="#BDB8D0" FontSize="12" Margin="4,0,0,20"/>
+
+          <TextBlock Text="$postReturnXaml" Foreground="White" FontSize="15" FontWeight="Bold" TextWrapping="Wrap" Margin="0,0,0,8"/>
+          <UniformGrid Columns="4" Margin="0,0,0,8">
+            <RadioButton Name="Return1" GroupName="Return" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="1" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Não" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Return2" GroupName="Return" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="2" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Talvez não" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Return3" GroupName="Return" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="3" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Talvez sim" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+            <RadioButton Name="Return4" GroupName="Return" Style="{StaticResource CardRadio}">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="4" FontSize="16" FontWeight="Bold" Foreground="#B9A0FF" HorizontalAlignment="Center" Margin="0,0,0,2"/>
+                <TextBlock Text="Sim" FontSize="12" HorizontalAlignment="Center"/>
+              </StackPanel>
+            </RadioButton>
+          </UniformGrid>
         </StackPanel>
       </ScrollViewer>
-      <Grid Grid.Row="2" Margin="0,12,0,0">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="10"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
-        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Height="46" Background="#3B344B" Foreground="White"/>
-        <Button Name="BtnSave" Grid.Column="2" Content="Salvar e concluir" Height="46" Background="#8B62E8" Foreground="White" FontWeight="Bold" IsEnabled="False"/>
+      <Grid Grid.Row="2" Margin="0,16,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <Button Name="BtnSkip" Grid.Column="0" Content="Prefiro não responder" Style="{StaticResource ModernBtn}" Height="46" Background="#241B4B"/>
+        <Button Name="BtnSave" Grid.Column="2" Content="Salvar e concluir" Style="{StaticResource ModernBtn}" Height="46" Background="#8B62E8" IsEnabled="False"/>
       </Grid>
     </Grid>
   </Border>
@@ -2127,14 +2608,6 @@ function Show-WpfPostSurvey {
         $window.Close()
     })
     $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
-
-    try {
-        [System.Media.SystemSounds]::Asterisk.Play()
-    } catch {}
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     $window.ShowDialog() | Out-Null
     $watch.Stop()
     return $result
@@ -2142,21 +2615,44 @@ function Show-WpfPostSurvey {
 
 function Show-WpfFinished {
     $xaml = @"
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Oficina Concluída"
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PulseLab - Oficina Concluída"
         Width="580" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
-  <Border CornerRadius="24" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="32">
+        AllowsTransparency="True" Background="Transparent" Topmost="True">
+  <Window.Resources>
+    <Style x:Key="ModernBtn" TargetType="Button">
+      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="FontSize" Value="15"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border Name="BtnBorder" Background="{TemplateBinding Background}" CornerRadius="12" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.88"/></Trigger>
+              <Trigger Property="IsEnabled" Value="False"><Setter TargetName="BtnBorder" Property="Opacity" Value="0.35"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+  <Border CornerRadius="24" Background="#110B27" BorderBrush="#00A7A0" BorderThickness="2.5" Padding="32">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
       <StackPanel Grid.Row="0" VerticalAlignment="Center" HorizontalAlignment="Center">
-        <TextBlock Text="🚀" FontSize="48" HorizontalAlignment="Center" Margin="0,0,0,12"/>
-        <TextBlock Text="OFICINA CONCLUÍDA!" Foreground="#00A7A0" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
-        <TextBlock Text="Muito obrigado por sua participação na atividade!" Foreground="#E2DBED" FontSize="15" Margin="0,10,0,0" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
+        <TextBlock Text="🚀" FontSize="52" HorizontalAlignment="Center" Margin="0,0,0,12"/>
+        <TextBlock Text="OFICINA CONCLUÍDA!" Foreground="#5EEAD4" FontSize="24" FontWeight="Bold" HorizontalAlignment="Center"/>
+        <TextBlock Text="Muito obrigado por sua participação na atividade de hoje!" Foreground="#E2DBED" FontSize="15" Margin="0,10,0,0" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
       </StackPanel>
-      <Button Name="BtnClose" Grid.Row="1" Content="Fechar" Height="46" Background="#00A7A0" Foreground="White" FontWeight="Bold" Margin="0,16,0,0"/>
+      <Button Name="BtnClose" Grid.Row="1" Content="Fechar" Style="{StaticResource ModernBtn}" Height="46" Background="#00A7A0" Foreground="White" Margin="0,16,0,0"/>
     </Grid>
   </Border>
 </Window>
@@ -2166,10 +2662,6 @@ function Show-WpfFinished {
         $window.DialogResult = $true
         $window.Close()
     })
-
-    $window.add_Loaded({ Set-PulseWindowForeground $window })
-    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
-
     $timer = New-Object Windows.Forms.Timer
     $timer.Interval = 5000
     $timer.add_Tick({ $timer.Stop(); $window.Close() })
@@ -2178,64 +2670,9 @@ function Show-WpfFinished {
     $timer.Stop()
 }
 
-# =============================================================================
-# TRAY E ORQUESTRAÇÃO
-# =============================================================================
-
-function Get-PulseLabTrayIcon {
-    try {
-        $localLogoPath = Join-Path $PSScriptRoot "logo.png"
-        $localCirclePath = Join-Path $PSScriptRoot "logo-circle.png"
-        $srcBitmap = $null
-
-        if (Test-Path $localCirclePath) {
-            $srcBitmap = [System.Drawing.Image]::FromFile($localCirclePath)
-        } elseif (Test-Path $localLogoPath) {
-            $rawImg = [System.Drawing.Image]::FromFile($localLogoPath)
-            $size = 32
-            $dest = New-Object System.Drawing.Bitmap($size, $size, [System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
-            $g = [System.Drawing.Graphics]::FromImage($dest)
-            $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
-            $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-            $g.Clear([System.Drawing.Color]::Transparent)
-
-            $path = New-Object System.Drawing.Drawing2D.GraphicsPath
-            $path.AddEllipse(0, 0, $size - 1, $size - 1)
-            $g.SetClip($path)
-            $g.FillEllipse([System.Drawing.Brushes]::White, 0, 0, $size - 1, $size - 1)
-            $g.DrawImage($rawImg, 0, 0, $size, $size)
-            $g.ResetClip()
-
-            $pen = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(200, 0, 103, 177), 1.0)
-            $g.DrawEllipse($pen, 0, 0, $size - 1, $size - 1)
-            $pen.Dispose()
-            $g.Dispose()
-            $path.Dispose()
-            $rawImg.Dispose()
-            $srcBitmap = $dest
-        } else {
-            $b64 = "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAgaSURBVFhHvVcJUJRHFv5r1+yhRgMMZD2iu6nKxrLMuruxDCkpibvljggII+FUNEEOAeUQFkREMKARYjhdJIAaxRUhgAyCHMFIBImiMHIPcgyni9wjA85w+G13z594ZPDIbuWrevX///v79Tv6db/X3AvBKXMB55ItIhS/NKCo2yqxoudponzyP4XQNs4tdykv+T/CIftVziXHbU341ZaQi9L7lR0j+B5KpRKh+z2QmpLMc4Cm3lHEXG6dMDxa1sG5iEOZ4T8ZLuL1K0NLGpNLZWOqqWlexZMw0tfFfp+P+a8nUdTQB2o4i8hLg3i9+3x17/0Hk/x0j0A9r6ysRHp6OgwNDeHm5oasrCzU19fzIx6BGv5ZYfMAi0Zw+q/42Z8DF3FE4lUZi3VRQQF6urvZZCMjI/D394e9lRm2OzjC80A4/CISCSVgV0Ao7LbYYZuVOaKiojA1NcVkpI2N+O7aNeTX9qrovM83gnhOlU9PTzOFf3j3b9jq5s8ms7ezxuHYRPjkdGNDqgKrTtzH8sgOrIjpwnunFDBNUyA4rx2+ewMRciCIybxnZAfhZnsoFAoUN/BGzAiy5jTsVHBoaBBvr9SHrvF+GNs6YXJyEvbWIgSUqMD51mGOWTi0TA/ijZBaLNxfhXlGgZhrEYNXAppxrHwAWyxMmAHL1lpAIPTFRlNzPHz4ENQ56iSv8TG4Z+msOvxty+PJVlZ+A2fOnsO2rVsgFAoRGLgPH2aM4VWHdBAJRgtc0iGwPfbD92yXPHgXjcLdaTtEIhF2k/xIOZeO2rpH+SGMKe/kHLP+SMY/Bpds75Tyjgl+zBOgy2FkZISg4GCYnRuCtncJfv27t/GK1mIsDqjAQp/LmDXvdfzmjT9j3p5yeOQNw2azKVxdXfkZnkRtjxycc04yr5mA7FW6XWbaahQtLS3w3OUK+8xhzPa7jSUHqrB4fyW0LaOhYx2DRYE3sThIglk+1QgqHsR2azNeUjOcz0rucU5ZhmoDyD6N+rp5nP+nEXTrbfj7WiR90wSDxHtYckSG18PaMcc2CbNtkqH7STuWhnfANHUYJ3PLYGsp4iU1I7emF9xOcZDaABIOGpbn4caNG7CztIB3QAj2xGbA62QpvNOb4J3WBK/kb7En6hw8fPxhY/khZDIZL6UZ9Hwhjhcz/X8JK+ng+TNicHAIcXHHYWWxGQsWLIDunFl4U28u3nlTDyt+r4slOr/F3F/+AosXLYLTdmskJCRhdFTBS2uGWXxFF7czcwVHCwnP0wi6h602myDSWQcVsQJIkwSoidfB7WNakMTNR1UsoTgt1CUIcDVCB8ne2gjZqgWP3bswMaExrxm80mroCbmeoy88TyMuXSqAt2geLh4UwMt8PtpOaQPf6ACFAqCAkh7wtR4m8wU44qCFWNf5yAwS4COjhWhslPKz/BhHCprGOadsG45WOZ6nEZmZFxBo8xrSArSxQzgfDSQCuEKoSJcYQSifUJEelLk6xPPXkOyljdS9Ajhu1ENtbR0/y4+RVNZBEjHHkdubVT/M8zSiv38A69fp46yfABXReug8o4c7J9TUfJIQebaQZ0eKHkojBIjZqYUIEomP7G0gl8+c3LRss0r5vBygkErvwNFpJzlghLASbYSlyJjlhSV5tzDbAEvzDbDYJISdhRBO9ubk1AxGT89dXlozqONkCYw52jzwvJ8V1HHOKeevtAhduDvygGf/PKCnLucszmMdF60DqRXqmv+yqO5RQDk58xE+E2hrR/TGs4OIhuEfsdf7mvuV/G+gb1SFyp4HpBA9ZN+ywXGibAzdw4/GVHbex8EiavhDDI5NorFPidaBcTT2jqF/dAJd/FiFchJVd1XkqW5SpklZ9kqvVxADRGoDKJzF0WuP1WHvxXZcb5djVVQDPjjeCuPERrT2j+PdoxI4nG/DmjgpcusGcal+CKuimyBMaoNHpgzJ5f+B/r/a8FaYBJuSGnCosBMmiQ1oIbJr48hcCW14P7oGI+MTyKntJ96LLzzZHZH6vCykRP5BXB3MkxuxJ7udleHVUbUIyW/HmuhqfH6lBwbRtcio6sPa2HqcuN4L1eQUlnxSQ4y+j2LpEJYfuoUpErXzlX0wOl4HH3E7TJKkrEW7RSI2QdZ+1afX6PZ7zPvv4Sz23yeWPrD9sgn7LqqLiSExyF9MPI+S4Pi1Xth8eQcH8zuw+vMafCXpY2OWHpTgOxK1stYRvPNpJeOlS/ph/EU93DNaYX26ifHuylUoqO97bO2fBg0JWYrE0k4sP1IDs9Pt0I+sQVWnHMvCbsI1Q4Z18c04VNSFlBv38KejjRAmt0L4hZRlNV2at0JvMWX/vtWP96NqIOkexcqIWpidIUZHVqsbEZb5M4FdRLJTCpvkyJdNY0ChLia3OkdR2jmBm52PKpykdxIX6uSYUOcpS0RJ9xh7lxOxyq5R9t4xpMTp6jG15y90UVEbEZ9YeHuMrl1aWhqbSJydzZ6ZGV8hIGAvrly+zL7bSe338/Nj75KqKnh6eiLy6Gfsm8pWtA2qPX+pWxJdDtKxbE0o63fxDWIJ6eHhgW5yR9ixYwdUKhXpEQaZkpiYGBgYGLCGhfLd3d1RVlZGtqISq50Ok1aceP7MsD8LtG9zzk7bFJqm2PbPQ+yuQA0oLi5GeXk5hoeHYWJiAl9f3x+a0I99guF1qkRJ5Vi5/b+AFg2SoISuCsML7m0JO40DqWWIzK9DSFo5K63rQsX95H+eOtxE8U/2+lmgS0MLCK3jTxPlk/sFP/IFwXH/BS7L8ZUfwyJOAAAAAElFTkSuQmCC"
-            $bytes = [System.Convert]::FromBase64String($b64)
-            $ms = New-Object System.IO.MemoryStream(,$bytes)
-            $srcBitmap = [System.Drawing.Image]::FromStream($ms)
-        }
-
-        if ($srcBitmap) {
-            $hIcon = $srcBitmap.GetHicon()
-            $icon = [System.Drawing.Icon]::FromHandle($hIcon).Clone()
-            [Win32]::DestroyIcon($hIcon) | Out-Null
-            $srcBitmap.Dispose()
-            return $icon
-        }
-    } catch {
-        Write-PulseLog "WARN" "Failed to generate custom circular tray icon, falling back to default: $_"
-    }
-    return [Drawing.SystemIcons]::Application
-}
 function Initialize-TrayIcon {
     $script:NotifyIcon = New-Object Windows.Forms.NotifyIcon
-    $script:NotifyIcon.Icon = Get-PulseLabTrayIcon
+    $script:NotifyIcon.Icon = [Drawing.SystemIcons]::Application
     $script:NotifyIcon.Text = "PulseLab - Oficina em andamento"
     $script:NotifyIcon.Visible = $true
     $menu = New-Object Windows.Forms.ContextMenu
@@ -2277,12 +2714,8 @@ function Show-HelpAlert {
 }
 
 function Dispose-TrayIcon {
-    try { [InputActivityTracker]::Stop() } catch {}
     if ($script:NotifyIcon) {
         $script:NotifyIcon.Visible = $false
-        if ($script:NotifyIcon.Icon -and $script:NotifyIcon.Icon -ne [Drawing.SystemIcons]::Application) {
-            $script:NotifyIcon.Icon.Dispose()
-        }
         $script:NotifyIcon.Dispose()
         $script:NotifyIcon = $null
     }
@@ -2421,10 +2854,6 @@ function Invoke-HeartbeatIfDue {
     Submit-SessionEvent "heartbeat" "info" $null $null $null $null $elapsed $null @{
         app_category = [string]$telemetry.ForegroundApp
         idle_seconds = [int]$telemetry.IdleSeconds
-        mouse_clicks_interval = [int]$telemetry.MouseClicksInterval
-        keystrokes_interval = [int]$telemetry.KeystrokesInterval
-        mouse_clicks_total = [long]$telemetry.MouseClicksTotal
-        keystrokes_total = [long]$telemetry.KeystrokesTotal
         spike_window_detected = $spikeDetected
         ending_requested = [bool]$script:TriggerEnding
     }
@@ -2530,10 +2959,6 @@ function Start-ResearchLoop {
         Submit-SessionEvent "checkpoint_started" "info" $mark $null $null $activityStage $elapsedAtCapture $scheduledAt @{
             app_category = [string]$telemetry.ForegroundApp
             idle_seconds = [int]$telemetry.IdleSeconds
-            mouse_clicks_interval = [int]$telemetry.MouseClicksInterval
-            keystrokes_interval = [int]$telemetry.KeystrokesInterval
-            mouse_clicks_total = [long]$telemetry.MouseClicksTotal
-            keystrokes_total = [long]$telemetry.KeystrokesTotal
             spike_window_detected = ($script:SpikeHandle -ne [IntPtr]::Zero)
             screenshot_captured = $screenshotCaptured
             screenshot_uploaded = (-not [string]::IsNullOrWhiteSpace($privatePath))
@@ -2600,15 +3025,8 @@ function Start-ResearchLoop {
         requested_at = if ($script:EndingRequestedAt) { $script:EndingRequestedAt.ToString("o") } else { $null }
     }
 
-    # Mandatory Instructor Rubric
-    $rubricResult = Show-WpfInstructorRubric
-    if ($rubricResult -and $rubricResult.Status) {
-        Submit-SessionEvent "rubric_completed" "info" $null $null $null $null (Get-CurrentElapsedMs) $null @{
-            mission_performance = $rubricResult.Mission
-            instructor_interventions = $rubricResult.Interventions
-            primary_issue = $rubricResult.Issue
-        }
-    }
+    # Instructor Rubric removed - proceed directly to student post-survey
+    $rubricResult = $null
 
     # Refresh participant list (with swapped roles if applicable)
     $participants = Get-ParticipantList
@@ -2617,10 +3035,7 @@ function Start-ResearchLoop {
         $p = $participants[$i]
         $isLast = ($i -eq $participants.Count - 1)
         $nextLabel = if ($isLast) { "" } else { [string]$participants[$i + 1].Label }
-        $missionVal = if ($rubricResult -and $rubricResult.Status) { $rubricResult.Mission } else { $null }
-        $intervVal = if ($rubricResult -and $rubricResult.Status) { $rubricResult.Interventions } else { $null }
-        $issueVal = if ($rubricResult -and $rubricResult.Status) { $rubricResult.Issue } else { $null }
-        $st = Save-PostSurvey $p.Id $p.Role $p.Label $missionVal $intervVal $issueVal $isLast $nextLabel
+        $st = Save-PostSurvey $p.Id $p.Role $p.Label $null $null $null $isLast $nextLabel
         $postStatuses["participant_$($p.Letter.ToLower())_status"] = $st
     }
     $elapsedAfterPost = Get-CurrentElapsedMs
@@ -2631,7 +3046,7 @@ function Start-ResearchLoop {
         expected_checkpoints = $marks
         expected_checkpoints_count = $marks.Count
         completion_reason = if ($script:TriggerEnding -and $script:CompletedCheckpoints.Count -lt $marks.Count) { "early_termination" } else { "finished_normally" }
-        rubric_completed = ($null -ne $rubricResult -and [bool]$rubricResult.Status)
+        rubric_completed = $false
     }
     Clear-SessionState
     Invoke-FlushCache
@@ -2748,7 +3163,6 @@ try {
 
         $script:SessionStartedAt = [DateTimeOffset]::Now
         $script:CollectionAuthorized = $true
-        try { [InputActivityTracker]::Start() } catch {}
         Initialize-TrayIcon
         Invoke-FlushCache
         Submit-SessionEvent "session_started" "info" $null $null $null $null 0L $null @{
@@ -2770,7 +3184,6 @@ try {
         Save-SessionState "activity"
     } else {
         $script:CollectionAuthorized = $true
-        try { [InputActivityTracker]::Start() } catch {}
         Initialize-TrayIcon
         Invoke-FlushCache
         Submit-SessionEvent "phase_completed" "info" $null $null $null "resumed" 0L $null @{
@@ -2796,7 +3209,6 @@ try {
         }
     }
 } finally {
-    try { [InputActivityTracker]::Stop() } catch {}
     if ($script:ActivityStopwatch -and $script:ActivityStopwatch.IsRunning) { $script:ActivityStopwatch.Stop() }
     Dispose-TrayIcon
     if ($script:AgentMutex) {

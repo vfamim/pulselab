@@ -1,20 +1,17 @@
-@echo off
-title Pulselab - Modo de Demonstracao Rapida
+﻿@echo off
+chcp 65001 >nul
+title PulseLab - Teste Rapido de Producao
 echo ====================================================================
-echo                 PULSELAB - MODO DE TESTE RAPIDO
+echo                 PULSELAB - TESTE RAPIDO DE PRODUCAO
 echo ====================================================================
 echo.
-echo * Este modo trata os minutos da configuracao como SEGUNDOS.
-echo * Os questionarios abrirao aos 20s e 40s de teste.
-echo * Ao fechar ou concluir, as respostas serao enviadas ao Supabase.
+echo * Trata minutos de checkpoint como SEGUNDOS (20s e 40s).
+echo * Abre a tela de contexto, termos, checkpoints e encerramento.
 echo.
-echo [!] Pressione qualquer tecla para iniciar a simulacao...
-pause > nul
-echo.
-echo Iniciando daemon do Pulselab...
-powershell.exe -ExecutionPolicy Bypass -File "%~dp0pulselab.ps1" -ProductionTest
+echo Iniciando PulseLab em modo de teste rápido...
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0pulselab.ps1" -ProductionTest
 echo.
 echo ====================================================================
-echo Simulacao do Pulselab concluida.
+echo Teste rapido concluido.
 echo ====================================================================
 pause
