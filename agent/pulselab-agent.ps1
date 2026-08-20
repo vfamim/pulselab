@@ -22,6 +22,7 @@ Add-Type @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 public class Win32 {
     [DllImport("user32.dll")]
@@ -55,6 +56,83 @@ public class Win32 {
 
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+}
+
+public class ActivityTracker {
+    public static long TotalMouseClicks = 0;
+    public static long TotalKeystrokes = 0;
+    private static bool _running = false;
+    private static Thread _pollThread = null;
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
+
+    public static void Start() {
+        if (_running) return;
+        _running = true;
+        _pollThread = new Thread(PollInput);
+        _pollThread.IsBackground = true;
+        _pollThread.Priority = ThreadPriority.Lowest;
+        _pollThread.Start();
+    }
+
+    public static void Stop() {
+        _running = false;
+    }
+
+    public static void Reset() {
+        Interlocked.Exchange(ref TotalMouseClicks, 0);
+        Interlocked.Exchange(ref TotalKeystrokes, 0);
+    }
+
+    private static void PollInput() {
+        bool leftDown = false;
+        bool rightDown = false;
+        bool[] keysDown = new bool[256];
+
+        while (_running) {
+            try {
+                // Mouse left button (0x01)
+                short leftState = GetAsyncKeyState(0x01);
+                if ((leftState & 0x8000) != 0) {
+                    if (!leftDown) {
+                        Interlocked.Increment(ref TotalMouseClicks);
+                        leftDown = true;
+                    }
+                } else {
+                    leftDown = false;
+                }
+
+                // Mouse right button (0x02)
+                short rightState = GetAsyncKeyState(0x02);
+                if ((rightState & 0x8000) != 0) {
+                    if (!rightDown) {
+                        Interlocked.Increment(ref TotalMouseClicks);
+                        rightDown = true;
+                    }
+                } else {
+                    rightDown = false;
+                }
+
+                // Keyboard keys (0x08 Backspace to 0xFE)
+                // Privacy note: Counts keypress events only, does not record key values or text.
+                for (int k = 8; k <= 222; k++) {
+                    if (k == 0x01 || k == 0x02 || k == 0x04) continue;
+                    short keyState = GetAsyncKeyState(k);
+                    if ((keyState & 0x8000) != 0) {
+                        if (!keysDown[k]) {
+                            Interlocked.Increment(ref TotalKeystrokes);
+                            keysDown[k] = true;
+                        }
+                    } else {
+                        keysDown[k] = false;
+                    }
+                }
+            } catch { }
+
+            Thread.Sleep(30);
+        }
+    }
 }
 "@
 
@@ -503,6 +581,10 @@ function Initialize-Session {
     $script:EndingRequestedAt = $null
     $script:CompletedCheckpoints = @()
     $script:IsResumedSession = $false
+    $script:LastReportedClicks = 0L
+    $script:LastReportedKeystrokes = 0L
+    [ActivityTracker]::Reset()
+    [ActivityTracker]::Start()
 
     New-Item -ItemType Directory -Path $script:OFFLINE_CACHE_DIR -Force | Out-Null
     Write-PulseLog "INFO" "Session initialized. version=$script:VERSION session_id=$script:SessionId dyad_id=$script:DyadId installation_id=$($script:InstallationId)"
@@ -887,12 +969,21 @@ function Get-ActiveTelemetry {
         $idle = [Math]::Round($elapsed / 1000)
     }
 
+    $totalClicks = [long][ActivityTracker]::TotalMouseClicks
+    $totalKeys = [long][ActivityTracker]::TotalKeystrokes
+    $clicksInterval = [Math]::Max(0L, ($totalClicks - [long]$script:LastReportedClicks))
+    $keysInterval = [Math]::Max(0L, ($totalKeys - [long]$script:LastReportedKeystrokes))
+
     return @{
         # Minimize telemetry at the source. Raw window titles and application
         # names can expose unrelated personal information.
         WindowTitle = $null
         ForegroundApp = $appCategory
         IdleSeconds = $idle
+        MouseClicksTotal = $totalClicks
+        KeystrokesTotal = $totalKeys
+        MouseClicksInterval = $clicksInterval
+        KeystrokesInterval = $keysInterval
     }
 }
 
@@ -2850,12 +2941,18 @@ function Invoke-HeartbeatIfDue {
     $script:NextHeartbeatElapsedMs = $elapsed + ([long]$intervalSeconds * 1000L)
 
     $telemetry = Get-ActiveTelemetry
+    $script:LastReportedClicks = $telemetry.MouseClicksTotal
+    $script:LastReportedKeystrokes = $telemetry.KeystrokesTotal
     $spikeDetected = ((Get-SpikeWindowHandle) -ne [IntPtr]::Zero)
     Submit-SessionEvent "heartbeat" "info" $null $null $null $null $elapsed $null @{
         app_category = [string]$telemetry.ForegroundApp
         idle_seconds = [int]$telemetry.IdleSeconds
         spike_window_detected = $spikeDetected
         ending_requested = [bool]$script:TriggerEnding
+        mouse_clicks_interval = [long]$telemetry.MouseClicksInterval
+        keystrokes_interval = [long]$telemetry.KeystrokesInterval
+        mouse_clicks_total = [long]$telemetry.MouseClicksTotal
+        keystrokes_total = [long]$telemetry.KeystrokesTotal
     }
 }
 
@@ -2963,6 +3060,10 @@ function Start-ResearchLoop {
             screenshot_captured = $screenshotCaptured
             screenshot_uploaded = (-not [string]::IsNullOrWhiteSpace($privatePath))
             lateness_ms = $captureLatenessMs
+            mouse_clicks_interval = [long]$telemetry.MouseClicksInterval
+            keystrokes_interval = [long]$telemetry.KeystrokesInterval
+            mouse_clicks_total = [long]$telemetry.MouseClicksTotal
+            keystrokes_total = [long]$telemetry.KeystrokesTotal
         }
 
         $maxLatenessSeconds = if ($script:Config.PSObject.Properties.Name -contains "max_checkpoint_lateness_seconds") {
@@ -3042,7 +3143,10 @@ function Start-ResearchLoop {
         expected_checkpoints_count = $marks.Count
         completion_reason = if ($script:TriggerEnding -and $script:CompletedCheckpoints.Count -lt $marks.Count) { "early_termination" } else { "finished_normally" }
         rubric_completed = $false
+        mouse_clicks_total = [long][ActivityTracker]::TotalMouseClicks
+        keystrokes_total = [long][ActivityTracker]::TotalKeystrokes
     }
+    [ActivityTracker]::Stop()
     Clear-SessionState
     Invoke-FlushCache
     Show-WpfFinished
