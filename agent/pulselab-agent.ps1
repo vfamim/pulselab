@@ -3004,11 +3004,6 @@ function Start-ResearchLoop {
         Submit-SessionEvent "checkpoint_completed" "info" $mark $null $null $activityStage $elapsedAfterResponses $scheduledAt $checkpointStatuses
         Save-SessionState "checkpoint_$mark" $mark
         Invoke-FlushCache
-
-        # Real role swap after configured mark (e.g. mark 20)
-        if ($script:GroupSize -ge 2) {
-            Invoke-ConfiguredRoleSwap $mark $activityStage
-        }
     }
 
     if (-not $script:TriggerEnding) {
