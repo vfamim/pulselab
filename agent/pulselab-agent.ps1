@@ -28,6 +28,12 @@ public class Win32 {
     public static extern bool SetForegroundWindow(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    public static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    [DllImport("user32.dll")]
     public static extern IntPtr GetForegroundWindow();
 
     [DllImport("user32.dll")]
@@ -592,6 +598,25 @@ function Clear-SessionState {
     } catch {}
 }
 
+function Set-PulseWindowForeground {
+    param($Window)
+    try {
+        if ($null -eq $Window) { return }
+        $hwnd = (New-Object System.Windows.Interop.WindowInteropHelper($Window)).Handle
+        if ($hwnd -ne [IntPtr]::Zero) {
+            $HWND_TOPMOST = [IntPtr](-1)
+            [Win32]::SetWindowPos($hwnd, $HWND_TOPMOST, 0, 0, 0, 0, 0x0043) | Out-Null
+            [Win32]::BringWindowToTop($hwnd) | Out-Null
+            [Win32]::SetForegroundWindow($hwnd) | Out-Null
+        }
+        $Window.Activate() | Out-Null
+        $Window.Topmost = $true
+        $Window.Focus() | Out-Null
+    } catch {
+        Write-PulseLog "WARN" "Could not set window foreground: $($_.Exception.Message)"
+    }
+}
+
 function Show-WpfResumePrompt {
     param($ResumableState)
 
@@ -613,6 +638,7 @@ function Show-WpfResumePrompt {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PulseLab - Recuperacao de Sessao" Height="420" Width="560"
         WindowStartupLocation="CenterScreen" WindowStyle="ToolWindow" ResizeMode="NoResize"
+        ShowInTaskbar="True" Topmost="True"
         Background="#150E2E" FontFamily="Segoe UI">
   <Grid Margin="24">
     <Grid.RowDefinitions>
@@ -683,6 +709,9 @@ function Show-WpfResumePrompt {
         $script:ResumeActionChoice = "resume"
         $window.Close()
     })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
 
     $window.ShowDialog() | Out-Null
     return $script:ResumeActionChoice
@@ -1337,7 +1366,7 @@ function Show-WpfSessionSetup {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Contexto da oficina"
         Width="540" Height="680" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#171128" BorderBrush="#6D5BD0" BorderThickness="3" Padding="24">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1445,6 +1474,10 @@ function Show-WpfSessionSetup {
         $window.DialogResult = $true
         $window.Close()
     })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     return ($window.ShowDialog() -eq $true)
 }
 
@@ -1453,7 +1486,7 @@ function Show-WpfGroupSizeSelection {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Quantidade de alunos"
         Width="500" Height="320" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1485,6 +1518,10 @@ function Show-WpfGroupSizeSelection {
         $window.DialogResult = $true
         $window.Close()
     })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     $window.ShowDialog() | Out-Null
 }
 
@@ -1525,7 +1562,7 @@ function Show-WpfAssent {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Convite para participar"
         Width="570" Height="430" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#57E0D5" BorderThickness="3" Padding="28">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1553,6 +1590,10 @@ function Show-WpfAssent {
     $result = @{ Accepted = $false }
     $window.FindName("BtnYes").add_Click({ $result.Accepted = $true; $window.DialogResult = $true; $window.Close() })
     $window.FindName("BtnNo").add_Click({ $result.Accepted = $false; $window.DialogResult = $false; $window.Close() })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     $window.ShowDialog() | Out-Null
     return [bool]$result.Accepted
 }
@@ -1574,7 +1615,7 @@ function Show-WpfPreSurvey {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Antes da oficina"
         Width="630" Height="560" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1633,6 +1674,9 @@ function Show-WpfPreSurvey {
         $window.Close()
     })
     $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
     $window.ShowDialog() | Out-Null
     $watch.Stop()
     return $result
@@ -1657,7 +1701,7 @@ function Show-WpfCheckpoint {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Checkpoint"
         Width="650" Height="740" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#FF686B" BorderThickness="3" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1749,6 +1793,21 @@ function Show-WpfCheckpoint {
     })
     $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
 
+    try {
+        [System.Media.SystemSounds]::Asterisk.Play()
+    } catch {}
+    if ($script:NotifyIcon) {
+        try {
+            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Checkpoint"
+            $script:NotifyIcon.BalloonTipText = "Momento do Checkpoint ($IntervalMark min). Por favor, respondam à pergunta no computador."
+            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
+            $script:NotifyIcon.ShowBalloonTip(5000)
+        } catch {}
+    }
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     $timer = New-Object Windows.Threading.DispatcherTimer
     $timer.Interval = [TimeSpan]::FromSeconds([int]$script:Config.timeout_seconds)
     $timer.add_Tick({ $timer.Stop(); $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
@@ -1764,7 +1823,7 @@ function Show-WpfRoleSwap {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Troca de papéis"
         Width="560" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#15102A" BorderBrush="#FFD166" BorderThickness="3" Padding="28">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1786,13 +1845,29 @@ function Show-WpfRoleSwap {
         $window.DialogResult = $true
         $window.Close()
     })
+
+    try {
+        [System.Media.SystemSounds]::Exclamation.Play()
+    } catch {}
+    if ($script:NotifyIcon) {
+        try {
+            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Troca de Papéis"
+            $script:NotifyIcon.BalloonTipText = "Atenção: momento de trocar os papéis no computador e na montagem."
+            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Warning
+            $script:NotifyIcon.ShowBalloonTip(5000)
+        } catch {}
+    }
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     return ($window.ShowDialog() -eq $true)
 }
 
 function Show-WpfInstructorRubric {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Registro do instrutor"
-        Width="560" Height="500" WindowStartupLocation="CenterScreen" Topmost="True">
+        Width="560" Height="500" WindowStartupLocation="CenterScreen" ShowInTaskbar="True" Topmost="True">
   <Grid Margin="26">
     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
     <StackPanel Grid.Row="0" Margin="0,0,0,18">
@@ -1833,6 +1908,10 @@ function Show-WpfInstructorRubric {
         $window.DialogResult = $true
         $window.Close()
     })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     $window.ShowDialog() | Out-Null
     return $result
 }
@@ -1855,7 +1934,7 @@ function Show-WpfPostSurvey {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Encerramento"
         Width="660" Height="710" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="22" Background="#171128" BorderBrush="#8B62E8" BorderThickness="3" Padding="26">
     <Grid>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -1936,6 +2015,14 @@ function Show-WpfPostSurvey {
         $window.Close()
     })
     $skip.add_Click({ $result.Declined = $true; $result.LatencyMs = [int]$watch.ElapsedMilliseconds; $window.Close() })
+
+    try {
+        [System.Media.SystemSounds]::Asterisk.Play()
+    } catch {}
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     $window.ShowDialog() | Out-Null
     $watch.Stop()
     return $result
@@ -1945,7 +2032,7 @@ function Show-WpfFinished {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Title="PulseLab - Oficina Concluída"
         Width="580" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" ShowInTaskbar="True" Topmost="True">
   <Border CornerRadius="24" Background="#15102A" BorderBrush="#00A7A0" BorderThickness="3" Padding="32">
     <Grid>
       <Grid.RowDefinitions>
@@ -1967,6 +2054,10 @@ function Show-WpfFinished {
         $window.DialogResult = $true
         $window.Close()
     })
+
+    $window.add_Loaded({ Set-PulseWindowForeground $window })
+    $window.add_ContentRendered({ Set-PulseWindowForeground $window })
+
     $timer = New-Object Windows.Forms.Timer
     $timer.Interval = 5000
     $timer.add_Tick({ $timer.Stop(); $window.Close() })
