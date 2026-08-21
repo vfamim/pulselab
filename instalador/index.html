@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
@@ -258,7 +258,7 @@
   <div class="container">
     <header>
       <div class="brand-mark">
-        <span class="dot"></span> PulseLab Protocol v1.5.0
+        <span class="dot"></span> PulseLab Protocol v1.6.0
       </div>
       <h1>Provisionamento e Enrollment Seguro</h1>
       <p class="subtitle">Procedimento operacional padronizado para matrícula e autenticação de máquinas escolares com DPAPI e tokens de uso único.</p>
@@ -267,18 +267,21 @@
     <!-- CARD: DOWNLOAD OFICIAL E PACOTE WINDOWS -->
     <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
       <div class="card-title" style="color: #5eead4;">
-        <span>📦</span> Pacote Oficial PulseLab 1.5.0 para Windows
+        <span>📦</span> Pacote Oficial PulseLab para Windows
       </div>
       <div class="card-subtitle">
-        Pacote genérico e seguro de instalação para Windows 10 e 11. Não contém credenciais embutidas nem tokens pré-gravados.
+        Pacote genérico e seguro de instalação para Windows 10 e 11. Inclui telemetria agregada de cliques e digitação.
       </div>
 
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
         <a href="/instalador/downloads/PulseLab-1.5.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>⬇️</span> Baixar PulseLab-1.5.0-Windows.zip
+          <span>⬇️</span> Baixar PulseLab-Windows.zip
+        </a>
+        <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>🎨</span> Ver Guia Ilustrado / PDF
         </a>
         <span style="font-size: 0.82rem; color: #c4b5fd;">
-          Versão: <strong>1.5.0</strong> · Formato: <strong>ZIP autônomo</strong>
+          Versão: <strong>1.6.0</strong> · Formato: <strong>ZIP autônomo</strong>
         </span>
       </div>
 
@@ -288,7 +291,7 @@
           <a href="/instalador/downloads/PulseLab-1.5.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
         </label>
         <div class="code-box">
-          <span style="font-size: 0.8rem;">108af695748c24a81c03d48232a8e87a09d3e10c3d1d2e612ac14a1809cce75a  PulseLab-1.5.0-Windows.zip</span>
+          <span style="font-size: 0.8rem;">108af695748c24a81c03d48232a8e87a09d3e10c3d1d2e612ac14a1809cce75a  PulseLab-Windows.zip</span>
           <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
         </div>
       </div>
@@ -322,7 +325,7 @@
           <div class="step-num">1</div>
           <div class="step-title">Baixar e Extrair</div>
           <div class="step-text">
-            Baixe o arquivo <code>PulseLab-1.5.0-Windows.zip</code> acima, confira o hash SHA-256 e extraia todo o conteúdo em uma pasta local na máquina do aluno.
+            Baixe o arquivo <code>PulseLab-Windows.zip</code> acima, confira o hash SHA-256 e extraia todo o conteúdo em uma pasta local na máquina do aluno.
           </div>
         </div>
 
@@ -344,9 +347,9 @@
 
         <div class="step-card">
           <div class="step-num">4</div>
-          <div class="step-title">Iniciar Oficina</div>
+          <div class="step-title">Iniciar e Encerrar Oficina</div>
           <div class="step-text">
-            As credenciais da sessão são salvas com proteção criptográfica DPAPI (<code>device_session.dat</code>). Use o atalho <em>"Iniciar PulseLab - Oficina de Robótica"</em> na Área de Trabalho.
+            Abra o atalho <em>"Iniciar PulseLab - Oficina de Robótica"</em>. Para encerrar a sessão ao final da aula, clique com o <strong>botão direito no ícone da bandeja do Windows</strong> e escolha <em>"Concluir Oficina"</em>.
           </div>
         </div>
       </div>
@@ -356,6 +359,7 @@
     <footer class="footer-links">
       <p>
         PulseLab Pesquisa Aplicada ·
+        <a href="/tutorial/">Tutorial & Guia Ilustrado</a> ·
         <a href="/instrutor/">Portal do Instrutor</a> ·
         <a href="/simulador/">Simulador dos Alunos</a> ·
         <a href="/relatorio/">Relatório Acadêmico</a> ·

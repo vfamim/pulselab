@@ -1,4 +1,4 @@
-﻿{
+{
   "hosting": {
     "public": ".",
     "ignore": [
@@ -41,6 +41,10 @@
       {
         "source": "/instalador/**",
         "destination": "/instalador/index.html"
+      },
+      {
+        "source": "/tutorial/**",
+        "destination": "/tutorial/index.html"
       }
     ]
   }
