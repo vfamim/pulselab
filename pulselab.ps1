@@ -15,8 +15,18 @@ $localDataRoot = [Environment]::GetFolderPath("LocalApplicationData")
 if ([string]::IsNullOrWhiteSpace($localDataRoot)) { $localDataRoot = $env:TEMP }
 $sessionPath = Join-Path $localDataRoot "PulseLab\device_session.dat"
 
-if (-not (Test-Path -LiteralPath $agentPath -PathType Leaf)) {
-    throw "PulseLab agent not found: $agentPath"
+# Sincronizacao automatica do agente via GitHub (GitOps) se houver conexao
+try {
+    $remoteAgentUrl = "https://raw.githubusercontent.com/vfamim/pulselab/main/agent/pulselab-agent.ps1"
+    $remoteResp = Invoke-WebRequest -Uri $remoteAgentUrl -UseBasicParsing -TimeoutSec 6 -ErrorAction Stop
+    if ($remoteResp -and $remoteResp.RawContentStream) {
+        $remoteBytes = $remoteResp.RawContentStream.ToArray()
+        if ($remoteBytes.Length -gt 10000) {
+            [System.IO.File]::WriteAllBytes($agentPath, $remoteBytes)
+        }
+    }
+} catch {
+    # Em caso de instabilidade ou offline, continua com a versao local
 }
 
 $params = @{}
