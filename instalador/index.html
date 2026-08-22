@@ -260,8 +260,8 @@
       <div class="brand-mark">
         <span class="dot"></span> PulseLab Protocol v1.6.0
       </div>
-      <h1>Provisionamento e Enrollment Seguro</h1>
-      <p class="subtitle">Procedimento operacional padronizado para matrícula e autenticação de máquinas escolares com DPAPI e tokens de uso único.</p>
+      <h1>Download e Execução Direta</h1>
+      <p class="subtitle">Procedimento rápido e simplificado para execução do PulseLab nos laboratórios escolares.</p>
     </header>
 
     <!-- CARD: DOWNLOAD OFICIAL E PACOTE WINDOWS -->
@@ -270,7 +270,7 @@
         <span>📦</span> Pacote Oficial PulseLab para Windows
       </div>
       <div class="card-subtitle">
-        Pacote genérico e seguro de instalação para Windows 10 e 11. Inclui telemetria agregada de cliques e digitação.
+        Pacote autônomo e seguro para Windows 10 e 11. Inclui sincronização automática na nuvem e telemetria para oficinas com LEGO SPIKE.
       </div>
 
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
@@ -281,7 +281,7 @@
           <span>🎨</span> Ver Guia Ilustrado / PDF
         </a>
         <span style="font-size: 0.82rem; color: #c4b5fd;">
-          Versão: <strong>1.6.0</strong> · Formato: <strong>ZIP autônomo</strong>
+          Versão: <strong>1.6.0</strong> · Formato: <strong>ZIP autônomo (~50 KB)</strong>
         </span>
       </div>
 
@@ -291,33 +291,23 @@
           <a href="/instalador/downloads/PulseLab-1.5.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
         </label>
         <div class="code-box">
-          <span style="font-size: 0.8rem;">108af695748c24a81c03d48232a8e87a09d3e10c3d1d2e612ac14a1809cce75a  PulseLab-Windows.zip</span>
+          <span style="font-size: 0.8rem;">6406b33552b391393284dc99b4f4dd339888f95cebb77e6a23d22bb27a5f60e7  PulseLab-Windows.zip</span>
           <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
         </div>
       </div>
 
-      <div style="background: rgba(124, 58, 237, 0.15); border: 1px solid rgba(124, 58, 237, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #e9d5ff;">
-        ⚠️ <strong>Atenção:</strong> A instalação exige um <strong>Token de Enrollment de uso único</strong> emitido pelo coordenador da pesquisa para vincular a máquina à sede e escola correspondentes.
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
+        ✨ <strong>Zero Configuração:</strong> O aplicativo conecta diretamente à nuvem e auto-sincroniza a configuração de forma transparente.
       </div>
     </div>
 
-    <!-- CARD: SUSPENSÃO DE GERAÇÃO INSEGURA NO NAVEGADOR -->
+    <!-- CARD: INSTRUÇÕES DE EXECUÇÃO -->
     <div class="card">
-      <div class="security-notice">
-        <div class="security-notice-icon">🛡️</div>
-        <div class="security-notice-content">
-          <h4>Geração Web de Executáveis e Pipe Direto (curl|iex) Suspensos</h4>
-          <p>
-            Por determinação de segurança operacional e integridade acadêmica, a compilação de scripts executáveis no navegador e a execução de comandos remotos via pipe direto (<code>curl | iex</code> / <code>irm | iex</code>) foram permanentemente suspensas. O PulseLab exige autenticação DPAPI por dispositivo e tokens de enrollment de uso único com hash SHA-256 no banco.
-          </p>
-        </div>
-      </div>
-
       <div class="card-title">
-        <span>📋</span> Instruções de Instalação e Ativação
+        <span>📋</span> Como Iniciar a Oficina (Em 3 Passos)
       </div>
       <div class="card-subtitle">
-        Siga as quatro etapas abaixo para instalar e matricular a máquina do laboratório:
+        Procedimento prático para instrutores e escolas:
       </div>
 
       <div class="steps-grid">
@@ -325,35 +315,26 @@
           <div class="step-num">1</div>
           <div class="step-title">Baixar e Extrair</div>
           <div class="step-text">
-            Baixe o arquivo <code>PulseLab-Windows.zip</code> acima, confira o hash SHA-256 e extraia todo o conteúdo em uma pasta local na máquina do aluno.
+            Baixe o arquivo <code>PulseLab-Windows.zip</code> acima e extraia a pasta em qualquer diretório da máquina (ex: Área de Trabalho ou Documentos).
           </div>
         </div>
 
         <div class="step-card">
           <div class="step-num">2</div>
-          <div class="step-title">Executar Instalador</div>
+          <div class="step-title">Iniciar com 2 Cliques</div>
           <div class="step-text">
-            Dê dois cliques em <code>Instalar-PulseLab.bat</code>. O instalador solicitará a URL do Supabase, a chave pública anônima e os códigos operacionais (Sede, Polo e Escola).
+            Abra a pasta extraída e dê dois cliques no arquivo <code>Iniciar-Oficina-Oficial.bat</code>. Não precisa instalar nada previamente.
           </div>
         </div>
 
         <div class="step-card">
           <div class="step-num">3</div>
-          <div class="step-title">Digitar Token no Prompt Mascarado</div>
+          <div class="step-title">Confirmar Contexto e Coletar</div>
           <div class="step-text">
-            Informe o <strong>Token de Enrollment</strong> emitido pelo coordenador. O valor é digitado em prompt mascarado e validado atomicamente no servidor.
-          </div>
-        </div>
-
-        <div class="step-card">
-          <div class="step-num">4</div>
-          <div class="step-title">Iniciar e Encerrar Oficina</div>
-          <div class="step-text">
-            Abra o atalho <em>"Iniciar PulseLab - Oficina de Robótica"</em>. Para encerrar a sessão ao final da aula, clique com o <strong>botão direito no ícone da bandeja do Windows</strong> e escolha <em>"Concluir Oficina"</em>.
+            Confirme os dados da escola/turma na tela visual do PulseLab e clique em <em>"Iniciar Oficina"</em>. O acompanhamento roda em segundo plano.
           </div>
         </div>
       </div>
-
     </div>
 
     <footer class="footer-links">
