@@ -1,4 +1,4 @@
-﻿{
+{
     "version":  "1.5.0",
     "protocol_version":  "protocolo-pesquisa-v1",
     "group_size":  2,
@@ -46,8 +46,8 @@
     "supabase_url_env_var":  "PULSELAB_URL",
     "supabase_key_env_var":  "PULSELAB_KEY",
     "supabase_anon_key_env_var":  "PULSELAB_ANON_KEY",
-    "supabase_url":  "",
-    "supabase_key":  "",
-    "supabase_anon_key":  "",
+    "supabase_url":  "https://cylsqbmtglvdfubbarqe.supabase.co",
+    "supabase_key":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU",
+    "supabase_anon_key":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU",
     "config_remote_url":  "https://raw.githubusercontent.com/vfamim/pulselab/main/config/config.json"
 }

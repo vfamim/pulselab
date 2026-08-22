@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
 # Version    : 1.5.0
@@ -490,10 +490,13 @@ function Test-DeviceSessionValid {
 }
 
 function Get-DeviceAuthHeader {
-    if (-not (Test-DeviceSessionValid)) {
-        return $null
+    if (Test-DeviceSessionValid) {
+        return "Bearer $($script:DeviceAccessToken)"
     }
-    return "Bearer $($script:DeviceAccessToken)"
+    if (-not [string]::IsNullOrWhiteSpace($script:SupabaseAnonKey)) {
+        return "Bearer $($script:SupabaseAnonKey)"
+    }
+    return $null
 }
 
 function Save-InstallationProfile {
@@ -891,34 +894,31 @@ function Get-EnvCredentials {
     }
 
     $savedSession = Load-DeviceSession
-    if (-not $savedSession) {
-        throw "Device authentication missing or invalid for this installation. Execute enroll-device.ps1 with a valid single-use enrollment token before starting data collection."
-    }
-
-    $requiredSessionFields = @("access_token", "refresh_token", "expires_at", "installation_id", "site_id")
-    foreach ($field in $requiredSessionFields) {
-        if (-not ($savedSession.PSObject.Properties.Name -contains $field) -or
-            [string]::IsNullOrWhiteSpace([string]($savedSession.$field))) {
-            Clear-DeviceSession
-            throw "Device authentication session is incomplete. Re-enroll the device."
+    if ($savedSession) {
+        $requiredSessionFields = @("access_token", "refresh_token", "expires_at", "installation_id", "site_id")
+        $isComplete = $true
+        foreach ($field in $requiredSessionFields) {
+            if (-not ($savedSession.PSObject.Properties.Name -contains $field) -or
+                [string]::IsNullOrWhiteSpace([string]($savedSession.$field))) {
+                $isComplete = $false
+                break
+            }
         }
-    }
-    if ([string]$savedSession.installation_id -ne $script:InstallationId -or
-        [string]$savedSession.site_id -ne $script:SiteId) {
-        Clear-DeviceSession
-        throw "Device authentication does not match this installation/site. Re-enroll the device."
-    }
-
-    $script:DeviceAccessToken = [string]$savedSession.access_token
-    $script:DeviceRefreshToken = [string]$savedSession.refresh_token
-    $script:DeviceTokenExpiresAt = [long]$savedSession.expires_at
-    if ($savedSession.PSObject.Properties.Name -contains "user_id") {
-        $script:DeviceAuthUid = [string]$savedSession.user_id
-    }
-    Write-PulseLog "INFO" "Device session loaded from DPAPI protected storage."
-
-    if (-not (Test-DeviceSessionValid)) {
-        throw "Device authentication session is invalid or token refresh failed. Re-enroll the device."
+        if ($isComplete -and [string]$savedSession.installation_id -eq $script:InstallationId -and [string]$savedSession.site_id -eq $script:SiteId) {
+            $script:DeviceAccessToken = [string]$savedSession.access_token
+            $script:DeviceRefreshToken = [string]$savedSession.refresh_token
+            $script:DeviceTokenExpiresAt = [long]$savedSession.expires_at
+            if ($savedSession.PSObject.Properties.Name -contains "user_id") {
+                $script:DeviceAuthUid = [string]$savedSession.user_id
+            }
+            Write-PulseLog "INFO" "Device session loaded from DPAPI protected storage."
+            Test-DeviceSessionValid | Out-Null
+        } else {
+            Write-PulseLog "WARN" "Saved device session is invalid or incomplete; using direct anonymous ingestion."
+            Clear-DeviceSession
+        }
+    } else {
+        Write-PulseLog "INFO" "Device enrollment session not present; using direct anonymous ingestion."
     }
 }
 

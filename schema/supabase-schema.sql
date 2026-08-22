@@ -466,7 +466,7 @@ SELECT
     coalesce(responses.pre_response_count, 0) AS pre_response_count,
     coalesce(responses.pre_completed_count, 0) AS pre_completed_count,
     coalesce(responses.checkpoint_response_count, 0) AS checkpoint_response_count,
-    coalesce(responses.checkpoint_completed_count, 0) AS checkpoint_completed_count,
+    coalesce(responses.checkpoint_completed_count, 0) AS checkpoint_completed_response_count,
     coalesce(responses.post_response_count, 0) AS post_response_count,
     coalesce(responses.post_completed_count, 0) AS post_completed_count,
     coalesce(responses.declined_response_count, 0) AS declined_response_count,
