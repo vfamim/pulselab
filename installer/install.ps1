@@ -1,5 +1,5 @@
-﻿#Requires -Version 5.1
-# PulseLab 1.5.0 - local, secret-free Windows installer
+#Requires -Version 5.1
+# PulseLab 1.5.1 - local, secret-free Windows installer
 
 [CmdletBinding()]
 param(
@@ -14,7 +14,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.5.0"
+$Version = "1.5.1"
 
 function Write-InstallLog {
     param([ValidateSet("INFO", "OK", "WARN", "ERROR")][string]$Level, [string]$Message)
@@ -37,10 +37,11 @@ if ([string]::IsNullOrWhiteSpace($DestinationDir)) {
 }
 
 $sourceRoot = $PSScriptRoot
+$sourceLauncher = Join-Path $sourceRoot "pulselab.ps1"
 $sourceAgent = Join-Path $sourceRoot "agent\pulselab-agent.ps1"
 $sourceConfig = Join-Path $sourceRoot "config\config.json"
 $sourceEnrollment = Join-Path $sourceRoot "supabase\scripts\enroll-device.ps1"
-foreach ($required in @($sourceAgent, $sourceConfig, $sourceEnrollment)) {
+foreach ($required in @($sourceLauncher, $sourceAgent, $sourceConfig, $sourceEnrollment)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Installer package is incomplete: $required"
     }
@@ -75,6 +76,7 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $stageDir "agent") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $stageDir "config") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $stageDir "supabase\scripts") -Force | Out-Null
+    Copy-Item -LiteralPath $sourceLauncher -Destination (Join-Path $stageDir "pulselab.ps1") -Force
     Copy-Item -LiteralPath $sourceAgent -Destination (Join-Path $stageDir "agent\pulselab-agent.ps1") -Force
     Copy-Item -LiteralPath $sourceEnrollment -Destination (Join-Path $stageDir "supabase\scripts\enroll-device.ps1") -Force
 
@@ -112,7 +114,7 @@ Write-InstallLog "INFO" "The one-time enrollment token will be requested in a ma
     -SchoolCode $SchoolCode `
     -ComputerId $ComputerId
 
-$agentPath = Join-Path $DestinationDir "agent\pulselab-agent.ps1"
+$launcherPath = Join-Path $DestinationDir "pulselab.ps1"
 $shortcutName = "Iniciar PulseLab - Oficina de Robotica.lnk"
 $locations = @(
     [Environment]::GetFolderPath("Desktop"),
@@ -123,8 +125,8 @@ foreach ($location in $locations) {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$agentPath`""
-    $shortcut.WorkingDirectory = Split-Path -Parent $agentPath
+    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
+    $shortcut.WorkingDirectory = $DestinationDir
     $shortcut.Description = "PulseLab $Version - Oficina de Robotica"
     $shortcut.Save()
 }

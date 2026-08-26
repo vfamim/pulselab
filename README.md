@@ -4,6 +4,15 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
+## Novidades da Versão 1.5.1
+
+- **Launcher com Auto-Update Seguro**: O script `pulselab.ps1` agora atua como ponto de entrada padrão. Ao abrir o aplicativo, ele verifica atualizações do agente no GitHub e as aplica de forma atômica.
+- **Validação Criptográfica SHA-256 e Sem Execução em Memória**: Total conformidade com Windows Defender e políticas de antivírus de laboratórios escolares (sem injeção em memória / `IEX`).
+- **Fallback Offline Transparente**: Timeout de 3 segundos para garantir inicialização imediata e estável mesmo sem conexão à internet.
+- **Preservação de Sessão DPAPI**: Atualizações no código do agente não interferem nas credenciais cifradas (`device_session.dat`) ou nos dados da instalação.
+
+---
+
 ## Novidades da Versão 1.5.0
 
 - **Autenticação individual por dispositivo**: cada máquina usa JWT próprio, vinculado por RLS a `auth.uid()`, `installation_id` e `site_id`.
@@ -15,14 +24,13 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 - **Instalador seguro**: pacote ZIP genérico, sem credenciais, sem pipe remoto e com manifestos SHA-256.
 - **CI ampliada**: Windows PowerShell 5.1, contratos Python/Node, build web e pgTAP/RLS com Supabase local.
 
-A versão 1.5.0 é uma atualização de segurança incompatível com a ingestão anônima anterior. Aplique as migrations e publique a Edge Function antes de matricular máquinas.
-
 ---
 
 ## Arquitetura do Repositório
 
 ```
 pulselab/
+├── pulselab.ps1                # Launcher autenticado com auto-update seguro e fallback offline
 ├── agent/
 │   └── pulselab-agent.ps1      # Daemon PowerShell WPF (coletor em background e interfaces)
 ├── config/
@@ -127,10 +135,10 @@ O pacote público não contém URL privada, token de enrollment, senha ou chave 
 ### 2. Baixar e validar
 
 - Site: `https://pulselab-robotica-edu.web.app/instalador/`
-- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.5.0`
+- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.5.1`
 
 ```powershell
-Get-FileHash .\PulseLab-1.5.0-Windows.zip -Algorithm SHA256
+Get-FileHash .\PulseLab-1.5.1-Windows.zip -Algorithm SHA256
 ```
 
 ### 3. Instalar e matricular
@@ -147,12 +155,12 @@ O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab\App`. A sessão autenticad
 
 ```bash
 python3 installer/build-installer.py \
-  --output instalador/downloads/PulseLab-1.5.0-Windows.zip
+  --output instalador/downloads/PulseLab-1.5.1-Windows.zip
 ```
 
 ```powershell
 .\installer\build-installer.ps1 `
-  -OutputPath .\instalador\downloads\PulseLab-1.5.0-Windows.zip
+  -OutputPath .\instalador\downloads\PulseLab-1.5.1-Windows.zip
 ```
 
 Os dois builders geram um ZIP sem segredos, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
@@ -258,7 +266,7 @@ git pull --ff-only
 ```
 
 
-Confirme que o agente é a versão 1.5.0:
+Confirme que o agente é a versão 1.5.1:
 
 ```powershell
 Select-String .\agent\pulselab-agent.ps1 -Pattern 'Version    :'

@@ -12,8 +12,9 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 REQUIRED_FILES = {
+    "pulselab.ps1": "pulselab.ps1",
     "agent/pulselab-agent.ps1": "agent/pulselab-agent.ps1",
     "config/config.json": "config/config.json",
     "supabase/scripts/enroll-device.ps1": "supabase/scripts/enroll-device.ps1",

@@ -1,5 +1,5 @@
-﻿#Requires -Version 5.1
-# PulseLab 1.5.0 - compatibility setup for a checked-out repository
+#Requires -Version 5.1
+# PulseLab 1.5.1 - compatibility setup for a checked-out repository
 
 [CmdletBinding()]
 param(
@@ -9,17 +9,17 @@ param(
     [Parameter(Mandatory = $true)][string]$RegionalHub,
     [Parameter(Mandatory = $true)][string]$SchoolCode,
     [string]$ComputerId = $env:COMPUTERNAME,
-    [string]$AgentPath = ""
+    [string]$LauncherPath = ""
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-if ([string]::IsNullOrWhiteSpace($AgentPath)) {
-    $AgentPath = Join-Path $repoRoot "agent\pulselab-agent.ps1"
+if ([string]::IsNullOrWhiteSpace($LauncherPath)) {
+    $LauncherPath = Join-Path $repoRoot "pulselab.ps1"
 }
 $enrollPath = Join-Path $repoRoot "supabase\scripts\enroll-device.ps1"
-foreach ($path in @($AgentPath, $enrollPath)) {
+foreach ($path in @($LauncherPath, $enrollPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required file not found: $path" }
 }
 
@@ -43,9 +43,9 @@ foreach ($location in $locations) {
     $shell = New-Object -ComObject WScript.Shell
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$AgentPath`""
-    $shortcut.WorkingDirectory = Split-Path -Parent $AgentPath
-    $shortcut.Description = "PulseLab 1.5.0 - Oficina de Robotica"
+    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$LauncherPath`""
+    $shortcut.WorkingDirectory = $repoRoot
+    $shortcut.Description = "PulseLab 1.5.1 - Oficina de Robotica"
     $shortcut.Save()
 }
-Write-Host "PulseLab 1.5.0 enrolled and configured for the current user." -ForegroundColor Green
+Write-Host "PulseLab 1.5.1 enrolled and configured for the current user." -ForegroundColor Green

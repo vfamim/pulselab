@@ -1,5 +1,5 @@
-﻿#Requires -Version 5.1
-# PulseLab 1.5.0 - secret-free Windows package builder
+#Requires -Version 5.1
+# PulseLab 1.5.1 - secret-free Windows package builder
 
 [CmdletBinding()]
 param(
@@ -8,7 +8,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.5.0"
+$Version = "1.5.1"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -23,6 +23,7 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $stage "config") -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $stage "supabase\scripts") -Force | Out-Null
 
+    Copy-Item (Join-Path $repoRoot "pulselab.ps1") (Join-Path $stage "pulselab.ps1") -Force
     Copy-Item (Join-Path $repoRoot "agent\pulselab-agent.ps1") (Join-Path $stage "agent\pulselab-agent.ps1") -Force
     Copy-Item (Join-Path $repoRoot "config\config.json") (Join-Path $stage "config\config.json") -Force
     Copy-Item (Join-Path $repoRoot "supabase\scripts\enroll-device.ps1") (Join-Path $stage "supabase\scripts\enroll-device.ps1") -Force
