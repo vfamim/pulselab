@@ -1,7 +1,9 @@
-﻿# Pulselab - .gitignore
+# Pulselab - .gitignore
 
 # AI agent framework (internal tooling, not part of the project)
 .agent/
+.agents/
+skills-lock.json
 scripts/
 
 # Test directories and non-runtime test scripts
