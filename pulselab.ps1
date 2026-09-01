@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.5.1 - authenticated agent launcher and auto-updater
+# PulseLab 1.6.0 - authenticated agent launcher and auto-updater
 
 [CmdletBinding()]
 param(

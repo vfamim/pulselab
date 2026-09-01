@@ -12,13 +12,16 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "1.5.1"
+VERSION = "1.6.0"
 REQUIRED_FILES = {
     "pulselab.ps1": "pulselab.ps1",
     "agent/pulselab-agent.ps1": "agent/pulselab-agent.ps1",
     "config/config.json": "config/config.json",
     "supabase/scripts/enroll-device.ps1": "supabase/scripts/enroll-device.ps1",
     "Install-PulseLab.ps1": "installer/install.ps1",
+    "Iniciar-Oficina-Oficial.bat": "Iniciar-Oficina-Oficial.bat",
+    "Iniciar-PulseLab-Dev.bat": "Iniciar-PulseLab-Dev.bat",
+    "Testar-Pulselab-Rapido.bat": "Testar-Pulselab-Rapido.bat",
 }
 
 BAT = r"""@echo off
@@ -30,25 +33,29 @@ if not "%EXIT_CODE%"=="0" pause
 exit /b %EXIT_CODE%
 """
 
-INSTRUCTIONS = """PULSELAB {version} - INSTALADOR WINDOWS SEGURO
+INSTRUCTIONS = """PULSELAB {version} - PACOTE WINDOWS (PRE-CONFIGURADO)
 
 REQUISITOS
 - Windows 10 ou 11 com Windows PowerShell 5.1.
-- URL e chave publica anon do projeto Supabase.
-- Token de enrollment de uso unico emitido pelo coordenador.
+- Nao e necessario configurar URLs ou chaves: o PulseLab ja vem pre-configurado!
 
-INSTALACAO
-1. Confirme o SHA-256 publicado no site/release.
-2. Extraia todo o ZIP; nao execute de dentro do arquivo compactado.
-3. Clique duas vezes em Instalar-PulseLab.bat.
-4. Informe URL, anon key e identidade da instalacao.
-5. Digite o token de enrollment no prompt mascarado.
-6. Abra o atalho "Iniciar PulseLab - Oficina de Robotica".
+COMO USAR (ESCOLHA UMA OPCAO):
 
-SEGURANCA
-- O pacote nao contem tokens, senhas ou service-role key.
-- A sessao do dispositivo e protegida por DPAPI no usuario do Windows.
-- Nao copie device_session.dat para outra conta ou computador.
+OPCAO 1: EXECUCAO DIRETA (Recomendado - Sem instalacao)
+1. Extraia todo o arquivo ZIP em uma pasta (ex: Area de Trabalho ou Documentos).
+2. De dois cliques em "Iniciar-Oficina-Oficial.bat".
+3. Confira os dados da turma na tela visual e clique em "Confirmar e Iniciar Oficina".
+
+OPCAO 2: INSTALACAO COM ATALHO NA AREA DE TRABALHO
+1. Extraia todo o arquivo ZIP.
+2. De dois cliques em "Instalar-PulseLab.bat".
+3. O atalho "Iniciar PulseLab - Oficina de Robotica" sera criado na Area de Trabalho.
+4. Abra o atalho sempre que for realizar uma oficina.
+
+RECURSOS
+- Sincronizacao automatica em nuvem (Supabase) pre-configurada.
+- Auto-atualizacao transparente via GitHub com verificacao criptografica SHA-256.
+- Funcionamento seguro e offline com fallback transparente.
 """
 
 

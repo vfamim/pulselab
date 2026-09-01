@@ -442,9 +442,9 @@ export default function AgentSimulatorPage() {
       activity_id: context.activity_id,
       computer_id: "SIMULADOR-WEB",
       protocol_version: "protocolo-pesquisa-v1",
-      config_version: "1.5.0",
+      config_version: "1.6.0",
       config_hash: CONFIG_HASH,
-      client_version: "web-simulator-1.5.0",
+      client_version: "web-simulator-1.6.0",
       occurred_at: new Date(startedAt + atMs).toISOString(),
       elapsed_ms: atMs,
       _delivery_state: deliveryState || (online ? "sent" : "queued"),
@@ -1930,7 +1930,7 @@ export default function AgentSimulatorPage() {
           </span>
           <span>
             <strong>PulseLab</strong>
-            <small>simulador do agente · v1.5.0</small>
+            <small>simulador do agente · v1.6.0</small>
           </span>
         </div>
         <div className="topbar__notice">

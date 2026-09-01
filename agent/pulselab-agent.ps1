@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
-# Version    : 1.5.1
+# Version    : 1.6.0
 # Description: Coletor de eventos de pesquisa para oficinas pontuais com LEGO
 #              SPIKE. Produz respostas pseudonimizadas e uma linha do tempo
 #              append-only para observação distribuída e controle de qualidade.
@@ -140,7 +140,7 @@ public class ActivityTracker {
 # ESTADO E CAMINHOS
 # =============================================================================
 
-$script:VERSION = "1.5.1"
+$script:VERSION = "1.6.0"
 $script:SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 $localConfigInAgent = Join-Path $script:SCRIPT_DIR "config\config.json"
@@ -808,7 +808,7 @@ function Get-RemoteConfig {
             $remote = $remoteRaw | ConvertFrom-Json
             if (-not $remote.questions -or -not $remote.interval_marks_minutes -or
                 -not ($remote.PSObject.Properties.Name -contains "protocol_version")) {
-                throw "Remote config is not compatible with PulseLab 1.5.1."
+                throw "Remote config is not compatible with PulseLab 1.6.0."
             }
 
             # Remote protocol updates must not erase the identity embedded by a
@@ -845,7 +845,7 @@ function Get-RemoteConfig {
 
     if (-not $script:Config.questions -or -not $script:Config.interval_marks_minutes -or
         -not ($script:Config.PSObject.Properties.Name -contains "protocol_version")) {
-        throw "Config version is incompatible with PulseLab 1.5.1."
+        throw "Config version is incompatible with PulseLab 1.6.0."
     }
 
     $marks = [int[]]$script:Config.interval_marks_minutes

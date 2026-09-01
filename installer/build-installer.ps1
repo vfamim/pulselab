@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.5.1 - secret-free Windows package builder
+# PulseLab 1.6.0 - Windows package builder
 
 [CmdletBinding()]
 param(
@@ -8,7 +8,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.5.1"
+$Version = "1.6.0"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -28,6 +28,9 @@ try {
     Copy-Item (Join-Path $repoRoot "config\config.json") (Join-Path $stage "config\config.json") -Force
     Copy-Item (Join-Path $repoRoot "supabase\scripts\enroll-device.ps1") (Join-Path $stage "supabase\scripts\enroll-device.ps1") -Force
     Copy-Item (Join-Path $repoRoot "installer\install.ps1") (Join-Path $stage "Install-PulseLab.ps1") -Force
+    Copy-Item (Join-Path $repoRoot "Iniciar-Oficina-Oficial.bat") (Join-Path $stage "Iniciar-Oficina-Oficial.bat") -Force
+    Copy-Item (Join-Path $repoRoot "Iniciar-PulseLab-Dev.bat") (Join-Path $stage "Iniciar-PulseLab-Dev.bat") -Force
+    Copy-Item (Join-Path $repoRoot "Testar-Pulselab-Rapido.bat") (Join-Path $stage "Testar-Pulselab-Rapido.bat") -Force
 
     $batch = @'
 @echo off
@@ -41,16 +44,29 @@ exit /b %EXIT_CODE%
     [IO.File]::WriteAllText((Join-Path $stage "Instalar-PulseLab.bat"), $batch, (New-Object Text.UTF8Encoding($false)))
 
     $instructions = @"
-PULSELAB $Version - INSTALADOR WINDOWS SEGURO
+PULSELAB $Version - PACOTE WINDOWS (PRE-CONFIGURADO)
 
-1. Confirme o SHA-256 publicado no site/release.
-2. Extraia todo o ZIP.
-3. Clique duas vezes em Instalar-PulseLab.bat.
-4. Informe URL, anon key e identidade operacional.
-5. Digite o token de enrollment no prompt mascarado.
+REQUISITOS
+- Windows 10 ou 11 com Windows PowerShell 5.1.
+- Nao e necessario configurar URLs ou chaves: o PulseLab ja vem pre-configurado!
 
-O pacote nao contem tokens, senhas ou chave administrativa privilegiada.
-A sessao do dispositivo e protegida por DPAPI no usuario do Windows.
+COMO USAR (ESCOLHA UMA OPCAO):
+
+OPCAO 1: EXECUCAO DIRETA (Recomendado - Sem instalacao)
+1. Extraia todo o arquivo ZIP em uma pasta (ex: Area de Trabalho ou Documentos).
+2. De dois cliques em "Iniciar-Oficina-Oficial.bat".
+3. Confira os dados da turma na tela visual e clique em "Confirmar e Iniciar Oficina".
+
+OPCAO 2: INSTALACAO COM ATALHO NA AREA DE TRABALHO
+1. Extraia todo o arquivo ZIP.
+2. De dois cliques em "Instalar-PulseLab.bat".
+3. O atalho "Iniciar PulseLab - Oficina de Robotica" sera criado na Area de Trabalho.
+4. Abra o atalho sempre que for realizar uma oficina.
+
+RECURSOS
+- Sincronizacao automatica em nuvem (Supabase) pre-configurada.
+- Auto-atualizacao transparente via GitHub com verificacao criptografica SHA-256.
+- Funcionamento seguro e offline com fallback transparente.
 "@
     [IO.File]::WriteAllText((Join-Path $stage "INSTRUCOES.txt"), $instructions, (New-Object Text.UTF8Encoding($true)))
     [IO.File]::WriteAllText((Join-Path $stage "VERSION.txt"), "$Version`n", [Text.Encoding]::ASCII)

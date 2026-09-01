@@ -4,6 +4,14 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
+## Novidades da Versão 1.6.0
+
+- **Zero Configuração para Escolas e Usuários Não-Técnicos**: Removida a necessidade de preencher manualmente URL do Supabase, anon key e tokens de enrollment durante a instalação. O instalador e o agente já vêm pré-configurados com os parâmetros da nuvem.
+- **Execução Direta ou Instalação com 2 Cliques**: O pacote permite rodar diretamente via `Iniciar-Oficina-Oficial.bat` sem instalação ou instalar no sistema via `Instalar-PulseLab.bat` sem intervenção no terminal.
+- **Auto-Update Seguro Mantido**: Atualização automática transparente do código do agente via GitHub com validação criptográfica SHA-256 e fallback offline de 3 segundos.
+
+---
+
 ## Novidades da Versão 1.5.1
 
 - **Launcher com Auto-Update Seguro**: O script `pulselab.ps1` agora atua como ponto de entrada padrão. Ao abrir o aplicativo, ele verifica atualizações do agente no GitHub e as aplica de forma atômica.
@@ -135,35 +143,35 @@ O pacote público não contém URL privada, token de enrollment, senha ou chave 
 ### 2. Baixar e validar
 
 - Site: `https://pulselab-robotica-edu.web.app/instalador/`
-- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.5.1`
+- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.6.0`
 
 ```powershell
-Get-FileHash .\PulseLab-1.5.1-Windows.zip -Algorithm SHA256
+Get-FileHash .\PulseLab-1.6.0-Windows.zip -Algorithm SHA256
 ```
 
-### 3. Instalar e matricular
+### 3. Instalar e executar
 
 1. Extraia todo o ZIP.
-2. Execute `Instalar-PulseLab.bat` com dois cliques.
-3. Informe URL, chave pública `anon`, sede, regional e escola.
-4. Digite o token de enrollment no prompt mascarado.
-5. Abra o atalho **Iniciar PulseLab - Oficina de Robótica**.
+2. Para execução direta sem instalação: dê dois cliques em `Iniciar-Oficina-Oficial.bat`.
+3. Para instalar e criar atalho na Área de Trabalho: dê dois cliques em `Instalar-PulseLab.bat`.
+4. Não é necessário digitar URLs ou chaves: o pacote já vem pré-configurado.
+5. Abra o atalho **Iniciar PulseLab - Oficina de Robótica** ou o arquivo `.bat`.
 
-O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab\App`. A sessão autenticada fica fora da pasta da aplicação para sobreviver a atualizações. Reexecutar o pacote atualiza o aplicativo, mas não reativa automaticamente um dispositivo revogado.
+O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab\App` caso execute o instalador.
 
 ### Gerar o pacote reproduzível
 
 ```bash
 python3 installer/build-installer.py \
-  --output instalador/downloads/PulseLab-1.5.1-Windows.zip
+  --output instalador/downloads/PulseLab-1.6.0-Windows.zip
 ```
 
 ```powershell
 .\installer\build-installer.ps1 `
-  -OutputPath .\instalador\downloads\PulseLab-1.5.1-Windows.zip
+  -OutputPath .\instalador\downloads\PulseLab-1.6.0-Windows.zip
 ```
 
-Os dois builders geram um ZIP sem segredos, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
+Os dois builders geram um ZIP pré-configurado, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
 
 ---
 
@@ -266,7 +274,7 @@ git pull --ff-only
 ```
 
 
-Confirme que o agente é a versão 1.5.1:
+Confirme que o agente é a versão 1.6.0:
 
 ```powershell
 Select-String .\agent\pulselab-agent.ps1 -Pattern 'Version    :'

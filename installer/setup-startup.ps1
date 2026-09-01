@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.5.1 - compatibility setup for a checked-out repository
+# PulseLab 1.6.0 - compatibility setup for a checked-out repository
 
 [CmdletBinding()]
 param(
@@ -45,7 +45,7 @@ foreach ($location in $locations) {
     $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$LauncherPath`""
     $shortcut.WorkingDirectory = $repoRoot
-    $shortcut.Description = "PulseLab 1.5.1 - Oficina de Robotica"
+    $shortcut.Description = "PulseLab 1.6.0 - Oficina de Robotica"
     $shortcut.Save()
 }
-Write-Host "PulseLab 1.5.1 enrolled and configured for the current user." -ForegroundColor Green
+Write-Host "PulseLab 1.6.0 enrolled and configured for the current user." -ForegroundColor Green
