@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # =============================================================================
 # pulselab-agent.ps1
 # Version    : 1.6.0
@@ -198,6 +198,20 @@ $script:AgentMutex = $null
 $script:ResumeActionChoice = "new"
 $script:DebugModeRequested = [bool]$DebugMode
 $script:ProductionTest = [bool]$ProductionTest
+$script:CurrentStageName = "Iniciando oficina..."
+$script:SkipToNextCheckpoint = $false
+
+function Update-TrayStatus {
+    param([string]$StatusText)
+    $script:CurrentStageName = $StatusText
+    if ($script:NotifyIcon) {
+        $cleanText = "PulseLab: $StatusText"
+        if ($cleanText.Length -gt 63) { $cleanText = $cleanText.Substring(0, 60) + "..." }
+        try {
+            $script:NotifyIcon.Text = $cleanText
+        } catch {}
+    }
+}
 
 # =============================================================================
 # INFRAESTRUTURA
@@ -693,9 +707,10 @@ function Show-WpfResumePrompt {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Recuperacao de Sessao" Height="450" Width="600"
+        Title="PulseLab - Recuperação de Sessão" Height="450" Width="600"
         WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -1167,26 +1182,30 @@ function Send-ResponseToSupabase {
 function Add-ToLocalQueue {
     param([hashtable]$Payload)
     try {
-        $queue = @()
+        $queue = New-Object 'System.Collections.Generic.List[object]'
         if (Test-Path $script:OFFLINE_CACHE_FILE) {
             try {
                 $raw = [System.IO.File]::ReadAllText($script:OFFLINE_CACHE_FILE, [Text.Encoding]::UTF8)
                 if (-not [string]::IsNullOrWhiteSpace($raw)) {
                     $existing = $raw | ConvertFrom-Json
-                    $queue = if ($existing -is [array]) { $existing } else { @($existing) }
+                    if ($null -ne $existing) {
+                        foreach ($item in @($existing)) {
+                            $queue.Add($item)
+                        }
+                    }
                 }
             } catch {
                 Write-PulseLog "WARN" "Offline queue file corrupted; moving to quarantine."
                 $corruptedPath = "$($script:OFFLINE_CACHE_FILE).corrupted.$([DateTimeOffset]::Now.ToUnixTimeSeconds()).json"
                 Move-Item $script:OFFLINE_CACHE_FILE $corruptedPath -Force -ErrorAction SilentlyContinue
-                $queue = @()
+                $queue = New-Object 'System.Collections.Generic.List[object]'
             }
         }
-        $queue += New-Object PSCustomObject -Property $Payload
-        if ($queue.Count -gt 500) {
-            $queue = $queue | Select-Object -Last 500
+        $queue.Add((New-Object PSCustomObject -Property $Payload))
+        while ($queue.Count -gt 500) {
+            $queue.RemoveAt(0)
         }
-        Write-AtomicUtf8Json $script:OFFLINE_CACHE_FILE $queue 10
+        Write-AtomicUtf8Json $script:OFFLINE_CACHE_FILE @($queue) 10
         Write-PulseLog "WARN" "Event cached offline. count=$($queue.Count)"
     } catch {
         Write-PulseLog "ERROR" "Could not cache event: $($_.Exception.Message)"
@@ -1235,10 +1254,10 @@ function Invoke-FlushCache {
         }
         if (-not ($items -is [array])) { $items = @($items) }
 
-        $remaining = @()
+        $remaining = New-Object 'System.Collections.Generic.List[object]'
         $uploadedScreenshots = @{}
-        $filesToRemove = @()
-        foreach ($item in $items) {
+        $filesToRemove = New-Object 'System.Collections.Generic.List[string]'
+        foreach ($item in @($items)) {
             $payload = @{}
             $item.PSObject.Properties | ForEach-Object { $payload[$_.Name] = $_.Value }
 
@@ -1252,13 +1271,13 @@ function Invoke-FlushCache {
                     $objectPath = Upload-ScreenshotToSupabase $localPath ([int]$payload["interval_mark"])
                     if (-not $objectPath) {
                         # Preserve the event and its local evidence together.
-                        $remaining += $item
+                        $remaining.Add($item)
                         continue
                     }
                     $payload["screenshot_path"] = $objectPath
                     $payload["local_screenshot_path"] = $null
                     $uploadedScreenshots[[string]$localPath] = $objectPath
-                    $filesToRemove += [string]$localPath
+                    $filesToRemove.Add([string]$localPath)
                 } else {
                     Write-PulseLog "WARN" "Local screenshot file missing on disk: $localPath"
                     Submit-SessionEvent "quality_issue" "warning" ([int]$payload["interval_mark"]) $null $null $null (Get-CurrentElapsedMs) $null @{
@@ -1271,18 +1290,18 @@ function Invoke-FlushCache {
             }
 
             if (-not (Send-ResponseToSupabase $payload)) {
-                $remaining += New-Object PSCustomObject -Property $payload
+                $remaining.Add((New-Object PSCustomObject -Property $payload))
             }
         }
 
-        $filesToRemove | Select-Object -Unique | ForEach-Object {
-            Remove-Item $_ -Force -ErrorAction SilentlyContinue
+        foreach ($file in ($filesToRemove | Select-Object -Unique)) {
+            Remove-Item $file -Force -ErrorAction SilentlyContinue
         }
 
         if ($remaining.Count -eq 0) {
             Remove-Item $script:OFFLINE_CACHE_FILE -Force -ErrorAction SilentlyContinue
         } else {
-            Write-AtomicUtf8Json $script:OFFLINE_CACHE_FILE $remaining 10
+            Write-AtomicUtf8Json $script:OFFLINE_CACHE_FILE @($remaining) 10
         }
     } catch {
         Write-PulseLog "ERROR" "Cache flush failed: $($_.Exception.Message)"
@@ -1439,9 +1458,10 @@ function Show-WpfSessionSetup {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Contexto da oficina"
+        Title="PulseLab - Contexto da Oficina"
         Width="580" Height="720" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -1591,9 +1611,10 @@ function Show-WpfGroupSizeSelection {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Quantidade de alunos"
+        Title="PulseLab - Quantidade de Alunos"
         Width="580" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -1733,9 +1754,10 @@ function Show-WpfAssent {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Convite para participar"
+        Title="PulseLab - Convite para Participar"
         Width="600" Height="460" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -1812,9 +1834,10 @@ function Show-WpfPreSurvey {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Antes da oficina"
+        Title="PulseLab - Antes da Oficina"
         Width="660" Height="620" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -1991,7 +2014,8 @@ function Show-WpfCheckpoint {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PulseLab - Checkpoint"
         Width="680" Height="780" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -2298,9 +2322,10 @@ function Show-WpfRoleSwap {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Troca de papéis"
+        Title="PulseLab - Troca de Papéis"
         Width="580" Height="400" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -2375,9 +2400,10 @@ function Show-WpfInstructorRubric {
     $xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PulseLab - Registro do instrutor"
+        Title="PulseLab - Registro do Instrutor"
         Width="580" Height="520" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -2468,7 +2494,8 @@ function Show-WpfPostSurvey {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PulseLab - Encerramento"
         Width="680" Height="740" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -2710,7 +2737,8 @@ function Show-WpfFinished {
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="PulseLab - Oficina Concluída"
         Width="580" Height="360" WindowStartupLocation="CenterScreen" WindowStyle="None"
-        AllowsTransparency="True" Background="Transparent" Topmost="True">
+        AllowsTransparency="True" Background="Transparent" Topmost="True"
+        FontFamily="Segoe UI, Tahoma, Arial, sans-serif">
   <Window.Resources>
     <Style x:Key="ModernBtn" TargetType="Button">
       <Setter Property="Foreground" Value="White"/>
@@ -2762,11 +2790,64 @@ function Show-WpfFinished {
 }
 
 function Initialize-TrayIcon {
+    Dispose-TrayIcon
+
     $script:NotifyIcon = New-Object Windows.Forms.NotifyIcon
     $script:NotifyIcon.Icon = [Drawing.SystemIcons]::Application
     $script:NotifyIcon.Text = "PulseLab - Oficina em andamento"
     $script:NotifyIcon.Visible = $true
+
     $menu = New-Object Windows.Forms.ContextMenu
+
+    $titleItem = New-Object Windows.Forms.MenuItem "PulseLab v$($script:VERSION) (Oficina Ativa)"
+    $titleItem.Enabled = $false
+    $menu.MenuItems.Add($titleItem) | Out-Null
+
+    $menu.MenuItems.Add((New-Object Windows.Forms.MenuItem "-")) | Out-Null
+
+    $nextStep = New-Object Windows.Forms.MenuItem "⏩ Avançar para a Próxima Etapa"
+    $nextStep.add_Click({
+        Write-PulseLog "INFO" "Instructor manually requested advancing to the next stage via Tray Icon."
+        $script:SkipToNextCheckpoint = $true
+        if ($script:NotifyIcon) {
+            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Próxima Etapa"
+            $script:NotifyIcon.BalloonTipText = "Avançando para a próxima etapa da oficina..."
+            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
+            $script:NotifyIcon.ShowBalloonTip(3000)
+        }
+    })
+    $menu.MenuItems.Add($nextStep) | Out-Null
+
+    $statusItem = New-Object Windows.Forms.MenuItem "ℹ️ Status da Oficina"
+    $statusItem.add_Click({
+        if ($script:NotifyIcon) {
+            $elapsedMinutes = [Math]::Round((Get-CurrentElapsedMs) / 60000.0, 1)
+            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Status da Oficina"
+            $script:NotifyIcon.BalloonTipText = "Status: $($script:CurrentStageName)`nTempo decorrido: $elapsedMinutes min`nTurma: $($script:ClassCode) | Escola: $($script:SchoolCode)"
+            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
+            $script:NotifyIcon.ShowBalloonTip(5000)
+        }
+    })
+    $menu.MenuItems.Add($statusItem) | Out-Null
+
+    $menu.MenuItems.Add((New-Object Windows.Forms.MenuItem "-")) | Out-Null
+
+    $finish = New-Object Windows.Forms.MenuItem "⏹️ Concluir Oficina"
+    $finish.add_Click({
+        if (-not $script:TriggerEnding) {
+            $script:EndingRequestedAt = [DateTimeOffset]::Now
+            $script:TriggerEnding = $true
+            Write-PulseLog "INFO" "Manual ending requested from tray icon."
+            if ($script:NotifyIcon) {
+                $script:NotifyIcon.BalloonTipTitle = "PulseLab"
+                $script:NotifyIcon.BalloonTipText = "Encerrando oficina e iniciando questionário de encerramento..."
+                $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
+                $script:NotifyIcon.ShowBalloonTip(3000)
+            }
+        }
+    })
+    $menu.MenuItems.Add($finish) | Out-Null
+
     $reconfig = New-Object Windows.Forms.MenuItem "Reconfigurar Contexto da Máquina"
     $reconfig.add_Click({
         if ($script:CollectionAuthorized) {
@@ -2780,17 +2861,28 @@ function Initialize-TrayIcon {
             Show-WpfSessionSetup | Out-Null
         }
     })
-    $finish = New-Object Windows.Forms.MenuItem "Concluir Oficina"
-    $finish.add_Click({
-        if (-not $script:TriggerEnding) {
-            $script:EndingRequestedAt = [DateTimeOffset]::Now
-            $script:TriggerEnding = $true
-            Write-PulseLog "INFO" "Manual ending requested."
+    $menu.MenuItems.Add($reconfig) | Out-Null
+
+    $script:NotifyIcon.ContextMenu = $menu
+
+    # Double click on tray icon opens status balloon
+    $script:NotifyIcon.add_DoubleClick({
+        if ($script:NotifyIcon) {
+            $elapsedMinutes = [Math]::Round((Get-CurrentElapsedMs) / 60000.0, 1)
+            $script:NotifyIcon.BalloonTipTitle = "PulseLab - Oficina Ativa"
+            $script:NotifyIcon.BalloonTipText = "Status: $($script:CurrentStageName)`nTempo decorrido: $elapsedMinutes min`nClique com botão direito para opções ou para avançar etapas."
+            $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
+            $script:NotifyIcon.ShowBalloonTip(4000)
         }
     })
-    $menu.MenuItems.Add($reconfig) | Out-Null
-    $menu.MenuItems.Add($finish) | Out-Null
-    $script:NotifyIcon.ContextMenu = $menu
+
+    # Show initial balloon tip so the user sees the icon in the tray immediately
+    try {
+        $script:NotifyIcon.BalloonTipTitle = "PulseLab Ativo na Bandeja"
+        $script:NotifyIcon.BalloonTipText = "A oficina está em andamento. Clique com o botão direito no ícone da bandeja para avançar etapas ou concluir."
+        $script:NotifyIcon.BalloonTipIcon = [Windows.Forms.ToolTipIcon]::Info
+        $script:NotifyIcon.ShowBalloonTip(4000)
+    } catch {}
 }
 
 function Show-HelpAlert {
@@ -2959,11 +3051,13 @@ function Invoke-HeartbeatIfDue {
 function Wait-UntilActivityTime {
     param([DateTimeOffset]$ScheduledAt)
 
-    while ([DateTimeOffset]::Now -lt $ScheduledAt -and -not $script:TriggerEnding) {
+    $script:SkipToNextCheckpoint = $false
+    while ([DateTimeOffset]::Now -lt $ScheduledAt -and -not $script:TriggerEnding -and -not $script:SkipToNextCheckpoint) {
         [Windows.Forms.Application]::DoEvents()
         Invoke-HeartbeatIfDue
-        Start-Sleep -Milliseconds 100
+        [System.Threading.Thread]::Sleep(30)
     }
+    $script:SkipToNextCheckpoint = $false
 }
 
 function Invoke-ConfiguredRoleSwap {
@@ -2977,6 +3071,7 @@ function Invoke-ConfiguredRoleSwap {
     $labelA = "Participante A: agora em $(Get-RoleLabel $nextComputerRole)"
     $labelB = "Participante B: agora em $(Get-RoleLabel $nextAssemblyRole)"
 
+    Update-TrayStatus "Troca de Papéis (Checkpoint $Mark min)"
     if (Show-WpfRoleSwap $labelA $labelB) {
         $script:ParticipantComputerRole = $nextComputerRole
         $script:ParticipantAssemblyRole = $nextAssemblyRole
@@ -3026,16 +3121,18 @@ function Start-ResearchLoop {
 
         $targetElapsedMs = Get-CheckpointTargetMs $mark
         $scheduledAt = $script:ActivityStartedAt.AddMilliseconds($targetElapsedMs)
+        $activityStage = Get-CheckpointStage $mark
+        Update-TrayStatus "Aguardando Checkpoint $mark min ($activityStage)"
         Wait-UntilActivityTime $scheduledAt
         if ($script:TriggerEnding) { break }
 
+        Update-TrayStatus "Respondendo Checkpoint $mark min"
         $script:SpikeHandle = Get-SpikeWindowHandle
         $telemetry = Get-ActiveTelemetry
         $fileSize = Get-LastSpikeFileSize
         $capturedAt = [DateTimeOffset]::Now
         $elapsedAtCapture = Get-CurrentElapsedMs
         $captureLatenessMs = [Math]::Max(0, [int][Math]::Round(($capturedAt - $scheduledAt).TotalMilliseconds))
-        $activityStage = Get-CheckpointStage $mark
         $localScreenshot = $null
         $privatePath = $null
         $screenshotCaptured = $false
@@ -3105,15 +3202,19 @@ function Start-ResearchLoop {
         Submit-SessionEvent "checkpoint_completed" "info" $mark $null $null $activityStage $elapsedAfterResponses $scheduledAt $checkpointStatuses
         Save-SessionState "checkpoint_$mark" $mark
         Invoke-FlushCache
+        Update-TrayStatus "Oficina em andamento"
     }
 
     if (-not $script:TriggerEnding) {
+        Update-TrayStatus "Checkpoints concluídos · Aguardando instrutor"
         Write-PulseLog "INFO" "All checkpoints completed. Waiting for instructor to finish the workshop."
-        while (-not $script:TriggerEnding) {
+        $script:SkipToNextCheckpoint = $false
+        while (-not $script:TriggerEnding -and -not $script:SkipToNextCheckpoint) {
             [Windows.Forms.Application]::DoEvents()
             Invoke-HeartbeatIfDue
-            Start-Sleep -Milliseconds 150
+            [System.Threading.Thread]::Sleep(50)
         }
+        $script:SkipToNextCheckpoint = $false
     }
 
     $elapsedAtEnding = Get-CurrentElapsedMs
@@ -3121,8 +3222,7 @@ function Start-ResearchLoop {
         requested_at = if ($script:EndingRequestedAt) { $script:EndingRequestedAt.ToString("o") } else { $null }
     }
 
-    # Instructor Rubric removed - proceed directly to student post-survey
-    $rubricResult = $null
+    Update-TrayStatus "Respondendo questionário de encerramento"
 
     # Refresh participant list (with swapped roles if applicable)
     $participants = Get-ParticipantList
@@ -3149,6 +3249,7 @@ function Start-ResearchLoop {
     [ActivityTracker]::Stop()
     Clear-SessionState
     Invoke-FlushCache
+    Update-TrayStatus "Oficina concluída com sucesso"
     Show-WpfFinished
     if ($script:ActivityStopwatch -and $script:ActivityStopwatch.IsRunning) { $script:ActivityStopwatch.Stop() }
     return $true
