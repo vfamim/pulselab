@@ -1,88 +1,63 @@
 #Requires -Version 5.1
-# PulseLab 1.7.0 - authenticated agent launcher and auto-updater
+# PulseLab 1.7.0 - Web-First Bridge & Student PWA Launcher
 
 [CmdletBinding()]
 param(
-    [switch]$DebugMode,
-    [switch]$ProductionTest,
-    [switch]$DevMode,
-    [switch]$NoUpdate
+    [int]$Port = 43127,
+    [string]$AppRoot = "",
+    [string]$DataDir = "",
+    [switch]$NoBrowser,
+    [switch]$Hidden
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $scriptRoot = $PSScriptRoot
-$agentPath = Join-Path $scriptRoot "agent\pulselab-agent.ps1"
-$configPath = Join-Path $scriptRoot "config\config.json"
-
-if (-not (Test-Path -LiteralPath $agentPath -PathType Leaf)) {
-    throw "PulseLab agent script not found: $agentPath"
-}
-
-# Rotina de auto-atualizacao segura e atomica com validacao de integridade (SHA-256)
-if (-not $NoUpdate -and -not $DevMode) {
-    try {
-        $remoteAgentUrl = "https://raw.githubusercontent.com/vfamim/pulselab/main/agent/pulselab-agent.ps1"
-        if (Test-Path -LiteralPath $configPath -PathType Leaf) {
-            try {
-                $cfgJson = Get-Content -LiteralPath $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
-                if ($cfgJson.config_remote_url) {
-                    if ($cfgJson.config_remote_url -match '^(https://raw\.githubusercontent\.com/[^/]+/[^/]+/[^/]+)/') {
-                        $remoteAgentUrl = "$($Matches[1])/agent/pulselab-agent.ps1"
-                    }
-                }
-            } catch {
-                # Se falhar o parse da config, usa a URL remota padrao
-            }
-        }
-
-        # Timeout curto (3 segundos) para nunca atrasar a inicializacao da oficina em caso de lentidao/offline
-        $response = Invoke-WebRequest -Uri $remoteAgentUrl -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-        if ($response -and $response.RawContentStream) {
-            $remoteBytes = $response.RawContentStream.ToArray()
-            # Validacao estrita: tamanho razoavel (> 20KB) e cabecalho esperado do script do agente
-            if ($remoteBytes.Length -gt 20000) {
-                $contentStart = [System.Text.Encoding]::UTF8.GetString($remoteBytes, 0, [Math]::Min($remoteBytes.Length, 500))
-                if ($contentStart -match '#Requires\s+-Version' -or $contentStart -match 'pulselab-agent') {
-                    $sha256 = [System.Security.Cryptography.SHA256]::Create()
-                    $remoteHash = [BitConverter]::ToString($sha256.ComputeHash($remoteBytes)).Replace("-", "").ToLowerInvariant()
-                    $localHash = (Get-FileHash -LiteralPath $agentPath -Algorithm SHA256).Hash.ToLowerInvariant()
-
-                    if ($remoteHash -ne $localHash) {
-                        $stagePath = "$agentPath.stage-$([Guid]::NewGuid().ToString('N')).tmp"
-                        $backupPath = "$agentPath.backup"
-                        try {
-                            [System.IO.File]::WriteAllBytes($stagePath, $remoteBytes)
-                            if (Test-Path -LiteralPath $backupPath) {
-                                Remove-Item -LiteralPath $backupPath -Force -ErrorAction SilentlyContinue
-                            }
-                            if (Test-Path -LiteralPath $agentPath) {
-                                Move-Item -LiteralPath $agentPath -Destination $backupPath -Force
-                            }
-                            Move-Item -LiteralPath $stagePath -Destination $agentPath -Force
-                            Write-Host "[PulseLab] Agente atualizado com sucesso (SHA-256: $remoteHash)." -ForegroundColor Green
-                        } catch {
-                            # Em caso de falha durante a troca, restaura o backup
-                            if (-not (Test-Path -LiteralPath $agentPath) -and (Test-Path -LiteralPath $backupPath)) {
-                                Move-Item -LiteralPath $backupPath -Destination $agentPath -Force
-                            }
-                        } finally {
-                            if (Test-Path -LiteralPath $stagePath) {
-                                Remove-Item -LiteralPath $stagePath -Force -ErrorAction SilentlyContinue
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } catch {
-        # Fallback offline transparente: em caso de erro de rede ou timeout, executa a versao local existente
+$bridgeScript = Join-Path $scriptRoot "bridge\pulselab-bridge.ps1"
+if (-not (Test-Path -LiteralPath $bridgeScript -PathType Leaf)) {
+    $altBridge = Join-Path $env:LOCALAPPDATA "PulseLab\bridge\pulselab-bridge.ps1"
+    if (Test-Path -LiteralPath $altBridge -PathType Leaf) {
+        $bridgeScript = $altBridge
+        $scriptRoot = Join-Path $env:LOCALAPPDATA "PulseLab"
+    } else {
+        throw "PulseLab bridge script not found: $bridgeScript"
     }
 }
 
-$params = @{}
-if ($DebugMode) { $params["DebugMode"] = $true }
-if ($ProductionTest) { $params["ProductionTest"] = $true }
-& $agentPath @params
-exit $LASTEXITCODE
+if ([string]::IsNullOrWhiteSpace($AppRoot)) {
+    $candidates = @(
+        (Join-Path $scriptRoot "app\alunos"),
+        (Join-Path $scriptRoot "alunos"),
+        (Join-Path $env:LOCALAPPDATA "PulseLab\app\alunos")
+    )
+    foreach ($cand in $candidates) {
+        if (Test-Path -LiteralPath (Join-Path $cand "index.html") -PathType Leaf) {
+            $AppRoot = $cand
+            break
+        }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($DataDir)) {
+    $DataDir = Join-Path $env:LOCALAPPDATA "PulseLab\data"
+}
+
+Write-Host "===================================================================="
+Write-Host "               PULSELAB 1.7.0 - OFICINA DE ROBÓTICA"
+Write-Host "===================================================================="
+Write-Host "Iniciando servidor local do PulseLab na porta $Port..."
+
+$windowStyle = if ($Hidden) { "Hidden" } else { "Normal" }
+
+Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$bridgeScript`" -Port $Port -AppRoot `"$AppRoot`" -DataDir `"$DataDir`""
+
+Start-Sleep -Milliseconds 800
+
+if (-not $NoBrowser) {
+    Write-Host "Abrindo interface dos alunos no navegador padrão..."
+    Start-Process "http://127.0.0.1:$Port/alunos/"
+}
+
+Write-Host "[OK] PulseLab ativo em http://127.0.0.1:$Port/alunos/"
+Write-Host "Alertas nativos aos 20 e 40 minutos de oficina."

@@ -92,9 +92,9 @@ O Bridge inspeciona o projeto salvo no SPIKE (`Documents\LEGO Education\SPIKE 3`
 ## Como Instalar e Executar
 
 ### 1. Pacote 100% Offline (Recomendado para Escolas)
-1. Baixe `PulseLab-Alunos-Offline-v1.7.0.zip` (~88 KB) em [`instalador/downloads/`](instalador/downloads/).
+1. Baixe `PulseLab-1.7.0-Windows.zip` (~92 KB) em [`instalador/downloads/`](instalador/downloads/).
 2. Extraia o ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
-3. Dê 2 cliques em `Instalar-PulseLab.bat` (cria o atalho) ou em `Iniciar-PulseLab.bat`.
+3. Dê 2 cliques em `Instalar-PulseLab.bat` (cria o atalho) ou em `Iniciar-PulseLab.bat` (roda direto).
 4. O navegador padrão abre automaticamente em `http://127.0.0.1:43127/alunos/` com funcionamento autônomo e sem conexão à internet.
 
 ### 2. Desenvolvimento e Testes no Linux / Navegador
@@ -106,23 +106,18 @@ npm run dev
 npm run check
 ```
 
-### 3. Instalar e executar
+### 3. Gerar o pacote de release reproduzível
 
-1. Extraia todo o ZIP.
-2. Para execução direta sem instalação: dê dois cliques em `Iniciar-Oficina-Oficial.bat` ou `Iniciar-PulseLab.bat`.
-3. Para instalar e criar atalho na Área de Trabalho: dê dois cliques em `Instalar-PulseLab.bat`.
-4. Não é necessário digitar URLs ou chaves: o pacote já vem pré-configurado.
-5. Abra o atalho **Iniciar PulseLab - Oficina de Robótica** ou o arquivo `.bat`.
+```bash
+# Compila PWA, gera ZIPs para instalador/downloads e atualiza checksums:
+./scripts/build-offline-package.sh
+```
 
-O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab` caso execute o instalador.
-
-### Gerar o pacote reproduzível
+Ou diretamente via Python / PowerShell:
 
 ```bash
 python3 installer/build-installer.py \
   --output instalador/downloads/PulseLab-1.7.0-Windows.zip
-
-./scripts/build-offline-package.sh
 ```
 
 ```powershell
@@ -130,24 +125,17 @@ python3 installer/build-installer.py \
   -OutputPath .\instalador\downloads\PulseLab-1.7.0-Windows.zip
 ```
 
-Os dois builders geram um ZIP pré-configurado, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
+Os builders geram o ZIP pré-configurado com a PWA compilada, Bridge local, `SHA256SUMS.txt` interno e manifesto `.zip.sha256`.
 
 ---
 
-## Como Usar na Oficina (Fluxo do Usuário)
+## Como Usar na Oficina (Jornada em 5 Telas da Dupla)
 
-1. O instrutor abre o atalho, revisa os dados operacionais pré-preenchidos e corrige o que mudou, sem nomes de estudantes.
-2. O instrutor confirma que verificou as autorizações e o consentimento aplicáveis.
-3. Cada criança recebe o convite de assentimento. Se qualquer uma recusar, o coletor encerra e a dupla continua normalmente na oficina.
-4. As crianças respondem, separadamente, experiência prévia e autoeficácia.
-5. A atividade recebe uma linha do tempo com heartbeats técnicos minimizados.
-6. Aos **20 e 40 minutos absolutos**, cada participante responde sozinho sobre esforço mental e situação da dupla. A colaboração é perguntada aos 40 minutos por padrão.
-7. Depois do minuto 20, o agente solicita e registra a troca dos papéis por padrão.
-8. Se alguém selecionar “precisamos de ajuda agora”, o agente alerta o instrutor e registra o evento.
-9. A captura opcional registra a região da tela correspondente à janela do SPIKE e é enviada ao bucket privado.
-10. Problemas como atraso, ausência da janela do SPIKE ou falha de captura geram eventos de qualidade.
-11. Depois do último checkpoint, o agente aguarda o instrutor selecionar **Concluir Oficina**.
-12. O instrutor registra desempenho da missão, intervenções e dificuldade principal. Depois, cada participante responde compreensão, afetos e intenção de retorno.
+1. **Preparação:** O instrutor abre o atalho, confere o código da turma/estação e clica em *Iniciar Oficina*.
+2. **Check-in Inicial (15s):** A dupla responde duas perguntas rápidas sobre experiência prévia e confiança para o desafio do dia.
+3. **Oficina em Andamento:** O cronômetro de tempo absoluto inicia e a dupla foca 100% no SPIKE. O Bridge analisa os arquivos `.llsp3` do robô em segundo plano.
+4. **Checkpoints aos 20 e 40 minutos (20s):** Alertas sonoros e visuais avisam os alunos para avaliarem esforço mental, progresso e colaboração (com botão de socorro ao professor).
+5. **Check-out Final & Conclusão (30s):** Autoavaliação da compreensão, sensação da equipe e gravação segura na outbox local em IndexedDB.
 
 ---
 

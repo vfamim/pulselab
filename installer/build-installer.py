@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the generic, secret-free PulseLab Windows installer package."""
+"""Build the complete, self-contained PulseLab Windows release package (PWA + Bridge + SPIKE Parser)."""
 
 from __future__ import annotations
 
@@ -13,51 +13,44 @@ import tempfile
 import zipfile
 
 VERSION = "1.7.0"
-REQUIRED_FILES = {
-    "pulselab.ps1": "pulselab.ps1",
-    "agent/pulselab-agent.ps1": "agent/pulselab-agent.ps1",
-    "config/config.json": "config/config.json",
-    "supabase/scripts/enroll-device.ps1": "supabase/scripts/enroll-device.ps1",
-    "Install-PulseLab.ps1": "installer/install.ps1",
-    "Iniciar-Oficina-Oficial.bat": "Iniciar-Oficina-Oficial.bat",
-    "Iniciar-PulseLab-Dev.bat": "Iniciar-PulseLab-Dev.bat",
-    "Testar-Pulselab-Rapido.bat": "Testar-Pulselab-Rapido.bat",
-}
 
-BAT = r"""@echo off
-setlocal
-set "SCRIPT_DIR=%~dp0"
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%SCRIPT_DIR%Install-PulseLab.ps1"
-set "EXIT_CODE=%ERRORLEVEL%"
-if not "%EXIT_CODE%"=="0" pause
-exit /b %EXIT_CODE%
-"""
+INSTRUCTIONS = """====================================================================
+PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
+====================================================================
 
-INSTRUCTIONS = """PULSELAB {version} - PACOTE WINDOWS (PRE-CONFIGURADO)
+O PulseLab é o ambiente de acompanhamento de oficinas de robótica escolar com LEGO SPIKE.
+Totalmente desacoplado: interface executada diretamente no navegador padrão (PWA 100% offline),
+servidor Bridge local mínimo em loopback (porta 43127) e leitura automática de projetos (.llsp3).
 
-REQUISITOS
-- Windows 10 ou 11 com Windows PowerShell 5.1.
-- Nao e necessario configurar URLs ou chaves: o PulseLab ja vem pre-configurado!
+REQUISITOS:
+- Windows 10 ou 11 com Windows PowerShell 5.1 (já nativo no Windows).
+- Zero internet necessária durante a oficina.
+- Não requer privilégios de administrador.
 
-COMO USAR (ESCOLHA UMA OPCAO):
+COMO USAR:
 
-OPCAO 1: EXECUCAO DIRETA (Recomendado - Sem instalacao)
-1. Extraia todo o arquivo ZIP em uma pasta (ex: Area de Trabalho ou Documentos).
-2. De dois cliques em "Iniciar-Oficina-Oficial.bat".
-3. Confira os dados da turma na tela visual e clique em "Confirmar e Iniciar Oficina".
+OPÇÃO 1: EXECUÇÃO DIRETA (Recomendado — Sem instalação)
+1. Extraia todo o arquivo ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
+2. Dê dois cliques em "Iniciar-PulseLab.bat".
+3. O navegador padrão abrirá automaticamente em http://127.0.0.1:43127/alunos/.
+4. O Bridge emitirá alertas sonoros e visuais aos 20 e 40 minutos de oficina.
 
-OPCAO 2: INSTALACAO COM ATALHO NA AREA DE TRABALHO
+OPÇÃO 2: INSTALAÇÃO NO SISTEMA (Com atalho na Área de Trabalho)
 1. Extraia todo o arquivo ZIP.
-2. De dois cliques em "Instalar-PulseLab.bat".
-3. O atalho "Iniciar PulseLab - Oficina de Robotica" sera criado na Area de Trabalho.
-4. Abra o atalho sempre que for realizar uma oficina.
+2. Dê dois cliques em "Instalar-PulseLab.bat".
+3. O atalho "PulseLab - Iniciar Oficina" será criado na Área de Trabalho.
+4. Para abrir nas próximas oficinas, basta dar dois cliques no atalho.
 
-RECURSOS
-- Sincronizacao automatica em nuvem (Supabase) pre-configurada.
-- Auto-atualizacao transparente via GitHub com verificacao criptografica SHA-256.
-- Funcionamento seguro e offline com fallback transparente.
+COMO DESINSTALAR:
+- Dê dois cliques em "Desinstalar-PulseLab.bat".
+
+RECURSOS DO PULSELAB v{version}:
+- Jornada da dupla em 5 etapas rápidas (sem troca excessiva de telas).
+- Leitura automática de blocos do LEGO SPIKE (.llsp3) para telemetria de código.
+- Alertas nativos aos 20 min e 40 min de oficina.
+- Armazenamento seguro em IndexedDB no navegador.
+- Privacidade total (LGPD) — sem captura de webcam, prints ou identificadores pessoais.
 """
-
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -67,42 +60,73 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build_package(repo_root: Path, output: Path) -> Path:
-    missing = [source for source in REQUIRED_FILES.values() if not (repo_root / source).is_file()]
-    if missing:
-        raise FileNotFoundError("Required installer inputs missing: " + ", ".join(missing))
+def build_package(repo_root: Path, output: Path, folder_name: str | None = None) -> Path:
+    if folder_name is None:
+        folder_name = f"PulseLab-{VERSION}-Windows"
 
-    config = json.loads((repo_root / "config/config.json").read_text(encoding="utf-8-sig"))
-    if config.get("version") != VERSION:
-        raise ValueError(f"config version must be {VERSION}, got {config.get('version')!r}")
-    for forbidden in ("device_access_token", "device_refresh_token", "service_role"):
-        if forbidden in json.dumps(config).lower():
-            raise ValueError(f"forbidden credential field in packaged config: {forbidden}")
+    alunos_dir = repo_root / "alunos"
+    if not alunos_dir.is_dir() or not (alunos_dir / "index.html").is_file():
+        raise FileNotFoundError("PWA build missing in alunos/. Run 'npm run build' in web/agent-simulator first.")
 
     output.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="pulselab-package-") as temp_name:
-        stage = Path(temp_name) / f"PulseLab-{VERSION}-Windows"
-        for archive_name, source_name in REQUIRED_FILES.items():
-            destination = stage / archive_name
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(repo_root / source_name, destination)
 
-        (stage / "Instalar-PulseLab.bat").write_text(BAT, encoding="utf-8", newline="\r\n")
+    with tempfile.TemporaryDirectory(prefix="pulselab-package-") as temp_name:
+        stage = Path(temp_name) / folder_name
+
+        # 1. Estrutura de pastas
+        (stage / "app" / "alunos").mkdir(parents=True, exist_ok=True)
+        (stage / "bridge").mkdir(parents=True, exist_ok=True)
+        (stage / "config").mkdir(parents=True, exist_ok=True)
+        (stage / "tools").mkdir(parents=True, exist_ok=True)
+
+        # 2. Copiar PWA
+        for item in alunos_dir.iterdir():
+            if item.is_dir():
+                shutil.copytree(item, stage / "app" / "alunos" / item.name)
+            else:
+                shutil.copy2(item, stage / "app" / "alunos" / item.name)
+
+        # 3. Copiar Bridge
+        shutil.copy2(repo_root / "bridge" / "pulselab-bridge.ps1", stage / "bridge" / "pulselab-bridge.ps1")
+        shutil.copy2(repo_root / "bridge" / "spike-parser.ps1", stage / "bridge" / "spike-parser.ps1")
+
+        # 4. Copiar Tools
+        if (repo_root / "tools" / "spike-probe.ps1").is_file():
+            shutil.copy2(repo_root / "tools" / "spike-probe.ps1", stage / "tools" / "spike-probe.ps1")
+
+        # 5. Copiar Config
+        if (repo_root / "config" / "defaults.json").is_file():
+            shutil.copy2(repo_root / "config" / "defaults.json", stage / "config" / "defaults.json")
+        if (repo_root / "config" / "config.json").is_file():
+            shutil.copy2(repo_root / "config" / "config.json", stage / "config" / "config.json")
+
+        # 6. Copiar Batch files e Launchers
+        shutil.copy2(repo_root / "Instalar-PulseLab.bat", stage / "Instalar-PulseLab.bat")
+        shutil.copy2(repo_root / "Iniciar-PulseLab.bat", stage / "Iniciar-PulseLab.bat")
+        shutil.copy2(repo_root / "Desinstalar-PulseLab.bat", stage / "Desinstalar-PulseLab.bat")
+        shutil.copy2(repo_root / "pulselab.ps1", stage / "pulselab.ps1")
+        shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
+
+        # 7. Instruções e Versão
         (stage / "INSTRUCOES.txt").write_text(
             INSTRUCTIONS.format(version=VERSION), encoding="utf-8", newline="\r\n"
         )
+        (stage / "VERSION").write_text(VERSION + "\n", encoding="ascii")
         (stage / "VERSION.txt").write_text(VERSION + "\n", encoding="ascii")
 
+        # 8. Manifesto SHA256SUMS.txt
         manifest_lines = []
         for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
             relative = file_path.relative_to(stage).as_posix()
             manifest_lines.append(f"{sha256(file_path)}  {relative}")
-        (stage / "SHA256SUMS.txt").write_text("\n".join(manifest_lines) + "\n", encoding="ascii")
+        (stage / "SHA256SUMS.txt").write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
 
+        # 9. Compactar ZIP
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
             for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
                 archive.write(file_path, file_path.relative_to(stage.parent).as_posix())
 
+    # 10. Checksum do arquivo ZIP
     checksum_path = output.with_suffix(output.suffix + ".sha256")
     checksum_path.write_text(f"{sha256(output)}  {output.name}\n", encoding="ascii")
     return output

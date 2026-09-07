@@ -5,15 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 VERSION=$(cat "${ROOT_DIR}/VERSION" 2>/dev/null || echo "1.7.0")
-PACKAGE_NAME="PulseLab-Alunos-v${VERSION}"
+PACKAGE_NAME="PulseLab-${VERSION}-Windows"
+OFFLINE_PACKAGE_NAME="PulseLab-Alunos-Offline-v${VERSION}"
 DIST_ROOT="${ROOT_DIR}/dist-offline"
 STAGE_DIR="${DIST_ROOT}/${PACKAGE_NAME}"
-ZIP_OUTPUT="${DIST_ROOT}/${PACKAGE_NAME}.zip"
+DOWNLOADS_DIR="${ROOT_DIR}/instalador/downloads"
 
 echo "=================================================="
-echo "PulseLab — Construção do Pacote 100% Offline"
-echo "Versão: ${VERSION}"
-echo "Destino: ${ZIP_OUTPUT}"
+echo "PulseLab — Construção do Pacote 100% Offline (v${VERSION})"
 echo "=================================================="
 
 # 1. Compilar a PWA
@@ -21,49 +20,29 @@ echo "[1/4] Compilando a PWA dos alunos (Vite)..."
 cd "${ROOT_DIR}/web/agent-simulator"
 npm run build
 
-# 2. Limpar e estruturar o diretório de empacotamento
-echo "[2/4] Estruturando pacote portátil offline..."
-rm -rf "${DIST_ROOT}"
-mkdir -p "${STAGE_DIR}/app/alunos"
-mkdir -p "${STAGE_DIR}/bridge"
-mkdir -p "${STAGE_DIR}/tools"
-mkdir -p "${STAGE_DIR}/config"
+# 2. Executar o construtor Python para gerar os pacotes
+echo "[2/4] Gerando pacotes ZIP de distribuição..."
+mkdir -p "${DOWNLOADS_DIR}"
 
-# Copiar arquivos da webapp
-cp -r "${ROOT_DIR}/alunos/"* "${STAGE_DIR}/app/alunos/"
+python3 "${ROOT_DIR}/installer/build-installer.py" \
+    --output "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip"
 
-# Copiar scripts do Bridge e ferramentas
-cp "${ROOT_DIR}/bridge/pulselab-bridge.ps1" "${STAGE_DIR}/bridge/"
-cp "${ROOT_DIR}/bridge/spike-parser.ps1" "${STAGE_DIR}/bridge/"
-if [ -f "${ROOT_DIR}/tools/spike-probe.ps1" ]; then
-    cp "${ROOT_DIR}/tools/spike-probe.ps1" "${STAGE_DIR}/tools/"
-fi
+python3 "${ROOT_DIR}/installer/build-installer.py" \
+    --output "${DOWNLOADS_DIR}/${OFFLINE_PACKAGE_NAME}.zip"
 
-# Copiar configurações e instaladores
-cp "${ROOT_DIR}/config/defaults.json" "${STAGE_DIR}/config/"
-cp "${ROOT_DIR}/Instalar-PulseLab.bat" "${STAGE_DIR}/"
-cp "${ROOT_DIR}/Iniciar-PulseLab.bat" "${STAGE_DIR}/"
-cp "${ROOT_DIR}/Desinstalar-PulseLab.bat" "${STAGE_DIR}/"
-echo "${VERSION}" > "${STAGE_DIR}/VERSION"
+# Atualizar também o Install-Pulselab.zip na raiz do repositório
+cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip" "${ROOT_DIR}/Install-Pulselab.zip"
+cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip.sha256" "${ROOT_DIR}/Install-Pulselab.zip.sha256"
 
-# 3. Compactar em formato ZIP
-echo "[3/4] Gerando arquivo compactado ZIP..."
-cd "${DIST_ROOT}"
-if command -v zip >/dev/null 2>&1; then
-    zip -r -q "${PACKAGE_NAME}.zip" "${PACKAGE_NAME}"
-else
-    python3 -c "import shutil; shutil.make_archive('${PACKAGE_NAME}', 'zip', '.', '${PACKAGE_NAME}')"
-fi
+# Copiar para dist-offline para compatibilidade
+mkdir -p "${DIST_ROOT}"
+cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip" "${DIST_ROOT}/PulseLab-Alunos-v${VERSION}.zip"
+cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip.sha256" "${DIST_ROOT}/PulseLab-Alunos-v${VERSION}.zip.sha256"
 
-# 4. Gerar Checksums SHA-256
-echo "[4/4] Gerando somas de verificação SHA-256..."
-cd "${DIST_ROOT}"
-sha256sum "${PACKAGE_NAME}.zip" > "${PACKAGE_NAME}.zip.sha256"
-sha256sum "${PACKAGE_NAME}.zip" > SHA256SUMS
+echo "[3/4] Checksums gerados:"
+echo "PulseLab-${VERSION}-Windows.zip: $(cat "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip.sha256")"
+echo "${OFFLINE_PACKAGE_NAME}.zip: $(cat "${DOWNLOADS_DIR}/${OFFLINE_PACKAGE_NAME}.zip.sha256")"
 
 echo "=================================================="
-echo "Pacote gerado com sucesso!"
-echo "Arquivo: ${ZIP_OUTPUT}"
-echo "Tamanho: $(du -h "${ZIP_OUTPUT}" | cut -f1)"
-echo "SHA-256: $(cat "${PACKAGE_NAME}.zip.sha256")"
+echo "Pacotes gerados com sucesso!"
 echo "=================================================="
