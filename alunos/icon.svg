@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="PulseLab">
+  <rect width="512" height="512" rx="112" fill="#171027"/>
+  <path d="M96 278h82l37-94 73 182 42-104h86" fill="none" stroke="#49d9ce" stroke-linecap="round" stroke-linejoin="round" stroke-width="38"/>
+</svg>

@@ -31,6 +31,10 @@
     ],
     "rewrites": [
       {
+        "source": "/alunos/**",
+        "destination": "/alunos/index.html"
+      },
+      {
         "source": "/simulador/**",
         "destination": "/simulador/index.html"
       },

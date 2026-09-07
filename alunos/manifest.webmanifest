@@ -1,0 +1,19 @@
+{
+  "name": "PulseLab — Atividade dos alunos",
+  "short_name": "PulseLab",
+  "description": "Jornada de coleta consentida dos alunos durante a atividade de robótica.",
+  "start_url": "/alunos/",
+  "scope": "/alunos/",
+  "display": "standalone",
+  "background_color": "#f2f0f7",
+  "theme_color": "#171027",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/alunos/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

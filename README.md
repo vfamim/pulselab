@@ -70,12 +70,14 @@ pulselab/
 
 - Para o agente real: Windows 10 ou superior com PowerShell 5.1, um projeto
   configurado no [Supabase](https://supabase.com) e permissão de usuário padrão.
-- Para o simulador: Linux, macOS ou Windows, Node.js e um navegador atual. O
-  simulador não precisa de Supabase e não coleta dados reais.
+- Para a aplicação dos alunos: Linux, macOS ou Windows, Node.js e um navegador
+  atual. Este primeiro corte salva eventos apenas no dispositivo e não envia
+  dados ao Supabase.
 
-## Simulador web no Linux
+## Aplicação dos alunos no Linux
 
-O fluxo da versão 1.5.0 pode ser percorrido no navegador sem uma máquina Windows:
+O fluxo dos alunos agora é uma PWA e pode ser desenvolvido, executado e testado
+integralmente no Linux:
 
 ```bash
 cd web/agent-simulator
@@ -83,15 +85,13 @@ npm install
 npm run dev
 ```
 
-Acesse `http://localhost:3000`. A interface permite simular o fluxo padrão,
-atraso de checkpoint, ausência do SPIKE e queda de rede, além de inspecionar os
-eventos e exportar a sessão em JSON.
+Acesse o endereço informado pelo Vite no caminho `/alunos/`. Para percorrer a
+aula sem esperar os checkpoints de 20 e 40 minutos, acrescente `?lab=1`.
 
-Essa versão valida a experiência do instrumento e seus contratos. Captura de
-tela, detecção da janela do SPIKE, cache em disco, sincronização com Supabase e
-integração Win32 continuam sendo responsabilidades do agente Windows. O roteiro
-de avaliação está em
-[`docs/validacao-simulador-web.md`](docs/validacao-simulador-web.md).
+A PWA não captura tela, não detecta a janela do SPIKE e não depende de Win32. O
+mesmo build estático validado no Chrome do Linux é o artefato publicado. A
+arquitetura, o fluxo e as fronteiras desta etapa estão em
+[`docs/arquitetura-aplicacao-alunos.md`](docs/arquitetura-aplicacao-alunos.md).
 
 ---
 
