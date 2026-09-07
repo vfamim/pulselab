@@ -236,6 +236,50 @@
       border-color: var(--accent-aqua);
     }
 
+    .tab-bar {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    .tab-btn {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-muted);
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tab-btn:hover {
+      background: rgba(255, 255, 255, 0.12);
+      color: #ffffff;
+    }
+
+    .tab-btn.active {
+      background: rgba(124, 58, 237, 0.3);
+      border-color: var(--accent-purple);
+      color: #ffffff;
+      box-shadow: 0 0 16px rgba(124, 58, 237, 0.3);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
     .footer-links {
       text-align: center;
       font-size: 0.82rem;
@@ -264,40 +308,95 @@
       <p class="subtitle">Procedimento rápido e simplificado para execução do PulseLab nos laboratórios escolares.</p>
     </header>
 
-    <!-- CARD: DOWNLOAD OFICIAL E PACOTE WINDOWS -->
-    <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
-      <div class="card-title" style="color: #5eead4;">
-        <span>📦</span> Pacote Oficial PulseLab para Windows
-      </div>
-      <div class="card-subtitle">
-        Pacote autônomo e pré-configurado para Windows 10 e 11. Inclui launcher com auto-atualização segura (SHA-256), sincronização direta na nuvem e telemetria para oficinas com LEGO SPIKE.
-      </div>
+    <!-- ABAS DE NAVEGAÇÃO -->
+    <div class="tab-bar">
+      <button type="button" class="tab-btn active" id="btn-tab-oficial" onclick="switchTab('oficial')">
+        <span>📦</span> Versão Oficial
+      </button>
+      <button type="button" class="tab-btn" id="btn-tab-offline" onclick="switchTab('offline')">
+        <span>🧪</span> Nova Versão Offline (PWA + Bridge)
+      </button>
+      <a href="/testes/" class="tab-btn" style="border-style: dashed;">
+        <span>🔬</span> Abrir Aba Oculta Completa ↗
+      </a>
+    </div>
 
-      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-        <a href="/instalador/downloads/PulseLab-1.6.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>⬇️</span> Baixar PulseLab-1.6.0-Windows.zip
-        </a>
-        <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>🎨</span> Ver Guia Ilustrado / PDF
-        </a>
-        <span style="font-size: 0.82rem; color: #c4b5fd;">
-          Versão: <strong>1.6.0</strong> · Formato: <strong>ZIP autônomo (~38 KB)</strong>
-        </span>
-      </div>
+    <!-- CONTEÚDO TAB: VERSÃO OFICIAL -->
+    <div id="tab-oficial" class="tab-content active">
+      <!-- CARD: DOWNLOAD OFICIAL E PACOTE WINDOWS -->
+      <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
+        <div class="card-title" style="color: #5eead4;">
+          <span>📦</span> Pacote Oficial PulseLab para Windows
+        </div>
+        <div class="card-subtitle">
+          Pacote autônomo e pré-configurado para Windows 10 e 11. Inclui launcher com auto-atualização segura (SHA-256), sincronização direta na nuvem e telemetria para oficinas com LEGO SPIKE.
+        </div>
 
-      <div style="margin-bottom: 12px;">
-        <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
-          Checksum SHA-256 Oficial:
-          <a href="/instalador/downloads/PulseLab-1.6.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
-        </label>
-        <div class="code-box">
-          <span style="font-size: 0.8rem;">07dbe569a5678de7aeb3803a6f99624116d101d13f810200375d6149675d5c55  PulseLab-1.6.0-Windows.zip</span>
-          <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+          <a href="/instalador/downloads/PulseLab-1.6.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+            <span>⬇️</span> Baixar PulseLab-1.6.0-Windows.zip
+          </a>
+          <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+            <span>🎨</span> Ver Guia Ilustrado / PDF
+          </a>
+          <span style="font-size: 0.82rem; color: #c4b5fd;">
+            Versão: <strong>1.6.0</strong> · Formato: <strong>ZIP autônomo (~38 KB)</strong>
+          </span>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
+            Checksum SHA-256 Oficial:
+            <a href="/instalador/downloads/PulseLab-1.6.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
+          </label>
+          <div class="code-box">
+            <span style="font-size: 0.8rem;">07dbe569a5678de7aeb3803a6f99624116d101d13f810200375d6149675d5c55  PulseLab-1.6.0-Windows.zip</span>
+            <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
+          </div>
+        </div>
+
+        <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
+          ✨ <strong>Zero Configuração (v1.6.0):</strong> O aplicativo já vem pré-configurado com conexão direta à nuvem e auto-atualização segura do GitHub com validação criptográfica SHA-256 e fallback offline.
         </div>
       </div>
+    </div>
 
-      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
-        ✨ <strong>Zero Configuração (v1.6.0):</strong> O aplicativo já vem pré-configurado com conexão direta à nuvem e auto-atualização segura do GitHub com validação criptográfica SHA-256 e fallback offline.
+    <!-- CONTEÚDO TAB: NOVA VERSÃO OFFLINE -->
+    <div id="tab-offline" class="tab-content">
+      <div class="card" style="border-color: rgba(73, 217, 206, 0.4); background: rgba(73, 217, 206, 0.06);">
+        <div class="card-title" style="color: #49d9ce;">
+          <span>🧪</span> Nova Versão 100% Offline (PWA + Bridge + SPIKE Parser)
+        </div>
+        <div class="card-subtitle">
+          Versão projetada para escolas sem internet ou com conexões comprometidas. Interface executada diretamente no navegador padrão, com servidor Bridge local e parser automático de projetos LEGO SPIKE (.llsp3).
+        </div>
+
+        <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+          <a href="/instalador/downloads/PulseLab-Alunos-Offline-v1.6.0.zip" download class="copy-btn" style="background: #49d9ce; color: #0d2826; border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+            <span>⬇️</span> Baixar PulseLab-Alunos-Offline-v1.6.0.zip
+          </a>
+          <a href="/testes/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+            <span>🔬</span> Abrir Painel de Testes
+          </a>
+          <span style="font-size: 0.82rem; color: #c4b5fd;">
+            Versão: <strong>1.6.0 Offline</strong> · Formato: <strong>ZIP autônomo (~92 KB)</strong>
+          </span>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
+            Checksum SHA-256 do Pacote Offline:
+            <a href="/instalador/downloads/PulseLab-Alunos-Offline-v1.6.0.zip.sha256" style="color: #49d9ce; text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
+          </label>
+          <div class="code-box">
+            <span style="font-size: 0.8rem;">4662a63507d4fa3fdb8d38bbf3e9e7b6bdb1196a2eb70af10e7b752520cea33d  PulseLab-Alunos-Offline-v1.6.0.zip</span>
+            <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
+          </div>
+        </div>
+
+        <div style="background: rgba(73, 217, 206, 0.12); border: 1px solid rgba(73, 217, 206, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #bbf7d0;">
+          💡 <strong>Como testar:</strong> Extraia o ZIP, clique em <code>Instalar-PulseLab.bat</code> e em seguida em <code>Iniciar-PulseLab.bat</code>. A aplicação abrirá no navegador padrão em <code>http://127.0.0.1:43127/alunos/</code> sem requisições externas.
+        </div>
       </div>
     </div>
 
@@ -350,6 +449,16 @@
   </div>
 
   <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+      const targetBtn = document.getElementById('btn-tab-' + tabId);
+      const targetContent = document.getElementById('tab-' + tabId);
+      if (targetBtn) targetBtn.classList.add('active');
+      if (targetContent) targetContent.classList.add('active');
+    }
+
     function copySnippet(btn) {
       const codeSpan = btn.parentElement.querySelector('span');
       if (!codeSpan) return;
@@ -358,6 +467,12 @@
         btn.textContent = "Copiado!";
         setTimeout(() => { btn.textContent = orig; }, 2000);
       });
+    }
+
+    // Suporte a ativação automática via URL: ?tab=offline ou ?tab=teste ou ?lab=1
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('tab') === 'offline' || urlParams.get('tab') === 'teste' || urlParams.get('lab') === '1') {
+      switchTab('offline');
     }
   </script>
 </body>

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="description" content="PulseLab - Área Oculta de Testes e Validação da Versão Offline 100%">
+  <title>PulseLab | Laboratório de Testes (Aba Oculta — v1.6.0 Offline)</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #070512 0%, #110c26 50%, #080616 100%);
+      --card-bg: rgba(255, 255, 255, 0.05);
+      --card-border: rgba(255, 255, 255, 0.12);
+      --accent-aqua: #49d9ce;
+      --accent-purple: #8b5cf6;
+      --accent-amber: #f59e0b;
+      --text-main: #f3f0f8;
+      --text-muted: #a499b8;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 60px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 860px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .secret-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      padding: 6px 16px;
+      border-radius: 24px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 700;
+      font-size: 0.8rem;
+      color: #fde68a;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+
+    .secret-badge span.dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #f59e0b;
+      box-shadow: 0 0 10px #f59e0b;
+      display: inline-block;
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: #ffffff;
+      margin-bottom: 8px;
+      letter-spacing: -0.02em;
+    }
+
+    p.subtitle {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border-radius: 22px;
+      padding: 28px 24px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+      margin-bottom: 24px;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-subtitle {
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      margin-bottom: 20px;
+      line-height: 1.45;
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 14px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .btn-download {
+      background: var(--accent-aqua);
+      color: #0d2826;
+      font-size: 0.95rem;
+      padding: 13px 24px;
+      border-radius: 12px;
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 10px 24px rgba(73, 217, 206, 0.25);
+      transition: all 0.2s ease;
+    }
+
+    .btn-download:hover {
+      background: #38c2b7;
+      transform: translateY(-2px);
+      box-shadow: 0 14px 28px rgba(73, 217, 206, 0.35);
+    }
+
+    .btn-pwa {
+      background: rgba(139, 92, 246, 0.25);
+      border: 1px solid rgba(139, 92, 246, 0.5);
+      color: #e9d5ff;
+      font-size: 0.92rem;
+      padding: 12px 20px;
+      border-radius: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .btn-pwa:hover {
+      background: rgba(139, 92, 246, 0.4);
+      color: #ffffff;
+      transform: translateY(-2px);
+    }
+
+    .code-box {
+      background: #060410;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 12px;
+      padding: 12px 16px;
+      font-family: 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: var(--accent-aqua);
+      word-break: break-all;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-aqua);
+      color: #0d2826;
+      border-color: var(--accent-aqua);
+    }
+
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    @media (max-width: 680px) {
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+
+    .feature-item {
+      background: rgba(15, 11, 30, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    .feature-item h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .feature-item p {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .pill-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; }
+    .pill-yellow { background: rgba(245, 158, 11, 0.2); color: #fde68a; }
+
+    .test-steps {
+      list-style: none;
+      counter-reset: test-step;
+      margin-top: 14px;
+    }
+
+    .test-steps li {
+      counter-increment: test-step;
+      position: relative;
+      padding-left: 38px;
+      margin-bottom: 14px;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      color: var(--text-main);
+    }
+
+    .test-steps li::before {
+      content: counter(test-step);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 8px;
+      background: var(--accent-purple);
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.8rem;
+      display: grid;
+      place-items: center;
+    }
+
+    .footer-links {
+      text-align: center;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-top: 20px;
+    }
+
+    .footer-links a {
+      color: var(--accent-aqua);
+      text-decoration: none;
+    }
+    .footer-links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="secret-badge">
+        <span class="dot"></span> Aba Oculta · Ambiente de Testes
+      </div>
+      <h1>PulseLab Offline v1.6.0 (PWA + Bridge)</h1>
+      <p class="subtitle">Versão experimental com arquitetura desacoplada do PowerShell: interface 100% no navegador (PWA), zero uso de internet, relógio e alertas nativos via Bridge mínimo e telemetria de código LEGO SPIKE (.llsp3).</p>
+    </header>
+
+    <!-- CARD: DOWNLOAD DO PACOTE OFFLINE -->
+    <div class="card" style="border-color: rgba(73, 217, 206, 0.4); background: rgba(73, 217, 206, 0.05);">
+      <div class="card-title" style="color: var(--accent-aqua);">
+        <span>📦</span> Pacote Portátil 100% Offline (.ZIP)
+      </div>
+      <div class="card-subtitle">
+        Contém o instalador local zero-touch, a PWA estática pré-compilada, o Bridge HTTP (porta 43127) e o parser de arquivos do SPIKE.
+      </div>
+
+      <div class="action-row">
+        <a href="/instalador/downloads/PulseLab-Alunos-Offline-v1.6.0.zip" download class="btn-download">
+          <span>⬇️</span> Baixar PulseLab-Alunos-Offline-v1.6.0.zip (~92 KB)
+        </a>
+        <a href="/alunos/?lab=1" target="_blank" class="btn-pwa">
+          <span>🧪</span> Testar PWA no Navegador (Modo Lab)
+        </a>
+      </div>
+
+      <div>
+        <label style="font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
+          Checksum SHA-256 Oficial:
+          <a href="/instalador/downloads/PulseLab-Alunos-Offline-v1.6.0.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(.sha256)</a>
+        </label>
+        <div class="code-box">
+          <span style="font-size: 0.78rem;">4662a63507d4fa3fdb8d38bbf3e9e7b6bdb1196a2eb70af10e7b752520cea33d  PulseLab-Alunos-Offline-v1.6.0.zip</span>
+          <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: GUIA RÁPIDO DE TESTES -->
+    <div class="card">
+      <div class="card-title">
+        <span>🔬</span> Como Testar Esta Versão no Windows
+      </div>
+      <div class="card-subtitle">
+        Siga estes passos em uma máquina escolar ou ambiente de testes local:
+      </div>
+
+      <ol class="test-steps">
+        <li>
+          <strong>Descompacte o ZIP:</strong> Extraia <code>PulseLab-Alunos-Offline-v1.6.0.zip</code> em uma pasta ou pendrive.
+        </li>
+        <li>
+          <strong>Instale localmente:</strong> Dê dois cliques em <code>Instalar-PulseLab.bat</code>. Ele copiará os arquivos para <code>%LOCALAPPDATA%\PulseLab</code> e criará o atalho sem pedir senha de administrador.
+        </li>
+        <li>
+          <strong>Inicie a oficina:</strong> Dê dois cliques em <code>Iniciar-PulseLab.bat</code> (ou no atalho da Área de Trabalho). O Bridge local subirá silenciosamente em <code>http://127.0.0.1:43127/alunos/</code> e abrirá o navegador padrão.
+        </li>
+        <li>
+          <strong>Valide sem internet:</strong> Desconecte o Wi-Fi ou cabo de rede. A aplicação continuará funcionando 100% offline, salvando respostas na outbox local em IndexedDB.
+        </li>
+        <li>
+          <strong>Teste o alerta do SPIKE:</strong> Aos 20 e 40 minutos (ou usando <code>/alunos/?lab=1</code> para teste acelerado), o Bridge emitirá som nativo e notificação compacta no Windows caso o navegador esteja minimizado durante a programação do robô.
+        </li>
+      </ol>
+    </div>
+
+    <!-- CARD: DESTAQUES TÉCNICOS DA NOVA VERSÃO -->
+    <div class="card">
+      <div class="card-title">
+        <span>⚙️</span> Inovações Desta Versão
+      </div>
+      <div class="card-subtitle">
+        Comparativo da arquitetura PWA + Bridge em relação ao agente legado:
+      </div>
+
+      <div class="feature-grid">
+        <div class="feature-item">
+          <h3><span class="pill pill-green">Navegador</span> Interface dos Alunos</h3>
+          <p>Interface React/Vite de alta performance, sem travamentos de janelas WPF do PowerShell e com suporte completo a Service Worker e IndexedDB.</p>
+        </div>
+
+        <div class="feature-item">
+          <h3><span class="pill pill-green">Offline</span> Zero Dependência Externa</h3>
+          <p>Sem chamadas a fontes remotas, CDNs ou bibliotecas externas. Todo o CSS, JS e ícones estão embutidos no pacote de 92 KB.</p>
+        </div>
+
+        <div class="feature-item">
+          <h3><span class="pill pill-yellow">SPIKE</span> Parser .llsp3</h3>
+          <p>Lê automaticamente contêineres Scratch/Python em <code>Documents\LEGO SPIKE</code> para inferir o estágio técnico, permitindo diminuir as perguntas dos questionários.</p>
+        </div>
+
+        <div class="feature-item">
+          <h3><span class="pill pill-yellow">LGPD</span> Privacidade por Design</h3>
+          <p>Não coleta nomes, e-mails, fotos da tela nem identificadores Bluetooth do Hub. Apenas telemetria estrutural e respostas éticas.</p>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer-links">
+      <p>
+        PulseLab Laboratório de Testes ·
+        <a href="/instalador/">Página do Instalador</a> ·
+        <a href="/tutorial/">Tutorial</a> ·
+        <a href="/alunos/?lab=1">PWA dos Alunos</a> ·
+        <a href="/">Página Principal</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    function copySnippet(btn) {
+      const codeSpan = btn.parentElement.querySelector('span');
+      if (!codeSpan) return;
+      navigator.clipboard.writeText(codeSpan.textContent).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = "Copiado!";
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

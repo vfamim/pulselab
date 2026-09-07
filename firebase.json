@@ -49,6 +49,14 @@
       {
         "source": "/tutorial/**",
         "destination": "/tutorial/index.html"
+      },
+      {
+        "source": "/testes/**",
+        "destination": "/testes/index.html"
+      },
+      {
+        "source": "/lab/**",
+        "destination": "/testes/index.html"
       }
     ]
   }
