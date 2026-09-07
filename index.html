@@ -540,25 +540,25 @@
             <div class="container">
                 <div class="section-heading section-heading--center">
                     <span class="eyebrow">O papel do PulseLab</span>
-                    <h2>Da preparação ao encerramento da sessão.</h2>
-                    <p>Enquanto a oficina desenvolve habilidades, o PulseLab registra momentos-chave com instrumentos curtos, transparentes e pseudonimizados.</p>
+                    <h2>Da preparação ao encerramento da oficina.</h2>
+                    <p>Enquanto a oficina desenvolve habilidades, o PulseLab registra momentos-chave com instrumentos ultrarrápidos, transparentes e sem burocracia para a dupla.</p>
                 </div>
 
                 <article class="experience-chapter">
                     <div class="chapter-copy">
                         <span class="chapter-number">01</span>
                         <span class="chapter-kicker">Antes da oficina</span>
-                        <h3>Preparar com clareza e assentimento.</h3>
-                        <p>O instrutor confirma o contexto no computador. Depois, cada participante recebe um convite individual e pode recusar sem prejuízo à atividade.</p>
+                        <h3>Preparar com agilidade e resposta por dupla.</h3>
+                        <p>O instrutor confirma a turma no computador e clica em Iniciar. A dupla responde apenas 2 perguntas rápidas (15 segundos) sobre confiança e experiência prévia antes de começar a montar.</p>
                         <ul class="chapter-points">
-                            <li>Sem coleta de nomes de estudantes</li>
-                            <li>Decisão individual de participação respeitada</li>
-                            <li>Contexto de escola, turma e oficina preservado</li>
+                            <li>Sem cadastro de nomes ou dados pessoais sensíveis</li>
+                            <li>Uma resposta conjunta por dupla (elimina fila no teclado)</li>
+                            <li>Contexto da escola, turma e oficina preservado</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
                         <img src="assets/images/app-context.jpg" alt="Preparação da oficina no simulador PulseLab" loading="lazy">
-                        <figcaption>Contexto e assentimento da oficina</figcaption>
+                        <figcaption>Configuração da turma e início rápido da dupla</figcaption>
                     </figure>
                 </article>
 
@@ -566,17 +566,17 @@
                     <div class="chapter-copy">
                         <span class="chapter-number">02</span>
                         <span class="chapter-kicker">Durante a atividade</span>
-                        <h3>Acompanhar sem quebrar o ritmo.</h3>
-                        <p>O agente fica em segundo plano e aparece apenas nos marcos previstos. Coleta silenciosamente a telemetria agregada de interação (cliques e digitação anônima) e nos checkpoints o estudante avalia seu percurso.</p>
+                        <h3>Telemetria automática do LEGO SPIKE 3.</h3>
+                        <p>A aplicação roda no navegador padrão e monitora em segundo plano os arquivos de projeto (.llsp3). O código é analisado estruturalmente para inferir o avanço técnico (motores, sensores, laços e condições) sem atrapalhar a aula.</p>
                         <ul class="chapter-points">
-                            <li>Checkpoints nos minutos 20 e 40 com escalas visuais lúdicas</li>
-                            <li>Telemetria de cliques e teclas preservando 100% a privacidade</li>
-                            <li>Troca de papéis, detecção do SPIKE e botão de ajuda</li>
+                            <li>Check-ins de 20 segundos nos minutos 20 e 40 com escalas visuais</li>
+                            <li>Alertas sonoros e visuais nativos quando a janela estiver minimizada</li>
+                            <li>Parser do SPIKE (.llsp3) eliminando questionários longos</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
                         <img src="assets/images/app-workshop.jpg" alt="Atividade em andamento no PulseLab" loading="lazy">
-                        <figcaption>Atividade em andamento e telemetria</figcaption>
+                        <figcaption>Cronômetro de atividade e telemetria do SPIKE</figcaption>
                     </figure>
                 </article>
 
@@ -584,17 +584,17 @@
                     <div class="chapter-copy">
                         <span class="chapter-number">03</span>
                         <span class="chapter-kicker">Depois da oficina</span>
-                        <h3>Encerrar pela bandeja e organizar evidências.</h3>
-                        <p>O instrutor clica com o botão direito no ícone da bandeja do Windows (System Tray) e seleciona <em>Concluir Oficina</em>. A rubrica da missão LEGO é registrada e as crianças respondem à reflexão final.</p>
+                        <h3>Fechamento rápido e persistência offline.</h3>
+                        <p>A dupla responde 3 perguntas de autoavaliação (compreensão, sentimento e interesse). O PulseLab salva a sessão em formato estruturado no dispositivo para sincronização segura quando houver internet.</p>
                         <ul class="chapter-points">
-                            <li>Encerramento seguro direto no ícone da barra de tarefas</li>
-                            <li>Rubrica de estrelas da missão LEGO e autoavaliação final</li>
-                            <li>Sincronização imediata em nuvem com tolerância offline</li>
+                            <li>Finalização em menos de 30 segundos pela própria PWA</li>
+                            <li>Armazenamento local em IndexedDB com tolerância a quedas de rede</li>
+                            <li>Sincronização com a nuvem Supabase quando a conexão estiver disponível</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
-                        <img src="assets/images/app-summary.jpg" alt="Portal do Instrutor do PulseLab" loading="lazy">
-                        <figcaption>Menu da bandeja, rubrica e encerramento</figcaption>
+                        <img src="assets/images/app-summary.jpg" alt="Resumo da oficina do PulseLab" loading="lazy">
+                        <figcaption>Fechamento e salvamento offline no dispositivo</figcaption>
                     </figure>
                 </article>
             </div>
@@ -604,40 +604,40 @@
             <div class="container">
                 <div class="section-heading">
                     <span class="eyebrow">Da oficina ao dado confiável</span>
-                    <h2>Uma arquitetura leve, resiliente e auditável.</h2>
-                    <p>Cada componente acolhe a resposta, preserva o contexto e mantém a sessão íntegra mesmo quando a internet da escola oscila.</p>
+                    <h2>Uma arquitetura web-first, leve e resiliente.</h2>
+                    <p>Cada componente acolhe a resposta, extrai o progresso no LEGO SPIKE e mantém a sessão íntegra mesmo sem internet na escola.</p>
                 </div>
-                <div class="architecture-flow" role="img" aria-label="Fluxo da arquitetura PulseLab: estudantes, agente local, fila offline e portal com banco de dados">
+                <div class="architecture-flow" role="img" aria-label="Fluxo da arquitetura PulseLab: dupla, PWA no navegador, parser SPIKE, fila offline e nuvem">
                     <article>
                         <div class="architecture-icon architecture-icon--yellow">
                             <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="11" cy="11" r="5"></circle><circle cx="22" cy="12" r="4"></circle><path d="M3 27c1-6 4-9 8-9s8 3 9 9M18 27c.5-4 2-7 5-7 3.5 0 5.5 3 6 7"></path></svg>
                         </div>
-                        <strong>Estudantes</strong>
-                        <small>Autorrelato individual</small>
+                        <strong>Dupla / Grupo</strong>
+                        <small>Respostas conjuntas</small>
                     </article>
                     <span class="flow-connector" aria-hidden="true"></span>
                     <article>
                         <div class="architecture-icon">
                             <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="18" rx="3"></rect><path d="M11 28h10M16 23v5M10 12h5l2-4 3 9 2-5h2"></path></svg>
                         </div>
-                        <strong>Agente local</strong>
-                        <small>Coleta & Telemetria</small>
+                        <strong>PWA + Bridge</strong>
+                        <small>Interface & Alertas</small>
                     </article>
                     <span class="flow-connector" aria-hidden="true"></span>
                     <article>
                         <div class="architecture-icon architecture-icon--yellow">
                             <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 10h22v16H5zM9 6h14v4M10 17h12M10 21h8"></path></svg>
                         </div>
-                        <strong>Fila offline</strong>
-                        <small>Entrega idempotente</small>
+                        <strong>Parser SPIKE</strong>
+                        <small>Telemetria .llsp3</small>
                     </article>
                     <span class="flow-connector" aria-hidden="true"></span>
                     <article>
                         <div class="architecture-icon">
                             <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 29s10-5 10-14V6l-10-4L6 6v9c0 9 10 14 10 14Z"></path><path d="m11 16 3 3 7-8"></path></svg>
                         </div>
-                        <strong>Portal e dados</strong>
-                        <small>Acesso protegido</small>
+                        <strong>Fila Offline & Nuvem</strong>
+                        <small>IndexedDB + Supabase</small>
                     </article>
                 </div>
             </div>

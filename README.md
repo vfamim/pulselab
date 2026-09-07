@@ -43,120 +43,67 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
-## Arquitetura do Repositório
+## Arquitetura do Repositório (v1.7.0)
 
 ```
 pulselab/
-├── pulselab.ps1                # Launcher autenticado com auto-update seguro e fallback offline
-├── agent/
-│   └── pulselab-agent.ps1      # Daemon PowerShell WPF (coletor em background e interfaces)
-├── config/
-│   └── config.json             # Configuração remota GitOps (fonte de verdade no GitHub)
-├── dashboard/
-│   └── index.html              # Painel Analytics (Resultados, Metodologia, TCC e Coletor)
+├── bridge/
+│   ├── pulselab-bridge.ps1     # Bridge HTTP local (porta 43127), relógio e alertas nativos
+│   └── spike-parser.ps1        # Parser offline de arquivos .llsp3 do LEGO SPIKE App 3
+├── alunos/                     # Build de produção estático da PWA dos alunos (HTML/CSS/JS)
 ├── web/
-│   └── agent-simulator/        # Simulador navegável do agente para Linux e validação
-├── installer/
-│   ├── build-installer.py      # Script Python para compilar o instalador único (Linux/macOS)
-│   ├── build-installer.ps1     # Script PowerShell para compilar o instalador único (Windows)
-│   └── setup-startup.ps1       # Setup manual via PowerShell por máquina
-├── schema/
-│   └── supabase-schema.sql     # DDL completo da tabela e bucket no Supabase
-└── docs/
-    ├── PLAN-pulselab-mvp.md    # Especificações históricas do MVP
-    ├── protocolo-pesquisa-v1.md # Protocolo acadêmico e decisões pendentes
-    ├── parecer-roadmap-observacao-distribuida.md # Parecer e roadmap de longo prazo
-    ├── arquitetura-evidencias-v1.4.md # Contrato técnico do primeiro incremento
-    ├── contexto-projeto-robotica-educativa.md # Contexto institucional público usado no front
-    ├── validacao-simulador-web.md # Protocolo de validação do fluxo navegável
-    ├── relatorio-metodologia-pulselab.html # Relatório navegável
-    └── tcc-research-framework.md # Guia histórico do TCC
+│   └── agent-simulator/        # Código-fonte da PWA (React, Vite, IndexedDB e testes)
+├── config/
+│   ├── defaults.json           # Configurações padrão offline
+│   └── config.json             # Configuração do protocolo (v1.7.0)
+├── instalador/                 # Página do instalador web e downloads dos pacotes ZIP
+│   └── downloads/              # Pacotes PulseLab-1.7.0-Windows.zip e PulseLab-Alunos-Offline-v1.7.0.zip
+├── testes/                     # Aba oculta para homologação rápida e download
+├── tutorial/                   # Guia operacional ilustrado interativo em slides (Marp)
+├── dashboard/                  # Painel de acompanhamento e visualização
+├── scripts/
+│   └── build-offline-package.sh # Compilador do pacote 100% offline (~88 KB)
+└── installer/
+    ├── build-installer.py      # Builder do pacote Windows
+    └── install.ps1             # Instalador local zero-touch
 ```
 
 ---
 
-## Pré-requisitos
+## O Que o PulseLab Coleta e Como Funciona
 
-- Para o agente real: Windows 10 ou superior com PowerShell 5.1, um projeto
-  configurado no [Supabase](https://supabase.com) e permissão de usuário padrão.
-- Para a aplicação dos alunos: Linux, macOS ou Windows, Node.js e um navegador
-  atual. Este primeiro corte salva eventos apenas no dispositivo e não envia
-  dados ao Supabase.
+### 1. Respostas Rápidas da Dupla (Jornada em 5 Passos)
+A aplicação elimina o "passa-passa" de teclado. A dupla que compartilha o computador responde conjuntamente em menos de 1 minuto em toda a oficina:
+- **Início (15 segundos):** Experiência prévia com robótica e confiança para o desafio.
+- **Checkpoints aos 20 e 40 minutos (20 segundos):** Esforço mental exigido, situação do progresso (travamos/começando/avançando/testando), colaboração e botão de pedir socorro ao professor.
+- **Finalização (30 segundos):** Compreensão do que foi construído/programado, sensação da equipe e interesse em novas oficinas.
 
-## Aplicação dos alunos no Linux
+### 2. Telemetria Automática do LEGO SPIKE 3 (.llsp3)
+O Bridge inspeciona o projeto salvo no SPIKE (`Documents\LEGO Education\SPIKE 3`) de forma contínua e nos marcos de 20 e 40 minutos:
+- **Contagem de blocos funcionais:** Volume real de blocos Scratch/Python programados.
+- **Detecção de componentes:** Uso de blocos de motores, sensores de cor/distância/força, laços de repetição (`repeat/forever`) e condições lógicas (`if/else`).
+- **Inferência automática de estágios:** Classifica o avanço técnico da equipe (*Vazio $\rightarrow$ Montagem Inicial $\rightarrow$ Movimento Básico $\rightarrow$ Reativo a Sensores $\rightarrow$ Laço Autônomo $\rightarrow$ Missão Integrada*).
+- **Delta de evolução:** Quantidade de blocos adicionados ou removidos entre o minuto 20 e o minuto 40.
 
-O fluxo dos alunos agora é uma PWA e pode ser desenvolvido, executado e testado
-integralmente no Linux:
+> 🔒 **Privacidade por Design (LGPD):** O PulseLab **NÃO** coleta nomes de alunos, fotos de webcam, prints de tela, textos digitados em variáveis nem identificadores Bluetooth do Hub.
 
+---
+
+## Como Instalar e Executar
+
+### 1. Pacote 100% Offline (Recomendado para Escolas)
+1. Baixe `PulseLab-Alunos-Offline-v1.7.0.zip` (~88 KB) em [`instalador/downloads/`](instalador/downloads/).
+2. Extraia o ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
+3. Dê 2 cliques em `Instalar-PulseLab.bat` (cria o atalho) ou em `Iniciar-PulseLab.bat`.
+4. O navegador padrão abre automaticamente em `http://127.0.0.1:43127/alunos/` com funcionamento autônomo e sem conexão à internet.
+
+### 2. Desenvolvimento e Testes no Linux / Navegador
 ```bash
 cd web/agent-simulator
 npm install
 npm run dev
-```
-
-Acesse o endereço informado pelo Vite no caminho `/alunos/`. Para percorrer a
-aula sem esperar os checkpoints de 20 e 40 minutos, acrescente `?lab=1`.
-
-A PWA não captura tela, não detecta a janela do SPIKE e não depende de Win32. O
-mesmo build estático validado no Chrome do Linux é o artefato publicado. A
-arquitetura, o fluxo e as fronteiras desta etapa estão em
-[`docs/arquitetura-aplicacao-alunos.md`](docs/arquitetura-aplicacao-alunos.md).
-
----
-
-## Setup: Supabase
-
-1. Acesse o painel do seu projeto no Supabase Studio.
-2. Abra o **SQL Editor**.
-3. Execute todo o conteúdo de `schema/supabase-schema.sql`. Isso irá:
-   - Criar, sem apagar a tabela legada, a tabela `research_events`.
-   - Criar `research_session_events` para a linha do tempo e controle de qualidade.
-   - Criar a view protegida `research_session_quality` para o futuro backend do painel.
-   - Adicionar os campos de rastreabilidade 1.5 a bancos já existentes.
-   - Configurar `screenshots` como bucket privado.
-   - Remover a política de leitura pública criada pela versão 1.2.
-   - Conceder explicitamente apenas `INSERT` ao coletor com credenciais autenticadas; consultas e ingestão anônima não autorizada permanecem bloqueadas.
-
-> RLS é uma salvaguarda técnica, mas não substitui consentimento, assentimento, minimização, controle de acesso e política de retenção.
-
----
-
-## Setup: GitHub (GitOps)
-
-1. Edite o arquivo `config/config.json`:
-   - Defina `"site_id"` para a sede/cidade inicial ou informe-o ao gerar o instalador.
-   - Insira o identificador regional em `"regional_hub"` (ex: `"Polo-Nordeste-01"`).
-   - Defina os códigos padrão de escola, oficina e turma. Valores que ainda começarem com `CONFIGURE_` aparecerão vazios na primeira abertura.
-   - Ajuste `activity_id` e as perguntas somente após aprovação da versão do protocolo.
-   - Configure `"config_remote_url"` com a URL raw do seu repositório pessoal:
-     ```
-     https://raw.githubusercontent.com/vfamim/pulselab/main/config/config.json
-     ```
-2. Realize o commit e envie para a branch `main` ou de release ativa.
-
-Sede, regional, escola, oficina, turma, atividade e tamanho do grupo são persistidos em `%LOCALAPPDATA%\PulseLab\installation.json` após a primeira confirmação válida. Na próxima execução, a preparação reaparece preenchida para conferência e edição. A confirmação das autorizações nunca é reutilizada: precisa ser marcada em cada oficina. Atualizações remotas do protocolo não substituem a identidade local da instalação.
-
----
-
-## Instalação segura no Windows
-
-O pacote público não contém URL privada, token de enrollment, senha ou chave administrativa. A instalação é por usuário porque o DPAPI vincula a sessão à conta do Windows.
-
-### 1. Preparar o backend
-
-1. Aplique as migrations de `supabase/migrations/`.
-2. Publique `supabase/functions/enroll-device`.
-3. Mantenha `SUPABASE_SERVICE_ROLE_KEY` somente nos secrets da Edge Function e no ambiente administrativo.
-4. Emita um token por máquina com `supabase/scripts/provision_device.py`; nunca envie a chave administrativa ao computador da oficina.
-
-### 2. Baixar e validar
-
-- Site: `https://pulselab-robotica-edu.web.app/instalador/`
-- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.7.0`
-
-```powershell
-Get-FileHash .\PulseLab-1.7.0-Windows.zip -Algorithm SHA256
-Get-FileHash .\PulseLab-Alunos-Offline-v1.7.0.zip -Algorithm SHA256
+# Ou execute a suíte de testes unitários e ponta-a-ponta:
+npm run check
 ```
 
 ### 3. Instalar e executar

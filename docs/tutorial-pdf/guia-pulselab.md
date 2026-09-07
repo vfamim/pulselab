@@ -122,35 +122,35 @@ style: |
 <!-- Slide 1: Capa -->
 <div style="text-align: center; padding-top: 20px;">
   <span class="badge" style="background:#dbeafe; color:#1d4ed8; font-size:0.95rem; padding: 5px 14px;">
-    Guia Operacional Passo a Passo
+    Guia Operacional Ilustrado
   </span>
   <h1 style="font-size: 3rem; margin-top: 12px; color: #1e40af;">
     PulseLab 1.7.0
   </h1>
-  <p style="font-size: 1.25rem; color: #475569; max-width: 820px; margin: 0 auto 24px auto; font-weight: 600;">
-    Como instalar o pacote ZIP, conduzir oficinas de robótica, coletar telemetria de interação e concluir o ciclo pela bandeja do sistema.
+  <p style="font-size: 1.25rem; color: #475569; max-width: 840px; margin: 0 auto 24px auto; font-weight: 600;">
+    Instalação 100% offline, jornada simplificada por dupla, telemetria automática do LEGO SPIKE (.llsp3) e check-ins rápidos.
   </p>
 
   <div style="display: flex; justify-content: center; gap: 16px; margin-top: 10px;">
     <div class="card-panel" style="background:#eff6ff; border-color:#bfdbfe; width: 210px; text-align: center;">
       <div style="font-size: 1.6rem; margin-bottom: 2px;">📦</div>
-      <strong style="color: #1e3a8a; font-size: 0.95rem;">1. Instalação ZIP</strong>
-      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">Setup & Matrícula</p>
+      <strong style="color: #1e3a8a; font-size: 0.95rem;">1. Instalação Offline</strong>
+      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">ZIP ~88 KB · Zero Internet</p>
     </div>
     <div class="card-panel" style="background:#f0fdf4; border-color:#bbf7d0; width: 210px; text-align: center;">
-      <div style="font-size: 1.6rem; margin-bottom: 2px;">🖱️</div>
-      <strong style="color: #166534; font-size: 0.95rem;">2. Uso & Telemetria</strong>
-      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">Cliques, Teclas & Checkpoint</p>
+      <div style="font-size: 1.6rem; margin-bottom: 2px;">👥</div>
+      <strong style="color: #166534; font-size: 0.95rem;">2. Resposta por Dupla</strong>
+      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">15s no início · Sem burocracia</p>
     </div>
     <div class="card-panel" style="background:#faf5ff; border-color:#e9d5ff; width: 210px; text-align: center;">
-      <div style="font-size: 1.6rem; margin-bottom: 2px;">📥</div>
-      <strong style="color: #6b21a8; font-size: 0.95rem;">3. Concluir na Bandeja</strong>
-      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">Botão Direito & Rubrica</p>
+      <div style="font-size: 1.6rem; margin-bottom: 2px;">🤖</div>
+      <strong style="color: #6b21a8; font-size: 0.95rem;">3. Telemetria SPIKE</strong>
+      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">Parser de blocos & fases</p>
     </div>
     <div class="card-panel" style="background:#fffbeb; border-color:#fde68a; width: 210px; text-align: center;">
-      <div style="font-size: 1.6rem; margin-bottom: 2px;">🌐</div>
-      <strong style="color: #92400e; font-size: 0.95rem;">4. Web & Suporte</strong>
-      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">Portal & Fale Conosco</p>
+      <div style="font-size: 1.6rem; margin-bottom: 2px;">⏱️</div>
+      <strong style="color: #92400e; font-size: 0.95rem;">4. Checkpoints 20/40m</strong>
+      <p style="font-size: 0.75rem; color:#64748b; margin: 2px 0 0 0;">Alertas nativos & Fechamento</p>
     </div>
   </div>
 </div>
@@ -158,126 +158,131 @@ style: |
 ---
 
 <!-- Slide 2: Etapa 1 - Instalação do Pacote ZIP -->
-## <span class="badge" style="background:#dbeafe; color:#1e40af;">Etapa 1</span> Como Instalar o Pacote ZIP
+## <span class="badge" style="background:#dbeafe; color:#1e40af;">Etapa 1</span> Como Instalar o Pacote ZIP (100% Offline)
 
 <div class="grid-2">
   <div>
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Baixar o ZIP:</strong> Baixe o arquivo compactado <code>PulseLab-1.7.0-Windows.zip</code> no computador da oficina.</div>
+        <div><strong>Baixar o ZIP:</strong> Baixe <code>PulseLab-Alunos-Offline-v1.7.0.zip</code> (~88 KB) diretamente ou transporte por pendrive.</div>
       </li>
       <li class="step-item">
         <span class="step-num">2</span>
-        <div><strong>Extrair Todo o Conteúdo:</strong> Clique com o botão direito sobre o <code>.zip</code> e escolha <em>"Extrair Tudo..."</em> em uma pasta local.</div>
+        <div><strong>Extrair:</strong> Clique com o botão direito sobre o arquivo <code>.zip</code> e escolha <em>"Extrair Tudo..."</em> em qualquer pasta (ex: Área de Trabalho).</div>
       </li>
       <li class="step-item">
         <span class="step-num">3</span>
-        <div><strong>Executar Instalador:</strong> Abra a pasta extraída e dê dois cliques no executável <code>Instalar-PulseLab.bat</code>.</div>
+        <div><strong>Instalação Zero-Touch:</strong> Dê dois cliques em <code>Instalar-PulseLab.bat</code>. O atalho é criado na Área de Trabalho sem pedir senha de administrador.</div>
       </li>
       <li class="step-item">
         <span class="step-num">4</span>
-        <div><strong>Matrícula e Token:</strong> Preencha Cidade/Escola e digite o <strong>Token de uso único</strong> fornecido pela coordenação.</div>
+        <div><strong>Zero Configuração:</strong> O aplicativo já vem pré-configurado com servidor Bridge local e rotas de telemetria integradas.</div>
       </li>
     </ul>
 
     <div class="highlight-box">
-      ✨ <strong>Atalho Criado:</strong> O atalho <em>"Iniciar PulseLab - Oficina de Robótica"</em> será gerado na Área de Trabalho!
+      ✨ <strong>Pronto para usar:</strong> Dê 2 cliques em <em>"Iniciar PulseLab"</em> para abrir a interface web no navegador padrão!
     </div>
   </div>
 
   <div class="img-container">
-    <img src="images/01-instalacao.jpg" alt="Tela de Instalação e Matrícula" />
+    <img src="images/01-instalacao.jpg" alt="Tela de Instalação e Execução" />
   </div>
 </div>
 
 ---
 
-<!-- Slide 3: Etapa 2 - Como Usar na Oficina & Telemetria -->
-## <span class="badge" style="background:#dcfce7; color:#166534;">Etapa 2</span> Como Usar na Oficina & Telemetria
+<!-- Slide 3: Etapa 2 - Como Funciona a Jornada da Dupla -->
+## <span class="badge" style="background:#dcfce7; color:#166534;">Etapa 2</span> Jornada Rápida da Dupla (Sem Burocracia)
 
 <div class="grid-2">
   <div>
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">1</span>
-        <div><strong>Início & Assentimento:</strong> O instrutor confere a turma e as crianças recebem o convite lúdico de participação.</div>
+        <div><strong>Preparação Instantânea:</strong> O instrutor confere a turma e clica em <em>"Iniciar Oficina"</em>. Não há termos de consentimento repetitivos nem divisão de alunos A/B.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">2</span>
-        <div><strong>Telemetria Automática:</strong> O PulseLab 1.7.0 contabiliza em segundo plano o volume agregado de <strong>cliques do mouse</strong> e <strong>teclas digitadas</strong> (sem registrar o que é digitado, preservando 100% a privacidade).</div>
+        <div><strong>Início Rápido (15 segundos):</strong> A dupla responde apenas 2 perguntas sobre experiência prévia e confiança para o desafio.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">3</span>
-        <div><strong>Checkpoints (20 e 40 min):</strong> Janelas leves surgem para avaliar esforço mental, humor da dupla e alternância de papéis.</div>
+        <div><strong>Foco no SPIKE:</strong> Ao clicar em <em>"Começar Atividade"</em>, o cronômetro inicia em segundo plano e a dupla pode focar 100% na montagem do robô.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">4</span>
-        <div><strong>Botão de Ajuda:</strong> O botão <em>"Precisamos de Ajuda!"</em> avisa o instrutor imediatamente.</div>
+        <div><strong>Persistência Local:</strong> Todos os dados ficam protegidos no armazenamento local (IndexedDB) com tolerância total a quedas de energia ou fechamento acidental.</div>
       </li>
     </ul>
   </div>
 
   <div class="img-container">
-    <img src="images/02-como-usar.jpg" alt="Tela de Checkpoint e Telemetria" />
+    <img src="images/02-como-usar.jpg" alt="Tela de Atividade e Cronômetro" />
   </div>
 </div>
 
 ---
 
-<!-- Slide 3: Etapa 3 - Como Encerrar o Ciclo pela Bandeja -->
-## <span class="badge" style="background:#f3e8ff; color:#6b21a8;">Etapa 3</span> Como Encerrar o Ciclo (Bandeja do Sistema)
+<!-- Slide 4: Etapa 3 - Telemetria Automática do LEGO SPIKE 3 -->
+## <span class="badge" style="background:#f3e8ff; color:#6b21a8;">Etapa 3</span> Telemetria Automática do LEGO SPIKE (.llsp3)
 
 <div class="grid-2">
   <div>
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num" style="background:#9333ea;">1</span>
-        <div><strong>Ícone na Bandeja:</strong> No canto inferior direito da tela (perto do relógio do Windows), localize o ícone de pulso do PulseLab.</div>
+        <div><strong>Captura Invisível:</strong> O servidor Bridge local monitora a pasta de projetos do LEGO SPIKE App 3 em <code>Documents\LEGO Education\SPIKE 3</code>.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#9333ea;">2</span>
-        <div><strong>Clique com o Botão Direito:</strong> Clique com o botão direito no ícone da bandeja e selecione <strong>"Concluir Oficina"</strong>.</div>
+        <div><strong>Parser Estrutural:</strong> Extrai a quantidade de blocos programados, uso de motores, sensores de cor/distância, laços de repetição e condições lógicas.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#9333ea;">3</span>
-        <div><strong>Rubrica da Missão:</strong> O modal abre para o instrutor registrar as estrelas de desempenho LEGO e intervenções.</div>
+        <div><strong>Inferência de Estágios:</strong> Classifica o progresso da equipe (<em>Movimento Básico $\rightarrow$ Reativo a Sensores $\rightarrow$ Laço Autônomo $\rightarrow$ Missão Integrada</em>).</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#9333ea;">4</span>
-        <div><strong>Autoavaliação & Sincronização:</strong> Os alunos respondem ao feedback final e a sessão é enviada à nuvem Supabase.</div>
+        <div><strong>100% Ético & LGPD:</strong> Não coleta nomes, fotos, telas, variáveis de texto ou códigos do Hub.</div>
       </li>
     </ul>
   </div>
 
   <div class="img-container">
-    <img src="images/03-encerramento.jpg" alt="Menu da Bandeja e Conclusão" />
+    <img src="images/03-encerramento.jpg" alt="Telemetria Estrutural do SPIKE" />
   </div>
 </div>
 
 ---
 
-<!-- Slide 4: Etapa 4 - Web Portal & Suporte -->
-## <span class="badge" style="background:#fef3c7; color:#92400e;">Etapa 4</span> Web Portal, Dúvidas & Fale Comigo
+<!-- Slide 5: Etapa 4 - Checkpoints e Encerramento -->
+## <span class="badge" style="background:#fef3c7; color:#92400e;">Etapa 4</span> Check-ins (20 e 40 min) & Encerramento
 
 <div class="grid-2">
   <div>
-    <div class="card-panel" style="background:#fffbeb; border-color:#fde68a; margin-bottom: 6px;">
-      <strong style="color:#92400e;">🌐 Web Portal do PulseLab:</strong>
-      <p style="font-size:0.84rem; color:#78350f; margin:2px 0 0 0;">Acesse <a href="https://pulselab-robotica-edu.web.app" target="_blank" style="color:#b45309; font-weight:700;">pulselab-robotica-edu.web.app</a> para acessar o Portal do Instrutor, baixar atualizações e consultar dashboards.</p>
-    </div>
-
-    <div class="card-panel" style="background:#f8fafc; border-color:#cbd5e1; margin-bottom: 6px;">
-      <strong style="color:#334155;">📶 Offline & Resiliência:</strong>
-      <p style="font-size:0.84rem; color:#475569; margin:2px 0 0 0;">Se a internet cair, todas as respostas e telemetria ficam salvas no cache seguro local e sincronizam no próximo sinal.</p>
-    </div>
-
-    <div class="highlight-box" style="background:#eff6ff; border-color:#3b82f6; color:#1e40af; margin-top:6px;">
-      💬 <strong>Dúvidas ou Suporte?</strong> Fale diretamente com a coordenação do projeto pelo canal institucional ou abra um chamado no portal.
-    </div>
+    <ul class="step-list">
+      <li class="step-item">
+        <span class="step-num" style="background:#d97706;">1</span>
+        <div><strong>Alertas Sonoros e Visuais:</strong> Aos 20 e 40 minutos de oficina, o Bridge emite um aviso discreto no Windows chamando a atenção da dupla.</div>
+      </li>
+      <li class="step-item">
+        <span class="step-num" style="background:#d97706;">2</span>
+        <div><strong>Check-in de 20 Segundos:</strong> 3 perguntas rápidas (esforço mental, situação do avanço e colaboração da equipe) + botão de pedir ajuda ao instrutor.</div>
+      </li>
+      <li class="step-item">
+        <span class="step-num" style="background:#d97706;">3</span>
+        <div><strong>Sem Troca de Telas:</strong> Ao salvar o check-in de 20min, a dupla volta direto para a montagem sem interrupções.</div>
+      </li>
+      <li class="step-item">
+        <span class="step-num" style="background:#d97706;">4</span>
+        <div><strong>Fechamento:</strong> No final da aula, 3 perguntas de autoavaliação encerram o ciclo e salvam o arquivo JSON da oficina.</div>
+      </li>
+    </ul>
   </div>
 
   <div class="img-container">
-    <img src="images/04-suporte.jpg" alt="Web Portal e Suporte" />
+    <img src="images/04-suporte.jpg" alt="Check-in Rápido e Fechamento" />
   </div>
 </div>
