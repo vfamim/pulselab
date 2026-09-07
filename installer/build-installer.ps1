@@ -1,5 +1,6 @@
 #Requires -Version 5.1
-# PulseLab 1.6.0 - Windows package builder
+# PulseLab 1.7.0 - Windows package builder
+# Builds the standalone release ZIP file containing all required runtime dependencies.
 
 [CmdletBinding()]
 param(
@@ -8,7 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.6.0"
+$Version = "1.7.0"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {

@@ -125,7 +125,7 @@ style: |
     Guia Operacional Passo a Passo
   </span>
   <h1 style="font-size: 3rem; margin-top: 12px; color: #1e40af;">
-    PulseLab 1.6.0
+    PulseLab 1.7.0
   </h1>
   <p style="font-size: 1.25rem; color: #475569; max-width: 820px; margin: 0 auto 24px auto; font-weight: 600;">
     Como instalar o pacote ZIP, conduzir oficinas de robótica, coletar telemetria de interação e concluir o ciclo pela bandeja do sistema.
@@ -165,7 +165,7 @@ style: |
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Baixar o ZIP:</strong> Baixe o arquivo compactado <code>PulseLab-1.6.0-Windows.zip</code> no computador da oficina.</div>
+        <div><strong>Baixar o ZIP:</strong> Baixe o arquivo compactado <code>PulseLab-1.7.0-Windows.zip</code> no computador da oficina.</div>
       </li>
       <li class="step-item">
         <span class="step-num">2</span>
@@ -205,7 +205,7 @@ style: |
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">2</span>
-        <div><strong>Telemetria Automática:</strong> O PulseLab 1.6.0 contabiliza em segundo plano o volume agregado de <strong>cliques do mouse</strong> e <strong>teclas digitadas</strong> (sem registrar o que é digitado, preservando 100% a privacidade).</div>
+        <div><strong>Telemetria Automática:</strong> O PulseLab 1.7.0 contabiliza em segundo plano o volume agregado de <strong>cliques do mouse</strong> e <strong>teclas digitadas</strong> (sem registrar o que é digitado, preservando 100% a privacidade).</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">3</span>

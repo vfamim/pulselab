@@ -1,5 +1,11 @@
 #Requires -Version 5.1
-# PulseLab 1.6.0 - local Windows installer (pre-configured)
+# PulseLab 1.7.0 - local Windows installer (pre-configured)
+#
+# Extracts all runtime dependencies, places config with live credentials,
+# and registers the user-level scheduled task.
+#
+# Usage (run from extracted directory):
+#   powershell -ExecutionPolicy Bypass -File .\install.ps1
 
 [CmdletBinding()]
 param(
@@ -14,7 +20,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.6.0"
+$Version = "1.7.0"
 
 function Write-InstallLog {
     param([ValidateSet("INFO", "OK", "WARN", "ERROR")][string]$Level, [string]$Message)

@@ -171,7 +171,7 @@ $listener.Prefixes.Add($prefix)
 try {
     $listener.Start()
     Write-Host "==================================================" -ForegroundColor Cyan
-    Write-Host "PulseLab Bridge v1.6.0 ativo em $prefix" -ForegroundColor Green
+    Write-Host "PulseLab Bridge v1.7.0 ativo em $prefix" -ForegroundColor Green
     Write-Host "Pasta da WebApp: $AppRoot" -ForegroundColor Gray
     Write-Host "Armazenamento:   $DataDir" -ForegroundColor Gray
     Write-Host "Pressione Ctrl+C para encerrar." -ForegroundColor Gray
@@ -217,7 +217,7 @@ try {
             $spikeDetected = (Find-LatestSpikeProject) -ne $null
             $healthObj = @{
                 status = "ok"
-                version = "1.6.0"
+                version = "1.7.0"
                 uptime_seconds = [Math]::Round($uptime, 1)
                 port = $Port
                 spike_detected = $spikeDetected

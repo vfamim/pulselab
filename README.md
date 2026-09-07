@@ -4,6 +4,15 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
+## Novidades da Versão 1.7.0
+
+- **Arquitetura Web-First Desacoplada (PWA 100% Offline)**: A jornada dos alunos roda diretamente no navegador padrão, eliminando sobrecarga e travamentos de interface, com armazenamento local em IndexedDB e service worker completo.
+- **Instalador Portátil Zero-Internet (ZIP de ~92 KB)**: Pacote autônomo transportável por pendrive, sem download de fontes remotas ou dependências externas, instalável com 2 cliques e sem permissões de administrador.
+- **Bridge HTTP Local Mínimo & Alertas Nativos**: Servidor leve em loopback (`127.0.0.1:43127`) com relógio de sessão independente e alertas sonoros/visuais para avisar os alunos aos 20 e 40 minutos.
+- **Parser Estrutural de Projetos LEGO SPIKE (.llsp3)**: Análise automática de blocos Scratch/Python para inferência de avanço técnico e redução drástica das perguntas dos questionários.
+
+---
+
 ## Novidades da Versão 1.6.0
 
 - **Zero Configuração para Escolas e Usuários Não-Técnicos**: Removida a necessidade de preencher manualmente URL do Supabase, anon key e tokens de enrollment durante a instalação. O instalador e o agente já vêm pré-configurados com os parâmetros da nuvem.
@@ -143,32 +152,35 @@ O pacote público não contém URL privada, token de enrollment, senha ou chave 
 ### 2. Baixar e validar
 
 - Site: `https://pulselab-robotica-edu.web.app/instalador/`
-- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.6.0`
+- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.7.0`
 
 ```powershell
-Get-FileHash .\PulseLab-1.6.0-Windows.zip -Algorithm SHA256
+Get-FileHash .\PulseLab-1.7.0-Windows.zip -Algorithm SHA256
+Get-FileHash .\PulseLab-Alunos-Offline-v1.7.0.zip -Algorithm SHA256
 ```
 
 ### 3. Instalar e executar
 
 1. Extraia todo o ZIP.
-2. Para execução direta sem instalação: dê dois cliques em `Iniciar-Oficina-Oficial.bat`.
+2. Para execução direta sem instalação: dê dois cliques em `Iniciar-Oficina-Oficial.bat` ou `Iniciar-PulseLab.bat`.
 3. Para instalar e criar atalho na Área de Trabalho: dê dois cliques em `Instalar-PulseLab.bat`.
 4. Não é necessário digitar URLs ou chaves: o pacote já vem pré-configurado.
 5. Abra o atalho **Iniciar PulseLab - Oficina de Robótica** ou o arquivo `.bat`.
 
-O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab\App` caso execute o instalador.
+O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab` caso execute o instalador.
 
 ### Gerar o pacote reproduzível
 
 ```bash
 python3 installer/build-installer.py \
-  --output instalador/downloads/PulseLab-1.6.0-Windows.zip
+  --output instalador/downloads/PulseLab-1.7.0-Windows.zip
+
+./scripts/build-offline-package.sh
 ```
 
 ```powershell
 .\installer\build-installer.ps1 `
-  -OutputPath .\instalador\downloads\PulseLab-1.6.0-Windows.zip
+  -OutputPath .\instalador\downloads\PulseLab-1.7.0-Windows.zip
 ```
 
 Os dois builders geram um ZIP pré-configurado, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
@@ -274,7 +286,7 @@ git pull --ff-only
 ```
 
 
-Confirme que o agente é a versão 1.6.0:
+Confirme que o agente é a versão 1.7.0:
 
 ```powershell
 Select-String .\agent\pulselab-agent.ps1 -Pattern 'Version    :'

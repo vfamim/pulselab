@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "1.6.0"
+VERSION = "1.7.0"
 REQUIRED_FILES = {
     "pulselab.ps1": "pulselab.ps1",
     "agent/pulselab-agent.ps1": "agent/pulselab-agent.ps1",

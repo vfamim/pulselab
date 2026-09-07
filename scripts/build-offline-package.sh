@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-VERSION=$(cat "${ROOT_DIR}/VERSION" 2>/dev/null || echo "1.6.0")
+VERSION=$(cat "${ROOT_DIR}/VERSION" 2>/dev/null || echo "1.7.0")
 PACKAGE_NAME="PulseLab-Alunos-v${VERSION}"
 DIST_ROOT="${ROOT_DIR}/dist-offline"
 STAGE_DIR="${DIST_ROOT}/${PACKAGE_NAME}"
