@@ -56,30 +56,78 @@ try {
 } catch {}
 
 if (-not $alreadyRunning) {
-    $argList = @(
-        '-NoProfile',
-        '-ExecutionPolicy', 'Bypass',
-        '-WindowStyle', 'Hidden',
-        '-File', $bridgeScript,
-        '-Port', [string]$Port,
-        '-AppRoot', $AppRoot,
-        '-DataDir', $DataDir
-    )
-    Start-Process -FilePath "powershell.exe" -ArgumentList $argList
+    try {
+        $ws = New-Object -ComObject WScript.Shell
+        $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$bridgeScript`" -Port $Port -AppRoot `"$AppRoot`" -DataDir `"$DataDir`""
+        $ws.Run($cmd, 0, $false)
+    } catch {
+        $argList = @(
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-WindowStyle', 'Hidden',
+            '-File', $bridgeScript,
+            '-Port', [string]$Port,
+            '-AppRoot', $AppRoot,
+            '-DataDir', $DataDir
+        )
+        Start-Process -FilePath "powershell.exe" -ArgumentList $argList
+    }
     
-    # Aguardar até o servidor responder (até 5 segundos)
-    for ($i = 0; $i -lt 12; $i++) {
+    # Aguardar até o servidor responder (até 6 segundos)
+    $started = $false
+    for ($i = 0; $i -lt 15; $i++) {
         Start-Sleep -Milliseconds 400
         try {
             $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
-            if ($resp -and $resp.StatusCode -eq 200) { break }
+            if ($resp -and $resp.StatusCode -eq 200) {
+                $started = $true
+                break
+            }
         } catch {}
+    }
+
+    if (-not $started) {
+        $logPath = Join-Path $DataDir "bridge.log"
+        Write-Host "[AVISO] O servidor local demorou para responder." -ForegroundColor Yellow
+        if (Test-Path $logPath) {
+            Write-Host "Últimas linhas do log ($logPath):" -ForegroundColor Yellow
+            Get-Content $logPath -Tail 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
+        }
     }
 }
 
 if (-not $NoBrowser) {
-    Write-Host "Abrindo interface dos alunos no navegador padrão..."
-    Start-Process "http://127.0.0.1:$Port/alunos/"
+    $targetUrl = "http://127.0.0.1:$Port/alunos/"
+    
+    # Priorizar navegadores Chromium com modo --app para abrir janela limpa e com foco na frente
+    $chromiumCandidates = @(
+        "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
+        "${env:ProgramFiles(x86)}\BraveSoftware\Brave-Browser\Application\brave.exe",
+        "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe",
+        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
+        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
+        "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
+        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
+        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
+    )
+
+    $opened = $false
+    foreach ($exe in $chromiumCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($exe) -and (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            try {
+                $browserName = [System.IO.Path]::GetFileNameWithoutExtension($exe)
+                Write-Host "Abrindo interface em janela dedicada via $browserName..." -ForegroundColor Green
+                Start-Process -FilePath $exe -ArgumentList @("--app=$targetUrl")
+                $opened = $true
+                break
+            } catch {}
+        }
+    }
+
+    if (-not $opened) {
+        Write-Host "Abrindo interface dos alunos no navegador padrão..." -ForegroundColor Cyan
+        Start-Process $targetUrl
+    }
 }
 
 Write-Host "[OK] PulseLab ativo em http://127.0.0.1:$Port/alunos/"
