@@ -9,8 +9,7 @@ echo.
 echo Encerrando processos do Bridge...
 powershell -NoProfile -Command "Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'pulselab-bridge' } | Stop-Process -Force" >nul 2>&1
 
-set "DESKTOP_LNK=%USERPROFILE%\Desktop\PulseLab - Iniciar Oficina.lnk"
-if exist "%DESKTOP_LNK%" del /f /q "%DESKTOP_LNK%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$desktop = [Environment]::GetFolderPath('Desktop'); $startup = [Environment]::GetFolderPath('Startup'); Remove-Item -LiteralPath (Join-Path $desktop 'PulseLab - Iniciar Oficina.lnk') -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $desktop 'Iniciar Pulselab - Oficina de Robotica.lnk') -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $startup 'PulseLab.lnk') -Force -ErrorAction SilentlyContinue" >nul 2>&1
 
 set "INSTALL_DIR=%LOCALAPPDATA%\PulseLab"
 if exist "%INSTALL_DIR%" (
