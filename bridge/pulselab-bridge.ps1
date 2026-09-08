@@ -100,51 +100,42 @@ function Get-MimeType([string]$ext) {
 
 function Play-CheckpointSound {
     try {
-        [System.Media.SystemSounds]::Exclamation.Play()
+        [System.Media.SystemSounds]::Asterisk.Play()
     } catch {
-        try { [System.Console]::Beep(880, 300) } catch {}
+        try { [System.Console]::Beep(880, 200) } catch {}
     }
 }
 
 function Show-NativeCheckpointAlert([int]$mark) {
     Write-BridgeLog "[ALERTA] Hora do checkpoint de $mark minutos!" "WARN"
-    Play-CheckpointSound
 
-    # Disparar alerta visual compacto via Windows Forms se disponível
     try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
-        $form = New-Object System.Windows.Forms.Form
-        $form.Text = "PulseLab — Check-in de $mark min"
-        $form.Size = New-Object System.Drawing.Size(340, 160)
-        $form.StartPosition = "CenterScreen"
-        $form.TopMost = $true
-        $form.FormBorderStyle = "FixedDialog"
-        $form.MaximizeBox = $false
-        $form.MinimizeBox = $false
+        $toastScript = $null
+        if ($PSScriptRoot) {
+            $cToast = Join-Path $PSScriptRoot "pulselab-toast.ps1"
+            if (Test-Path $cToast) { $toastScript = (Resolve-Path $cToast).Path }
+        }
+        if (-not $toastScript -and $env:LOCALAPPDATA) {
+            $cToast = Join-Path $env:LOCALAPPDATA "PulseLab\bridge\pulselab-toast.ps1"
+            if (Test-Path $cToast) { $toastScript = $cToast }
+        }
 
-        $label = New-Object System.Windows.Forms.Label
-        $label.Text = "Hora do check-in rápido de $mark minutos.`nPor favor, volte ao navegador para responder."
-        $label.Size = New-Object System.Drawing.Size(300, 45)
-        $label.Location = New-Object System.Drawing.Point(20, 15)
-        $form.Controls.Add($label)
-
-        $btn = New-Object System.Windows.Forms.Button
-        $btn.Text = "Responder agora"
-        $btn.Size = New-Object System.Drawing.Size(140, 32)
-        $btn.Location = New-Object System.Drawing.Point(90, 75)
-        $btn.DialogResult = [System.Windows.Forms.DialogResult]::OK
-        $btn.Add_Click({
-            try {
-                Start-Process "http://127.0.0.1:$Port/alunos/"
-            } catch {}
-            $form.Close()
-        })
-        $form.Controls.Add($btn)
-        $form.AcceptButton = $btn
-
-        $form.Show()
+        if ($toastScript) {
+            Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+                "-ExecutionPolicy", "Bypass",
+                "-NoProfile",
+                "-WindowStyle", "Hidden",
+                "-File", "`"$toastScript`"",
+                "-Mark", "$mark",
+                "-Port", "$Port",
+                "-AppRoot", "`"$AppRoot`""
+            ) | Out-Null
+        } else {
+            # Fallback sonoro se o script não for localizado
+            try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
+        }
     } catch {
-        # Fallback se WinForms não estiver disponível
+        Write-BridgeLog "Falha ao disparar alerta visual: $($_.Exception.Message)" "WARN"
     }
 }
 

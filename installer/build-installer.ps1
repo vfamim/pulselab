@@ -35,6 +35,7 @@ try {
     # Copiar Bridge
     Copy-Item (Join-Path $repoRoot "bridge\pulselab-bridge.ps1") (Join-Path $stage "bridge\pulselab-bridge.ps1") -Force
     Copy-Item (Join-Path $repoRoot "bridge\spike-parser.ps1") (Join-Path $stage "bridge\spike-parser.ps1") -Force
+    Copy-Item (Join-Path $repoRoot "bridge\pulselab-toast.ps1") (Join-Path $stage "bridge\pulselab-toast.ps1") -Force
 
     # Copiar Tools
     if (Test-Path -LiteralPath (Join-Path $repoRoot "tools\spike-probe.ps1") -PathType Leaf) {
