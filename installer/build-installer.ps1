@@ -54,6 +54,7 @@ try {
     Copy-Item (Join-Path $repoRoot "Iniciar-PulseLab.bat") (Join-Path $stage "Iniciar-PulseLab.bat") -Force
     Copy-Item (Join-Path $repoRoot "Desinstalar-PulseLab.bat") (Join-Path $stage "Desinstalar-PulseLab.bat") -Force
     Copy-Item (Join-Path $repoRoot "pulselab.ps1") (Join-Path $stage "pulselab.ps1") -Force
+    Copy-Item (Join-Path $repoRoot "pulselab.ico") (Join-Path $stage "pulselab.ico") -Force
     Copy-Item (Join-Path $repoRoot "installer\install.ps1") (Join-Path $stage "Install-PulseLab.ps1") -Force
 
     $instructions = @"

@@ -59,7 +59,7 @@ if (Test-Path -LiteralPath $toolsSrc) {
 }
 
 # Copiar arquivos de inicializacao e scripts
-foreach ($file in @("Iniciar-PulseLab.bat", "Desinstalar-PulseLab.bat", "Instalar-PulseLab.bat", "pulselab.ps1", "VERSION")) {
+foreach ($file in @("Iniciar-PulseLab.bat", "Desinstalar-PulseLab.bat", "Instalar-PulseLab.bat", "pulselab.ps1", "pulselab.ico", "VERSION")) {
     $src = Join-Path $sourceRoot $file
     if (Test-Path -LiteralPath $src) {
         Copy-Item -LiteralPath $src -Destination (Join-Path $DestinationDir $file) -Force
@@ -74,6 +74,10 @@ if (-not [string]::IsNullOrWhiteSpace($desktopPath) -and (Test-Path -LiteralPath
     $shortcut = $shell.CreateShortcut($shortcutPath)
     $shortcut.TargetPath = Join-Path $DestinationDir "Iniciar-PulseLab.bat"
     $shortcut.WorkingDirectory = $DestinationDir
+    $icoFile = Join-Path $DestinationDir "pulselab.ico"
+    if (Test-Path -LiteralPath $icoFile) {
+        $shortcut.IconLocation = "$icoFile,0"
+    }
     $shortcut.Description = "PulseLab $Version - Iniciar Oficina de Robótica"
     $shortcut.Save()
 }
