@@ -48,11 +48,34 @@ Write-Host "               PULSELAB 1.7.0 - OFICINA DE ROBÓTICA"
 Write-Host "===================================================================="
 Write-Host "Iniciando servidor local do PulseLab na porta $Port..."
 
-$windowStyle = if ($Hidden) { "Hidden" } else { "Normal" }
+# Verificar se o Bridge já está rodando
+$alreadyRunning = $false
+try {
+    $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+    if ($resp -and $resp.StatusCode -eq 200) { $alreadyRunning = $true }
+} catch {}
 
-Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$bridgeScript`" -Port $Port -AppRoot `"$AppRoot`" -DataDir `"$DataDir`""
-
-Start-Sleep -Milliseconds 800
+if (-not $alreadyRunning) {
+    $argList = @(
+        '-NoProfile',
+        '-ExecutionPolicy', 'Bypass',
+        '-WindowStyle', 'Hidden',
+        '-File', $bridgeScript,
+        '-Port', [string]$Port,
+        '-AppRoot', $AppRoot,
+        '-DataDir', $DataDir
+    )
+    Start-Process -FilePath "powershell.exe" -ArgumentList $argList
+    
+    # Aguardar até o servidor responder (até 5 segundos)
+    for ($i = 0; $i -lt 12; $i++) {
+        Start-Sleep -Milliseconds 400
+        try {
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
+            if ($resp -and $resp.StatusCode -eq 200) { break }
+        } catch {}
+    }
+}
 
 if (-not $NoBrowser) {
     Write-Host "Abrindo interface dos alunos no navegador padrão..."
