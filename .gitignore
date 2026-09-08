@@ -2,6 +2,8 @@
 
 # AI agent framework (internal tooling, not part of the project)
 .agent/
+.agents/
+skills-lock.json
 dist-offline/
 
 # Test directories and non-runtime test scripts
