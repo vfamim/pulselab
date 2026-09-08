@@ -187,7 +187,7 @@ $listener.Prefixes.Add($prefix)
 
 try {
     $listener.Start()
-    Write-BridgeLog "PulseLab Bridge v1.7.0 ativo em $prefix" "INFO"
+    Write-BridgeLog "PulseLab Bridge v1.7.1 ativo em $prefix" "INFO"
     Write-BridgeLog "Pasta da WebApp: $AppRoot" "INFO"
     Write-BridgeLog "Armazenamento:   $DataDir" "INFO"
 } catch {
@@ -258,7 +258,7 @@ try {
                 }
                 $healthObj = @{
                     status = "ok"
-                    version = "1.7.0"
+                    version = "1.7.1"
                     uptime_seconds = [Math]::Round($uptime, 1)
                     port = $Port
                     spike_detected = $spikeDetected

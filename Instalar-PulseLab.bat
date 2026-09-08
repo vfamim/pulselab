@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab — Instalação Local 100% Offline (v1.7.0)
+title PulseLab — Instalação Local 100% Offline (v1.7.1)
 echo ====================================================================
-echo                   PULSELAB — INSTALADOR OFFLINE (v1.7.0)
+echo                   PULSELAB — INSTALADOR OFFLINE (v1.7.1)
 echo ====================================================================
 echo.
 echo * Zero dependência de internet.

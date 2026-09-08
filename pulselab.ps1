@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.7.0 - Web-First Bridge & Student PWA Launcher
+# PulseLab 1.7.1 - Web-First Bridge & Student PWA Launcher
 
 [CmdletBinding()]
 param(
@@ -43,8 +43,26 @@ if ([string]::IsNullOrWhiteSpace($DataDir)) {
     $DataDir = Join-Path $env:LOCALAPPDATA "PulseLab\data"
 }
 
+function Get-DefaultBrowserExe {
+    try {
+        $progId = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" -ErrorAction SilentlyContinue).ProgId
+        if (-not $progId) {
+            $progId = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" -ErrorAction SilentlyContinue).ProgId
+        }
+        if ($progId) {
+            $cmd = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction SilentlyContinue).'(default)'
+            if ($cmd -match '"([^"]+\.exe)"') {
+                return $Matches[1]
+            } elseif ($cmd -match '([^\s]+\.exe)') {
+                return $Matches[1]
+            }
+        }
+    } catch {}
+    return $null
+}
+
 Write-Host "===================================================================="
-Write-Host "               PULSELAB 1.7.0 - OFICINA DE ROBÓTICA"
+Write-Host "               PULSELAB 1.7.1 - OFICINA DE ROBÓTICA"
 Write-Host "===================================================================="
 Write-Host "Iniciando servidor local do PulseLab na porta $Port..."
 
@@ -59,7 +77,7 @@ if (-not $alreadyRunning) {
     try {
         $ws = New-Object -ComObject WScript.Shell
         $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$bridgeScript`" -Port $Port -AppRoot `"$AppRoot`" -DataDir `"$DataDir`""
-        $ws.Run($cmd, 0, $false)
+        $ws.Run($cmd, 0, $false) | Out-Null
     } catch {
         $argList = @(
             '-NoProfile',
@@ -98,34 +116,38 @@ if (-not $alreadyRunning) {
 
 if (-not $NoBrowser) {
     $targetUrl = "http://127.0.0.1:$Port/alunos/"
-    
-    # Priorizar navegadores Chromium com modo --app para abrir janela limpa e com foco na frente
-    $chromiumCandidates = @(
-        "$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
-        "${env:ProgramFiles(x86)}\BraveSoftware\Brave-Browser\Application\brave.exe",
-        "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe",
-        "$env:ProgramFiles\Google\Chrome\Application\chrome.exe",
-        "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe",
-        "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe",
-        "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
-        "$env:ProgramFiles\Microsoft\Edge\Application\msedge.exe"
-    )
-
+    $browserExe = Get-DefaultBrowserExe
     $opened = $false
-    foreach ($exe in $chromiumCandidates) {
-        if (-not [string]::IsNullOrWhiteSpace($exe) -and (Test-Path -LiteralPath $exe -PathType Leaf)) {
+
+    if ($browserExe -and (Test-Path -LiteralPath $browserExe -PathType Leaf)) {
+        $browserName = [System.IO.Path]::GetFileNameWithoutExtension($browserExe)
+        $browserLower = $browserName.ToLowerInvariant()
+
+        # Se o navegador padrão for baseado em Chromium (Brave, Chrome, Edge, Vivaldi, Opera)
+        # abrir em modo janela dedicada (--app) para foco imediato no primeiro plano da tela
+        if ($browserLower -match 'brave|chrome|msedge|edge|opera|vivaldi') {
             try {
-                $browserName = [System.IO.Path]::GetFileNameWithoutExtension($exe)
-                Write-Host "Abrindo interface em janela dedicada via $browserName..." -ForegroundColor Green
-                Start-Process -FilePath $exe -ArgumentList @("--app=$targetUrl")
+                Write-Host "Abrindo interface no navegador padrão ($browserName) em janela dedicada..." -ForegroundColor Green
+                Start-Process -FilePath $browserExe -ArgumentList @("--app=$targetUrl")
                 $opened = $true
-                break
+            } catch {}
+        } elseif ($browserLower -match 'firefox') {
+            try {
+                Write-Host "Abrindo interface no navegador padrão ($browserName)..." -ForegroundColor Green
+                Start-Process -FilePath $browserExe -ArgumentList @("-new-window", $targetUrl)
+                $opened = $true
+            } catch {}
+        } else {
+            try {
+                Write-Host "Abrindo interface no navegador padrão ($browserName)..." -ForegroundColor Green
+                Start-Process -FilePath $browserExe -ArgumentList @($targetUrl)
+                $opened = $true
             } catch {}
         }
     }
 
     if (-not $opened) {
-        Write-Host "Abrindo interface dos alunos no navegador padrão..." -ForegroundColor Cyan
+        Write-Host "Abrindo interface no navegador padrão do sistema..." -ForegroundColor Cyan
         Start-Process $targetUrl
     }
 }

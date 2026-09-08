@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.7.0 - Local Windows Installer (PWA + Bridge)
+# PulseLab 1.7.1 - Local Windows Installer (PWA + Bridge)
 
 [CmdletBinding()]
 param(
@@ -8,7 +8,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.7.0"
+$Version = "1.7.1"
 
 function Write-InstallLog {
     param([ValidateSet("INFO", "OK", "WARN", "ERROR")][string]$Level, [string]$Message)

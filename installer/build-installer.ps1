@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.7.0 - Windows package builder (PWA + Bridge)
+# PulseLab 1.7.1 - Windows package builder (PWA + Bridge)
 # Builds the standalone release ZIP file containing the Web-First offline package.
 
 [CmdletBinding()]
@@ -9,7 +9,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.7.0"
+$Version = "1.7.1"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = Resolve-Path (Join-Path $scriptDir "..")
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
