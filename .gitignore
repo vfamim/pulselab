@@ -25,6 +25,8 @@ instrutor/config.js
 device_session.dat
 tokens.json
 *.dat
+*firebase-adminsdk*.json
+*-adminsdk-*.json
 
 # Slide and presentation files
 *.pptx
