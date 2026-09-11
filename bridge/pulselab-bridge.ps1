@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # PulseLab — Bridge HTTP Local e Companion de Alertas (Windows Offline)
 # ==============================================================================
 # - Servidor web local em http://127.0.0.1:43127/alunos/
@@ -175,6 +175,9 @@ function Check-SessionSchedule {
 $listener = New-Object System.Net.HttpListener
 $prefix = "http://127.0.0.1:$Port/"
 $listener.Prefixes.Add($prefix)
+try {
+    $listener.Prefixes.Add("http://localhost:$Port/")
+} catch {}
 
 try {
     $listener.Start()

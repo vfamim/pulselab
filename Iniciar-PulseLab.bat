@@ -24,8 +24,8 @@ if not exist "%APP_PATH%" (
 
 start "" /B powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%BASE_DIR%bridge\pulselab-bridge.ps1" -Port 43127 -AppRoot "%APP_PATH%" -DataDir "%LOCALAPPDATA%\PulseLab\data"
 
-:: Aguardar 1 segundo para o HttpListener inicializar
-timeout /t 1 /nobreak >nul 2>&1
+:: Aguardar 2 segundos para o HttpListener inicializar
+timeout /t 2 /nobreak >nul 2>&1
 
 :: Abrir interface Web diretamente no navegador padrao
 start http://127.0.0.1:43127/alunos/

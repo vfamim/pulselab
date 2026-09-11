@@ -467,7 +467,7 @@ function EvidencePanel({ events }) {
 
 export default function StudentPage() {
   const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
-  const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEMO_CONTEXT));
+  const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
   const [resumable, setResumable] = useState(() => readJson(ACTIVE_SESSION_KEY, null));
   const [screen, setScreen] = useState(() => {
     const saved = readJson(ACTIVE_SESSION_KEY, null);
@@ -587,7 +587,7 @@ export default function StudentPage() {
 
   function resumeSession() {
     if (!resumable) return;
-    setContext(resumable.context || DEMO_CONTEXT);
+    setContext(resumable.context || DEFAULT_CONTEXT);
     setSessionId(resumable.sessionId);
     setGroupId(resumable.groupId);
     setStartedAt(resumable.startedAt);
