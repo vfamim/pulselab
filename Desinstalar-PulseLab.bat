@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab — Desinstalar
+title PulseLab - Desinstalar
 echo ====================================================================
-echo                   PULSELAB — DESINSTALAÇÃO
+echo                   PULSELAB - DESINSTALACAO
 echo ====================================================================
 echo.
 
@@ -13,11 +13,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$desktop = [Environment]
 
 set "INSTALL_DIR=%LOCALAPPDATA%\PulseLab"
 if exist "%INSTALL_DIR%" (
-    echo Removendo arquivos de aplicação e bridge...
+    echo Removendo arquivos de aplicacao e bridge...
     rmdir /s /q "%INSTALL_DIR%\app" >nul 2>&1
     rmdir /s /q "%INSTALL_DIR%\bridge" >nul 2>&1
     del /f /q "%INSTALL_DIR%\*.bat" >nul 2>&1
-    echo Nota: A pasta de dados "%INSTALL_DIR%\data" foi preservada para segurança das pesquisas.
+    echo Nota: A pasta de dados "%INSTALL_DIR%\data" foi preservada para seguranca das pesquisas.
 )
 
 echo.

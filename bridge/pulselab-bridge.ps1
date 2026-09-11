@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # PulseLab — Bridge HTTP Local e Companion de Alertas (Windows Offline)
 # ==============================================================================
 # - Servidor web local em http://127.0.0.1:43127/alunos/
@@ -364,7 +364,7 @@ try {
                 $response.Close()
             }
         } catch {
-            Write-BridgeLog "Aviso ao atender requisição $($request.HttpMethod) $path`: $($_.Exception.Message)" "WARN"
+            Write-BridgeLog "Aviso ao atender requisicao $($request.HttpMethod) $path`: $($_.Exception.Message)" "WARN"
             try {
                 if ($context -and $context.Response) {
                     $context.Response.StatusCode = 500
@@ -374,7 +374,7 @@ try {
         }
     }
 } catch {
-    Write-BridgeLog "Exceção no loop do Bridge: $($_.Exception.ToString())" "ERROR"
+    Write-BridgeLog "Excecao no loop do Bridge: $($_.Exception.ToString())" "ERROR"
 } finally {
     Write-BridgeLog "Finalizando listener HTTP do PulseLab..." "INFO"
     if ($listener) {

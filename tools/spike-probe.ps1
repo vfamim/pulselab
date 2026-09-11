@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # PulseLab — Spike Probe (Diagnóstico e Mapeamento de UI Automation no Windows)
 # ==============================================================================
 # Script de diagnóstico 100% somente leitura para verificar quais elementos

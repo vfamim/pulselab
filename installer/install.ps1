@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # PulseLab 1.7.1 - Local Windows Installer (PWA + Bridge)
 
 [CmdletBinding()]
@@ -78,15 +78,15 @@ if (-not [string]::IsNullOrWhiteSpace($desktopPath) -and (Test-Path -LiteralPath
     if (Test-Path -LiteralPath $icoFile) {
         $shortcut.IconLocation = "$icoFile,0"
     }
-    $shortcut.Description = "PulseLab $Version - Iniciar Oficina de Robótica"
+    $shortcut.Description = "PulseLab $Version - Iniciar Oficina de Robotica"
     $shortcut.Save()
 }
 
 Write-InstallLog "OK" "PulseLab $Version instalado com sucesso!"
-Write-InstallLog "INFO" "Diretório de instalação: $DestinationDir"
-Write-InstallLog "INFO" "Atalho criado na Área de Trabalho: PulseLab - Iniciar Oficina"
+Write-InstallLog "INFO" "Diretorio de instalacao: $DestinationDir"
+Write-InstallLog "INFO" "Atalho criado na Area de Trabalho: PulseLab - Iniciar Oficina"
 Write-Host ""
 Write-Host "====================================================================" -ForegroundColor Green
-Write-Host "  Instalação concluída! O atalho já está na sua Área de Trabalho.   " -ForegroundColor Green
+Write-Host "  Instalacao concluida! O atalho ja esta na sua Area de Trabalho.   " -ForegroundColor Green
 Write-Host "====================================================================" -ForegroundColor Green
 Write-Host ""

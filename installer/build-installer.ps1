@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 # PulseLab 1.7.1 - Windows package builder (PWA + Bridge)
 # Builds the standalone release ZIP file containing the Web-First offline package.
 

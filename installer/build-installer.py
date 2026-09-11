@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "1.7.0"
+VERSION = "1.7.1"
 
 INSTRUCTIONS = """====================================================================
 PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
@@ -89,6 +89,8 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         # 3. Copiar Bridge
         shutil.copy2(repo_root / "bridge" / "pulselab-bridge.ps1", stage / "bridge" / "pulselab-bridge.ps1")
         shutil.copy2(repo_root / "bridge" / "spike-parser.ps1", stage / "bridge" / "spike-parser.ps1")
+        if (repo_root / "bridge" / "pulselab-toast.ps1").is_file():
+            shutil.copy2(repo_root / "bridge" / "pulselab-toast.ps1", stage / "bridge" / "pulselab-toast.ps1")
 
         # 4. Copiar Tools
         if (repo_root / "tools" / "spike-probe.ps1").is_file():
@@ -106,6 +108,8 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         shutil.copy2(repo_root / "Desinstalar-PulseLab.bat", stage / "Desinstalar-PulseLab.bat")
         shutil.copy2(repo_root / "pulselab.ps1", stage / "pulselab.ps1")
         shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
+        if (repo_root / "pulselab.ico").is_file():
+            shutil.copy2(repo_root / "pulselab.ico", stage / "pulselab.ico")
 
         # 7. Instruções e Versão
         (stage / "INSTRUCOES.txt").write_text(

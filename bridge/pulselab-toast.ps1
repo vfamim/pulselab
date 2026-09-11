@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # PulseLab — Notificação Toast Nativa e Amigável (Windows Offline)
 # ==============================================================================
 # - Exibe pop-up moderno e não-bloqueante no canto inferior direito
@@ -30,7 +30,7 @@ try {
     }
 
     $form = New-Object System.Windows.Forms.Form
-    $form.Text = "PulseLab — Check-in"
+    $form.Text = "PulseLab - Check-in"
     $form.Size = New-Object System.Drawing.Size(420, 145)
     $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
     $form.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
@@ -98,7 +98,7 @@ try {
 
     # Título amigável com destaque aqua PulseLab
     $lblTitle = New-Object System.Windows.Forms.Label
-    $lblTitle.Text = "PulseLab · Check-in de $Mark min"
+    $lblTitle.Text = "PulseLab - Check-in de $Mark min"
     $lblTitle.Font = New-Object System.Drawing.Font("Segoe UI", 11, [System.Drawing.FontStyle]::Bold)
     $lblTitle.ForeColor = [System.Drawing.Color]::FromArgb(94, 234, 212) # #5eead4
     $lblTitle.Location = New-Object System.Drawing.Point(96, 16)
@@ -114,9 +114,9 @@ try {
     $lblMsg.Size = New-Object System.Drawing.Size(295, 36)
     $form.Controls.Add($lblMsg)
 
-    # Botão principal de ação ("👉 Responder agora")
+    # Botão principal de ação
     $btnOpen = New-Object System.Windows.Forms.Button
-    $btnOpen.Text = "👉 Responder agora"
+    $btnOpen.Text = "Responder agora"
     $btnOpen.Font = New-Object System.Drawing.Font("Segoe UI", 9, [System.Drawing.FontStyle]::Bold)
     $btnOpen.ForeColor = [System.Drawing.Color]::White
     $btnOpen.BackColor = [System.Drawing.Color]::FromArgb(0, 167, 160) # #00a7a0
@@ -151,9 +151,9 @@ try {
     })
     $form.Controls.Add($btnOpen)
 
-    # Botão de fechar suave "✕"
+    # Botão de fechar suave "X"
     $btnClose = New-Object System.Windows.Forms.Button
-    $btnClose.Text = "✕"
+    $btnClose.Text = "X"
     $btnClose.Font = New-Object System.Drawing.Font("Segoe UI", 10)
     $btnClose.ForeColor = [System.Drawing.Color]::FromArgb(148, 163, 184)
     $btnClose.BackColor = [System.Drawing.Color]::Transparent

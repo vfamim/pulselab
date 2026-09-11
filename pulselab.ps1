@@ -1,5 +1,5 @@
-#Requires -Version 5.1
-# PulseLab 1.7.1 - Web-First Bridge & Student PWA Launcher
+﻿#Requires -Version 5.1
+# PulseLab 1.7.1 - Web-First Bridge & Student WebApp Launcher
 
 [CmdletBinding()]
 param(
@@ -43,30 +43,12 @@ if ([string]::IsNullOrWhiteSpace($DataDir)) {
     $DataDir = Join-Path $env:LOCALAPPDATA "PulseLab\data"
 }
 
-function Get-DefaultBrowserExe {
-    try {
-        $progId = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" -ErrorAction SilentlyContinue).ProgId
-        if (-not $progId) {
-            $progId = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice" -ErrorAction SilentlyContinue).ProgId
-        }
-        if ($progId) {
-            $cmd = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction SilentlyContinue).'(default)'
-            if ($cmd -match '"([^"]+\.exe)"') {
-                return $Matches[1]
-            } elseif ($cmd -match '([^\s]+\.exe)') {
-                return $Matches[1]
-            }
-        }
-    } catch {}
-    return $null
-}
-
 Write-Host "===================================================================="
-Write-Host "               PULSELAB 1.7.1 - OFICINA DE ROBÓTICA"
+Write-Host "               PULSELAB 1.7.1 - OFICINA DE ROBOTICA"
 Write-Host "===================================================================="
 Write-Host "Iniciando servidor local do PulseLab na porta $Port..."
 
-# Verificar se o Bridge já está rodando
+# Verificar se o Bridge ja esta rodando
 $alreadyRunning = $false
 try {
     $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
@@ -74,82 +56,30 @@ try {
 } catch {}
 
 if (-not $alreadyRunning) {
-    try {
-        $ws = New-Object -ComObject WScript.Shell
-        $cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$bridgeScript`" -Port $Port -AppRoot `"$AppRoot`" -DataDir `"$DataDir`""
-        $ws.Run($cmd, 0, $false) | Out-Null
-    } catch {
-        $argList = @(
-            '-NoProfile',
-            '-ExecutionPolicy', 'Bypass',
-            '-WindowStyle', 'Hidden',
-            '-File', $bridgeScript,
-            '-Port', [string]$Port,
-            '-AppRoot', $AppRoot,
-            '-DataDir', $DataDir
-        )
-        Start-Process -FilePath "powershell.exe" -ArgumentList $argList
-    }
+    $argList = @(
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-WindowStyle", "Hidden",
+        "-File", $bridgeScript,
+        "-Port", [string]$Port,
+        "-AppRoot", $AppRoot,
+        "-DataDir", $DataDir
+    )
+    Start-Process -FilePath "powershell.exe" -ArgumentList $argList
     
-    # Aguardar até o servidor responder (até 6 segundos)
-    $started = $false
-    for ($i = 0; $i -lt 15; $i++) {
-        Start-Sleep -Milliseconds 400
+    # Aguardar brevemente ate o servidor responder
+    for ($i = 0; $i -lt 10; $i++) {
+        Start-Sleep -Milliseconds 300
         try {
             $resp = Invoke-WebRequest -Uri "http://127.0.0.1:$Port/health" -UseBasicParsing -TimeoutSec 1 -ErrorAction SilentlyContinue
-            if ($resp -and $resp.StatusCode -eq 200) {
-                $started = $true
-                break
-            }
+            if ($resp -and $resp.StatusCode -eq 200) { break }
         } catch {}
-    }
-
-    if (-not $started) {
-        $logPath = Join-Path $DataDir "bridge.log"
-        Write-Host "[AVISO] O servidor local demorou para responder." -ForegroundColor Yellow
-        if (Test-Path $logPath) {
-            Write-Host "Últimas linhas do log ($logPath):" -ForegroundColor Yellow
-            Get-Content $logPath -Tail 5 | ForEach-Object { Write-Host "  $_" -ForegroundColor Gray }
-        }
     }
 }
 
 if (-not $NoBrowser) {
-    $targetUrl = "http://127.0.0.1:$Port/alunos/"
-    $browserExe = Get-DefaultBrowserExe
-    $opened = $false
-
-    if ($browserExe -and (Test-Path -LiteralPath $browserExe -PathType Leaf)) {
-        $browserName = [System.IO.Path]::GetFileNameWithoutExtension($browserExe)
-        $browserLower = $browserName.ToLowerInvariant()
-
-        # Se o navegador padrão for baseado em Chromium (Brave, Chrome, Edge, Vivaldi, Opera)
-        # abrir em modo janela dedicada (--app) para foco imediato no primeiro plano da tela
-        if ($browserLower -match 'brave|chrome|msedge|edge|opera|vivaldi') {
-            try {
-                Write-Host "Abrindo interface no navegador padrão ($browserName) em janela dedicada..." -ForegroundColor Green
-                Start-Process -FilePath $browserExe -ArgumentList @("--app=$targetUrl")
-                $opened = $true
-            } catch {}
-        } elseif ($browserLower -match 'firefox') {
-            try {
-                Write-Host "Abrindo interface no navegador padrão ($browserName)..." -ForegroundColor Green
-                Start-Process -FilePath $browserExe -ArgumentList @("-new-window", $targetUrl)
-                $opened = $true
-            } catch {}
-        } else {
-            try {
-                Write-Host "Abrindo interface no navegador padrão ($browserName)..." -ForegroundColor Green
-                Start-Process -FilePath $browserExe -ArgumentList @($targetUrl)
-                $opened = $true
-            } catch {}
-        }
-    }
-
-    if (-not $opened) {
-        Write-Host "Abrindo interface no navegador padrão do sistema..." -ForegroundColor Cyan
-        Start-Process $targetUrl
-    }
+    Write-Host "Abrindo interface dos alunos no navegador padrao..."
+    Start-Process "http://127.0.0.1:$Port/alunos/"
 }
 
 Write-Host "[OK] PulseLab ativo em http://127.0.0.1:$Port/alunos/"
