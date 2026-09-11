@@ -14,23 +14,14 @@ import {
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/1.7.0";
+const CLIENT_VERSION = "student-pwa/1.7.1";
 
-const EMPTY_CONTEXT = {
-  site_id: "",
-  regional: "",
-  school: "",
-  workshop: "",
-  class: "",
-  activity: "atividade-01-spike"
-};
-
-const DEMO_CONTEXT = {
-  site_id: "POLO-01",
-  regional: "Juazeiro",
-  school: "Escola Piloto",
-  workshop: "Oficina 01",
-  class: "Turma A",
+const DEFAULT_CONTEXT = {
+  site_id: "POLO-LOCAL",
+  regional: "Regional",
+  school: "Escola",
+  workshop: "Oficina-SPIKE",
+  class: "Turma-Geral",
   activity: "atividade-01-spike"
 };
 
@@ -44,11 +35,10 @@ const CHECKPOINT_DEFAULT = {
 const POST_DEFAULT = { understanding: null, affect: null, returnIntent: null };
 
 const FLOW_STEPS = [
-  { id: 1, label: "Preparar" },
-  { id: 2, label: "Início" },
-  { id: 3, label: "Atividade" },
-  { id: 4, label: "Check-in" },
-  { id: 5, label: "Finalizar" }
+  { id: 1, label: "Início" },
+  { id: 2, label: "Atividade" },
+  { id: 3, label: "Check-in" },
+  { id: 4, label: "Finalizar" }
 ];
 
 const EXPERIENCE_OPTIONS = [
@@ -116,11 +106,10 @@ async function fetchBridgeSpikeMetrics() {
 }
 
 function stepForScreen(screen) {
-  if (screen === "context") return 1;
-  if (screen === "pre") return 2;
-  if (screen === "activity") return 3;
-  if (screen.startsWith("checkpoint")) return 4;
-  return 5;
+  if (screen === "pre") return 1;
+  if (screen === "activity") return 2;
+  if (screen.startsWith("checkpoint")) return 3;
+  return 4;
 }
 
 function readJson(key, fallback) {
@@ -207,24 +196,18 @@ function Card({ eyebrow, title, description, children, footer, compact = false }
   );
 }
 
-function ContextScreen({ context, setContext, onStart, resumable, onResume, labMode }) {
-  const ready =
-    context.site_id.trim() &&
-    context.regional.trim() &&
-    context.school.trim() &&
-    context.workshop.trim() &&
-    context.class.trim();
-
+function PreScreen({ answers, setAnswers, onSubmit, resumable, onResume }) {
+  const ready = answers.experience !== null && answers.confidence !== null;
   return (
     <Card
-      eyebrow="Oficina de Robótica"
-      title="Deixe a atividade pronta para os alunos"
-      description="Informe os dados da turma para iniciar. O tempo de atividade e a telemetria do LEGO SPIKE serão monitorados automaticamente."
+      eyebrow="Oficina de Robótica · Início rápido (15 segundos)"
+      title="Como a dupla chega para esta oficina?"
+      description="Responda rapidamente antes de começar a montar e programar o robô LEGO SPIKE."
       footer={
         <div className="action-row">
-          <span className="footer-hint">Armazenamento 100% local e seguro neste dispositivo.</span>
-          <button className="button button--primary" disabled={!ready} onClick={onStart} type="button">
-            Iniciar Oficina
+          <span className="footer-hint">Sua resposta fica salva assim que você clica em começar.</span>
+          <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
+            Começar Atividade!
           </button>
         </div>
       }
@@ -241,87 +224,6 @@ function ContextScreen({ context, setContext, onStart, resumable, onResume, labM
         </div>
       ) : null}
 
-      <div className="form-grid">
-        <label>
-          <span>Código do polo</span>
-          <input
-            aria-label="Código do polo"
-            onChange={(event) => setContext({ ...context, site_id: event.target.value })}
-            placeholder="Ex.: POLO-01"
-            value={context.site_id}
-          />
-        </label>
-        <label>
-          <span>Regional / município</span>
-          <input
-            aria-label="Regional ou município"
-            onChange={(event) => setContext({ ...context, regional: event.target.value })}
-            placeholder="Ex.: Juazeiro"
-            value={context.regional}
-          />
-        </label>
-        <label className="form-grid__wide">
-          <span>Escola</span>
-          <input
-            aria-label="Escola"
-            onChange={(event) => setContext({ ...context, school: event.target.value })}
-            placeholder="Nome ou código da escola"
-            value={context.school}
-          />
-        </label>
-        <label>
-          <span>Oficina</span>
-          <input
-            aria-label="Oficina"
-            onChange={(event) => setContext({ ...context, workshop: event.target.value })}
-            placeholder="Ex.: Oficina 01"
-            value={context.workshop}
-          />
-        </label>
-        <label>
-          <span>Turma</span>
-          <input
-            aria-label="Turma"
-            onChange={(event) => setContext({ ...context, class: event.target.value })}
-            placeholder="Ex.: Turma A"
-            value={context.class}
-          />
-        </label>
-        <label>
-          <span>Atividade LEGO SPIKE</span>
-          <select
-            aria-label="Atividade"
-            onChange={(event) => setContext({ ...context, activity: event.target.value })}
-            value={context.activity}
-          >
-            <option value="atividade-01-spike">Atividade 01 · SPIKE</option>
-            <option value="atividade-02-spike">Atividade 02 · SPIKE</option>
-            <option value="atividade-03-spike">Atividade 03 · SPIKE</option>
-          </select>
-        </label>
-      </div>
-
-      {labMode ? <p className="lab-footnote">Modo de laboratório: os campos de demonstração foram preenchidos automaticamente.</p> : null}
-    </Card>
-  );
-}
-
-function PreScreen({ answers, setAnswers, onSubmit }) {
-  const ready = answers.experience !== null && answers.confidence !== null;
-  return (
-    <Card
-      eyebrow="Antes da atividade · 15 segundos"
-      title="Como o grupo chega para esta oficina?"
-      description="Responda rapidamente antes de começar a montar e programar."
-      footer={
-        <div className="action-row">
-          <span className="footer-hint">Sua resposta fica salva assim que você clica em começar.</span>
-          <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
-            Começar Atividade!
-          </button>
-        </div>
-      }
-    >
       <ScaleQuestion
         legend="Quanto o grupo já trabalhou com robótica ou programação?"
         onChange={(experience) => setAnswers({ ...answers, experience })}
@@ -565,9 +467,12 @@ function EvidencePanel({ events }) {
 
 export default function StudentPage() {
   const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
-  const [context, setContext] = useState(() => readJson(CONTEXT_KEY, labMode ? DEMO_CONTEXT : EMPTY_CONTEXT));
-  const [screen, setScreen] = useState("context");
+  const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEMO_CONTEXT));
   const [resumable, setResumable] = useState(() => readJson(ACTIVE_SESSION_KEY, null));
+  const [screen, setScreen] = useState(() => {
+    const saved = readJson(ACTIVE_SESSION_KEY, null);
+    return saved?.screen && saved.screen !== "context" ? saved.screen : "pre";
+  });
   const [sessionId, setSessionId] = useState(createUuid);
   const [groupId, setGroupId] = useState(createUuid);
   const [installationId] = useState(getInstallationId);
@@ -680,39 +585,9 @@ export default function StudentPage() {
     }
   }
 
-  function startFreshSession() {
-    const nextSessionId = createUuid();
-    const nextGroupId = createUuid();
-    const nextStartedAt = Date.now();
-    localStorage.setItem(CONTEXT_KEY, JSON.stringify(context));
-    setSessionId(nextSessionId);
-    setGroupId(nextGroupId);
-    setStartedAt(nextStartedAt);
-    setActivityStartedAt(null);
-    setElapsedMs(0);
-    setCurrentMark(20);
-    setTimeline([]);
-    setResponses([]);
-    setSpikeTelemetry(null);
-    setPreAnswers(PRE_DEFAULT);
-    setCheckpoint20Answers(CHECKPOINT_DEFAULT);
-    setCheckpoint40Answers(CHECKPOINT_DEFAULT);
-    setPostAnswers(POST_DEFAULT);
-    sequenceRef.current = 0;
-    checkpointOpeningRef.current = false;
-    setResumable(null);
-
-    emitTimeline("session_started", {
-      activity_stage: "init",
-      details: { runtime: "browser_pwa" }
-    });
-
-    setScreen("pre");
-  }
-
   function resumeSession() {
     if (!resumable) return;
-    setContext(resumable.context);
+    setContext(resumable.context || DEMO_CONTEXT);
     setSessionId(resumable.sessionId);
     setGroupId(resumable.groupId);
     setStartedAt(resumable.startedAt);
@@ -732,6 +607,11 @@ export default function StudentPage() {
   }
 
   function submitPre() {
+    emitTimeline("session_started", {
+      activity_stage: "init",
+      details: { runtime: "browser_pwa" }
+    });
+
     emitResponse("pre", {
       activity_stage: "pre",
       prior_robotics: preAnswers.experience,
@@ -748,6 +628,7 @@ export default function StudentPage() {
       details: { runtime: "browser_pwa", checkpoints_minutes: [20, 40] }
     });
     void captureSpikeTelemetry("activity_start");
+    setResumable(null);
     setScreen("activity");
   }
 
@@ -826,10 +707,27 @@ export default function StudentPage() {
     setScreen("finished");
   }
 
-  function resetToContext() {
+  function resetToPre() {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
-    setScreen("context");
+    const nextSessionId = createUuid();
+    const nextGroupId = createUuid();
+    setSessionId(nextSessionId);
+    setGroupId(nextGroupId);
+    setStartedAt(Date.now());
+    setActivityStartedAt(null);
+    setElapsedMs(0);
+    setCurrentMark(20);
+    setTimeline([]);
+    setResponses([]);
+    setSpikeTelemetry(null);
+    setPreAnswers(PRE_DEFAULT);
+    setCheckpoint20Answers(CHECKPOINT_DEFAULT);
+    setCheckpoint40Answers(CHECKPOINT_DEFAULT);
+    setPostAnswers(POST_DEFAULT);
+    sequenceRef.current = 0;
+    checkpointOpeningRef.current = false;
     setResumable(null);
+    setScreen("pre");
   }
 
   function downloadSession() {
@@ -874,7 +772,7 @@ export default function StudentPage() {
   }, [activityStartedAt, currentMark, labMode, screen]);
 
   useEffect(() => {
-    if (["context", "finished"].includes(screen)) return;
+    if (screen === "finished") return;
     const snapshot = {
       sessionId,
       groupId,
@@ -900,12 +798,12 @@ export default function StudentPage() {
 
   let content;
 
-  if (screen === "context") {
-    content = <ContextScreen {...{ context, setContext, resumable, labMode }} onStart={startFreshSession} onResume={resumeSession} />;
-  } else if (screen === "pre") {
+  if (screen === "pre") {
     content = (
       <PreScreen
         answers={preAnswers}
+        resumable={resumable}
+        onResume={resumeSession}
         setAnswers={setPreAnswers}
         onSubmit={submitPre}
       />
@@ -939,7 +837,7 @@ export default function StudentPage() {
       />
     );
   } else {
-    content = <FinishedScreen pendingCount={pendingCount} onDownload={downloadSession} onRestart={resetToContext} />;
+    content = <FinishedScreen pendingCount={pendingCount} onDownload={downloadSession} onRestart={resetToPre} />;
   }
 
   return (
@@ -949,7 +847,7 @@ export default function StudentPage() {
           <span className="brand__mark" aria-hidden="true">P</span>
           <span>
             <strong>PulseLab</strong>
-            <small>oficina de robótica · v1.7.0</small>
+            <small>oficina de robótica · v1.7.1</small>
           </span>
         </div>
         <div className="topbar__notice">
@@ -958,7 +856,7 @@ export default function StudentPage() {
         </div>
         <div className="topbar__session">
           <span>Sessão</span>
-          <code>{screen === "context" ? "aguardando" : sessionId.slice(0, 8).toUpperCase()}</code>
+          <code>{sessionId.slice(0, 8).toUpperCase()}</code>
         </div>
       </header>
 
@@ -966,7 +864,7 @@ export default function StudentPage() {
         <aside className="flow-sidebar">
           <div className="flow-sidebar__header">
             <span>Progresso da oficina</span>
-            <strong>{activeStep}/5</strong>
+            <strong>{activeStep}/4</strong>
           </div>
           <nav aria-label="Etapas da atividade">
             {FLOW_STEPS.map((step) => (
@@ -976,13 +874,11 @@ export default function StudentPage() {
               </div>
             ))}
           </nav>
-          {screen !== "context" ? (
-            <div className="sidebar-context">
-              <span>Turma atual</span>
-              <strong>{context.class}</strong>
-              <small>{context.workshop} · {context.school}</small>
-            </div>
-          ) : null}
+          <div className="sidebar-context">
+            <span>Oficina LEGO SPIKE</span>
+            <strong>Desafio Ativo</strong>
+            <small>Coleta anônima por dupla</small>
+          </div>
         </aside>
 
         <section className="simulator-stage">

@@ -36,11 +36,8 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("conclui a jornada rápida da oficina com checkpoints e finalização", async ({ page }) => {
-  await expect(page.getByRole("heading", { name: "Deixe a atividade pronta para os alunos" })).toBeVisible();
-  await page.getByRole("button", { name: "Iniciar Oficina" }).click();
-
-  // Tela Pré (Início)
-  await expect(page.getByRole("heading", { name: "Como o grupo chega para esta oficina?" })).toBeVisible();
+  // Tela Pré (Início imediato sem burocracia de cadastro)
+  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
   await answerPre(page);
 
   // Tela Atividade
@@ -51,7 +48,7 @@ test("conclui a jornada rápida da oficina com checkpoints e finalização", asy
   await expect(page.getByRole("heading", { name: "Como está indo o projeto?" })).toBeVisible();
   await answerCheckpoint(page);
 
-  // Volta para a Atividade (sem tela de troca de papéis)
+  // Volta para a Atividade
   await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
 
   // Checkpoint de 40 min
@@ -69,22 +66,22 @@ test("conclui a jornada rápida da oficina com checkpoints e finalização", asy
 });
 
 test("retoma do ponto salvo depois de recarregar a página", async ({ page }) => {
-  await page.getByRole("button", { name: "Iniciar Oficina" }).click();
-  await expect(page.getByRole("heading", { name: "Como o grupo chega para esta oficina?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+  await answerPre(page);
+  await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: "Continuar sessão salva" }).click();
-  await expect(page.getByRole("heading", { name: "Como o grupo chega para esta oficina?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
 });
 
 test("carrega a aplicação instalada mesmo sem internet", async ({ page, context }) => {
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Deixe a atividade pronta para os alunos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
 
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: "Deixe a atividade pronta para os alunos" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
   await expect(page.getByText("Modo acelerado para testes")).toBeVisible();
 
   await context.setOffline(false);
