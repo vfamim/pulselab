@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="PulseLab - Download e Instruções de Execução Simplificada para Windows">
-  <title>PulseLab | Download e Execução Simplificada (v1.6.0)</title>
+  <title>PulseLab | Download e Execução Simplificada (v1.7.1)</title>
 
   <!-- Google Fonts: Outfit & Inter -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -124,43 +124,14 @@
       line-height: 1.45;
     }
 
-    .security-notice {
-      background: rgba(245, 158, 11, 0.12);
-      border: 1px solid rgba(245, 158, 11, 0.35);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 24px;
-      display: flex;
-      align-items: flex-start;
-      gap: 14px;
-    }
-
-    .security-notice-icon {
-      font-size: 1.5rem;
-      line-height: 1;
-    }
-
-    .security-notice-content h4 {
-      font-size: 0.95rem;
-      color: #fde68a;
-      margin-bottom: 4px;
-      font-weight: 700;
-    }
-
-    .security-notice-content p {
-      font-size: 0.82rem;
-      color: #f3f0f8;
-      line-height: 1.45;
-    }
-
     .steps-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 16px;
       margin-bottom: 24px;
     }
 
-    @media (max-width: 680px) {
+    @media (max-width: 768px) {
       .steps-grid { grid-template-columns: 1fr; }
     }
 
@@ -258,56 +229,56 @@
   <div class="container">
     <header>
       <div class="brand-mark">
-        <span class="dot"></span> PulseLab Protocol v1.6.0
+        <span class="dot"></span> PulseLab Protocol v1.7.1
       </div>
-      <h1>Download e Execução Direta</h1>
-      <p class="subtitle">Procedimento rápido e simplificado para execução do PulseLab nos laboratórios escolares.</p>
+      <h1>Download e Instalação Offline</h1>
+      <p class="subtitle">Arquitetura Web-First 100% Offline: Interface no navegador padrão, Bridge HTTP local mínimo e telemetria automática do LEGO SPIKE (.llsp3).</p>
     </header>
 
-    <!-- CARD: DOWNLOAD OFICIAL E PACOTE WINDOWS -->
+    <!-- CARD: DOWNLOAD PRINCIPAL DO PACOTE WINDOWS -->
     <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
       <div class="card-title" style="color: #5eead4;">
-        <span>📦</span> Pacote Oficial PulseLab para Windows
+        <span>📦</span> Pacote PulseLab v1.7.1 para Windows (100% Offline)
       </div>
       <div class="card-subtitle">
-        Pacote autônomo e pré-configurado para Windows 10 e 11. Inclui launcher com auto-atualização segura (SHA-256), sincronização direta na nuvem e telemetria para oficinas com LEGO SPIKE.
+        Pacote autônomo transportável por pendrive. Não requer internet durante a oficina, roda sem direitos de administrador e abre a interface diretamente no navegador padrão.
       </div>
 
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-        <a href="/instalador/downloads/PulseLab-1.6.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>⬇️</span> Baixar PulseLab-1.6.0-Windows.zip
+        <a href="/instalador/downloads/PulseLab-1.7.1-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>⬇️</span> Baixar PulseLab-1.7.1-Windows.zip (~92 KB)
         </a>
         <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>🎨</span> Ver Guia Ilustrado / PDF
+          <span>🎨</span> Ver Guia Ilustrado / Slides
         </a>
-        <span style="font-size: 0.82rem; color: #c4b5fd;">
-          Versão: <strong>1.6.0</strong> · Formato: <strong>ZIP autônomo (~38 KB)</strong>
-        </span>
+        <a href="/alunos/?lab=1" target="_blank" class="copy-btn" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; color: #a7f3d0;">
+          <span>🧪</span> Testar PWA no Navegador
+        </a>
       </div>
 
-      <div style="margin-bottom: 12px;">
+      <div style="margin-bottom: 16px;">
         <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
           Checksum SHA-256 Oficial:
-          <a href="/instalador/downloads/PulseLab-1.6.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
+          <a href="/instalador/downloads/PulseLab-1.7.1-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
         </label>
         <div class="code-box">
-          <span style="font-size: 0.8rem;">07dbe569a5678de7aeb3803a6f99624116d101d13f810200375d6149675d5c55  PulseLab-1.6.0-Windows.zip</span>
+          <span style="font-size: 0.8rem;">42634903ea7cc612d4538ebae84df88eee9665f64a243783c08b896cf9082b85  PulseLab-1.7.1-Windows.zip</span>
           <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
         </div>
       </div>
 
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
-        ✨ <strong>Zero Configuração (v1.6.0):</strong> O aplicativo já vem pré-configurado com conexão direta à nuvem e auto-atualização segura do GitHub com validação criptográfica SHA-256 e fallback offline.
+        ✨ <strong>Novidades da v1.7.1:</strong> Notificação toast nativa leve e amigável com o robozinho mascote (processo não-bloqueante), detecção automática inteligente do navegador padrão em modo aplicativo, loop HTTP resiliente e leitura contínua de projetos LEGO SPIKE (.llsp3).
       </div>
     </div>
 
-    <!-- CARD: INSTRUÇÕES DE EXECUÇÃO -->
+    <!-- CARD: INSTRUÇÕES DE EXECUÇÃO EM 3 PASSOS -->
     <div class="card">
       <div class="card-title">
-        <span>📋</span> Como Iniciar a Oficina (Em 3 Passos)
+        <span>📋</span> Como Instalar e Iniciar a Oficina (Em 3 Passos)
       </div>
       <div class="card-subtitle">
-        Procedimento prático para instrutores e escolas:
+        Procedimento direto e sem complexidade para instrutores e laboratórios:
       </div>
 
       <div class="steps-grid">
@@ -315,23 +286,23 @@
           <div class="step-num">1</div>
           <div class="step-title">Baixar e Extrair</div>
           <div class="step-text">
-            Baixe o arquivo <code>PulseLab-1.6.0-Windows.zip</code> acima e extraia a pasta em qualquer diretório da máquina (ex: Área de Trabalho ou Documentos).
+            Baixe o arquivo <code>PulseLab-1.7.1-Windows.zip</code> acima e extraia todo o conteúdo em uma pasta (ex: Área de Trabalho ou Pendrive).
           </div>
         </div>
 
         <div class="step-card">
           <div class="step-num">2</div>
-          <div class="step-title">Iniciar com 2 Cliques</div>
+          <div class="step-title">Instalar ou Iniciar</div>
           <div class="step-text">
-            Abra a pasta extraída e dê dois cliques no arquivo <code>Iniciar-Oficina-Oficial.bat</code> (ou <code>Instalar-PulseLab.bat</code>). Não precisa configurar URLs nem chaves.
+            Dê dois cliques em <code>Instalar-PulseLab.bat</code> para criar o atalho fixo na Área de Trabalho ou em <code>Iniciar-PulseLab.bat</code> para rodar direto do pendrive.
           </div>
         </div>
 
         <div class="step-card">
           <div class="step-num">3</div>
-          <div class="step-title">Confirmar Contexto e Coletar</div>
+          <div class="step-title">Navegador Abre Sozinho</div>
           <div class="step-text">
-            Confirme os dados da escola/turma na tela visual do PulseLab e clique em <em>"Iniciar Oficina"</em>. O acompanhamento roda em segundo plano.
+            O navegador abre em <code>http://127.0.0.1:43127/alunos/</code>. A dupla responde o início em 15s, o cronômetro inicia e os alertas tocam aos 20 e 40 min.
           </div>
         </div>
       </div>
@@ -341,9 +312,8 @@
       <p>
         PulseLab Pesquisa Aplicada ·
         <a href="/tutorial/">Tutorial & Guia Ilustrado</a> ·
-        <a href="/instrutor/">Portal do Instrutor</a> ·
-        <a href="/simulador/">Simulador dos Alunos</a> ·
-        <a href="/relatorio/">Relatório Acadêmico</a> ·
+        <a href="/testes/">Ambiente de Testes</a> ·
+        <a href="/alunos/?lab=1">Jornada dos Alunos (PWA)</a> ·
         <a href="/">Página Principal</a>
       </p>
     </footer>

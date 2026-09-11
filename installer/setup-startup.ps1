@@ -1,5 +1,5 @@
 ﻿#Requires -Version 5.1
-# PulseLab 1.6.0 - compatibility setup for a checked-out repository
+# PulseLab 1.7.0 - compatibility setup for a checked-out repository
 
 [CmdletBinding()]
 param(
@@ -23,29 +23,32 @@ foreach ($path in @($LauncherPath, $enrollPath)) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Required file not found: $path" }
 }
 
-Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
-[Environment]::SetEnvironmentVariable("PULSELAB_URL", $SupabaseUrl, "User")
-[Environment]::SetEnvironmentVariable("PULSELAB_ANON_KEY", $SupabaseAnonKey, "User")
-[Environment]::SetEnvironmentVariable("PULSELAB_KEY", $null, "User")
+$targetDir = "$env:LOCALAPPDATA\PulseLab"
+$agentScript = (Resolve-Path "$PSScriptRoot\..\agent\pulselab-agent.ps1").Path
+$launcherScript = (Resolve-Path "$PSScriptRoot\..\pulselab.ps1").Path
 
-& $enrollPath `
-    -SupabaseUrl $SupabaseUrl `
-    -SupabaseAnonKey $SupabaseAnonKey `
-    -SiteId $SiteId `
-    -RegionalHub $RegionalHub `
-    -SchoolCode $SchoolCode `
-    -ComputerId $ComputerId
+Write-Host "Configuring PulseLab development launcher..." -ForegroundColor Cyan
 
-$locations = @([Environment]::GetFolderPath("Desktop"), [Environment]::GetFolderPath("Programs")) |
-    Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path -LiteralPath $_) }
-foreach ($location in $locations) {
-    $shortcutPath = Join-Path $location "Iniciar PulseLab - Oficina de Robotica.lnk"
-    $shell = New-Object -ComObject WScript.Shell
-    $shortcut = $shell.CreateShortcut($shortcutPath)
-    $shortcut.TargetPath = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$LauncherPath`""
-    $shortcut.WorkingDirectory = $repoRoot
-    $shortcut.Description = "PulseLab 1.6.0 - Oficina de Robotica"
-    $shortcut.Save()
+# Create local data and config directories
+New-Item -ItemType Directory -Path "$targetDir\logs" -Force | Out-Null
+New-Item -ItemType Directory -Path "$targetDir\data" -Force | Out-Null
+New-Item -ItemType Directory -Path "$targetDir\config" -Force | Out-Null
+
+if (Test-Path $ConfigPath) {
+    Copy-Item -Path $ConfigPath -Destination "$targetDir\config\config.json" -Force
+    Write-Host "Copied config from $ConfigPath" -ForegroundColor Green
 }
-Write-Host "PulseLab 1.6.0 enrolled and configured for the current user." -ForegroundColor Green
+
+# Create Startup Shortcut using Windows Script Host
+$wsh = New-Object -ComObject WScript.Shell
+$startupFolder = [Environment]::GetFolderPath("Startup")
+$shortcutPath = Join-Path $startupFolder "PulseLab.lnk"
+$shortcut = $wsh.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = "powershell.exe"
+$shortcut.Arguments = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherScript`""
+$shortcut.WorkingDirectory = Split-Path -Parent $launcherScript
+$shortcut.Description = "PulseLab 1.7.0 - Oficina de Robotica"
+$shortcut.Save()
+
+Write-Host "PulseLab 1.7.0 enrolled and configured for the current user." -ForegroundColor Green
+Write-Host "Startup shortcut created at: $shortcutPath" -ForegroundColor Green

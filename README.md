@@ -4,6 +4,16 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
+## Novidades da Versão 1.7.1
+
+- **Detecção Inteligente do Navegador Padrão**: Identifica automaticamente o navegador padrão do Windows pelo registro (Brave, Chrome, Edge, Firefox, etc.) e ativa modo de janela dedicada (`--app`) para trazer a atividade imediatamente para a frente da tela.
+- **Servidor Local Desacoplado e Resiliente**: Servidor HTTP local mínimo (`127.0.0.1:43127`) com tratamento de erro isolado por requisição, loop sem travamentos e log contínuo em `%LOCALAPPDATA%\PulseLab\data\bridge.log`.
+- **Arquitetura Web-First Desacoplada (PWA 100% Offline)**: A jornada dos alunos roda diretamente no navegador padrão, eliminando sobrecarga e travamentos de interface, com armazenamento local em IndexedDB e service worker completo.
+- **Instalador Portátil Zero-Internet (ZIP de ~92 KB)**: Pacote autônomo transportável por pendrive, sem download de fontes remotas ou dependências externas, instalável com 2 cliques e sem permissões de administrador.
+- **Parser Estrutural de Projetos LEGO SPIKE (.llsp3)**: Análise automática de blocos Scratch/Python para inferência de avanço técnico e redução drástica das perguntas dos questionários.
+
+---
+
 ## Novidades da Versão 1.6.0
 
 - **Zero Configuração para Escolas e Usuários Não-Técnicos**: Removida a necessidade de preencher manualmente URL do Supabase, anon key e tokens de enrollment durante a instalação. O instalador e o agente já vêm pré-configurados com os parâmetros da nuvem.
@@ -34,161 +44,99 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
-## Arquitetura do Repositório
+## Arquitetura do Repositório (v1.7.1)
 
 ```
 pulselab/
-├── pulselab.ps1                # Launcher autenticado com auto-update seguro e fallback offline
-├── agent/
-│   └── pulselab-agent.ps1      # Daemon PowerShell WPF (coletor em background e interfaces)
-├── config/
-│   └── config.json             # Configuração remota GitOps (fonte de verdade no GitHub)
-├── dashboard/
-│   └── index.html              # Painel Analytics (Resultados, Metodologia, TCC e Coletor)
+├── bridge/
+│   ├── pulselab-bridge.ps1     # Bridge HTTP local (porta 43127), relógio e alertas nativos
+│   └── spike-parser.ps1        # Parser offline de arquivos .llsp3 do LEGO SPIKE App 3
+├── alunos/                     # Build de produção estático da PWA dos alunos (HTML/CSS/JS)
 ├── web/
-│   └── agent-simulator/        # Simulador navegável do agente para Linux e validação
-├── installer/
-│   ├── build-installer.py      # Script Python para compilar o instalador único (Linux/macOS)
-│   ├── build-installer.ps1     # Script PowerShell para compilar o instalador único (Windows)
-│   └── setup-startup.ps1       # Setup manual via PowerShell por máquina
-├── schema/
-│   └── supabase-schema.sql     # DDL completo da tabela e bucket no Supabase
-└── docs/
-    ├── PLAN-pulselab-mvp.md    # Especificações históricas do MVP
-    ├── protocolo-pesquisa-v1.md # Protocolo acadêmico e decisões pendentes
-    ├── parecer-roadmap-observacao-distribuida.md # Parecer e roadmap de longo prazo
-    ├── arquitetura-evidencias-v1.4.md # Contrato técnico do primeiro incremento
-    ├── contexto-projeto-robotica-educativa.md # Contexto institucional público usado no front
-    ├── validacao-simulador-web.md # Protocolo de validação do fluxo navegável
-    ├── relatorio-metodologia-pulselab.html # Relatório navegável
-    └── tcc-research-framework.md # Guia histórico do TCC
+│   └── agent-simulator/        # Código-fonte da PWA (React, Vite, IndexedDB e testes)
+├── config/
+│   ├── defaults.json           # Configurações padrão offline
+│   └── config.json             # Configuração do protocolo (v1.7.1)
+├── instalador/                 # Página do instalador web e downloads dos pacotes ZIP
+│   └── downloads/              # Pacotes PulseLab-1.7.1-Windows.zip e PulseLab-Alunos-Offline-v1.7.1.zip
+├── testes/                     # Aba oculta para homologação rápida e download
+├── tutorial/                   # Guia operacional ilustrado interativo em slides (Marp)
+├── dashboard/                  # Painel de acompanhamento e visualização
+├── scripts/
+│   └── build-offline-package.sh # Compilador do pacote 100% offline (~88 KB)
+└── installer/
+    ├── build-installer.py      # Builder do pacote Windows
+    └── install.ps1             # Instalador local zero-touch
 ```
 
 ---
 
-## Pré-requisitos
+## O Que o PulseLab Coleta e Como Funciona
 
-- Para o agente real: Windows 10 ou superior com PowerShell 5.1, um projeto
-  configurado no [Supabase](https://supabase.com) e permissão de usuário padrão.
-- Para o simulador: Linux, macOS ou Windows, Node.js e um navegador atual. O
-  simulador não precisa de Supabase e não coleta dados reais.
+### 1. Respostas Rápidas da Dupla (Jornada em 5 Passos)
+A aplicação elimina o "passa-passa" de teclado. A dupla que compartilha o computador responde conjuntamente em menos de 1 minuto em toda a oficina:
+- **Início (15 segundos):** Experiência prévia com robótica e confiança para o desafio.
+- **Checkpoints aos 20 e 40 minutos (20 segundos):** Esforço mental exigido, situação do progresso (travamos/começando/avançando/testando), colaboração e botão de pedir socorro ao professor.
+- **Finalização (30 segundos):** Compreensão do que foi construído/programado, sensação da equipe e interesse em novas oficinas.
 
-## Simulador web no Linux
+### 2. Telemetria Automática do LEGO SPIKE 3 (.llsp3)
+O Bridge inspeciona o projeto salvo no SPIKE (`Documents\LEGO Education\SPIKE 3`) de forma contínua e nos marcos de 20 e 40 minutos:
+- **Contagem de blocos funcionais:** Volume real de blocos Scratch/Python programados.
+- **Detecção de componentes:** Uso de blocos de motores, sensores de cor/distância/força, laços de repetição (`repeat/forever`) e condições lógicas (`if/else`).
+- **Inferência automática de estágios:** Classifica o avanço técnico da equipe (*Vazio $\rightarrow$ Montagem Inicial $\rightarrow$ Movimento Básico $\rightarrow$ Reativo a Sensores $\rightarrow$ Laço Autônomo $\rightarrow$ Missão Integrada*).
+- **Delta de evolução:** Quantidade de blocos adicionados ou removidos entre o minuto 20 e o minuto 40.
 
-O fluxo da versão 1.5.0 pode ser percorrido no navegador sem uma máquina Windows:
+> 🔒 **Privacidade por Design (LGPD):** O PulseLab **NÃO** coleta nomes de alunos, fotos de webcam, prints de tela, textos digitados em variáveis nem identificadores Bluetooth do Hub.
 
+---
+
+## Como Instalar e Executar
+
+### 1. Pacote 100% Offline (Recomendado para Escolas)
+1. Baixe `PulseLab-1.7.1-Windows.zip` (~92 KB) em [`instalador/downloads/`](instalador/downloads/).
+2. Extraia o ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
+3. Dê 2 cliques em `Instalar-PulseLab.bat` (cria o atalho) ou em `Iniciar-PulseLab.bat` (roda direto).
+4. O navegador padrão abre automaticamente em `http://127.0.0.1:43127/alunos/` com funcionamento autônomo e sem conexão à internet.
+
+### 2. Desenvolvimento e Testes no Linux / Navegador
 ```bash
 cd web/agent-simulator
 npm install
 npm run dev
+# Ou execute a suíte de testes unitários e ponta-a-ponta:
+npm run check
 ```
 
-Acesse `http://localhost:3000`. A interface permite simular o fluxo padrão,
-atraso de checkpoint, ausência do SPIKE e queda de rede, além de inspecionar os
-eventos e exportar a sessão em JSON.
+### 3. Gerar o pacote de release reproduzível
 
-Essa versão valida a experiência do instrumento e seus contratos. Captura de
-tela, detecção da janela do SPIKE, cache em disco, sincronização com Supabase e
-integração Win32 continuam sendo responsabilidades do agente Windows. O roteiro
-de avaliação está em
-[`docs/validacao-simulador-web.md`](docs/validacao-simulador-web.md).
-
----
-
-## Setup: Supabase
-
-1. Acesse o painel do seu projeto no Supabase Studio.
-2. Abra o **SQL Editor**.
-3. Execute todo o conteúdo de `schema/supabase-schema.sql`. Isso irá:
-   - Criar, sem apagar a tabela legada, a tabela `research_events`.
-   - Criar `research_session_events` para a linha do tempo e controle de qualidade.
-   - Criar a view protegida `research_session_quality` para o futuro backend do painel.
-   - Adicionar os campos de rastreabilidade 1.5 a bancos já existentes.
-   - Configurar `screenshots` como bucket privado.
-   - Remover a política de leitura pública criada pela versão 1.2.
-   - Conceder explicitamente apenas `INSERT` ao coletor com credenciais autenticadas; consultas e ingestão anônima não autorizada permanecem bloqueadas.
-
-> RLS é uma salvaguarda técnica, mas não substitui consentimento, assentimento, minimização, controle de acesso e política de retenção.
-
----
-
-## Setup: GitHub (GitOps)
-
-1. Edite o arquivo `config/config.json`:
-   - Defina `"site_id"` para a sede/cidade inicial ou informe-o ao gerar o instalador.
-   - Insira o identificador regional em `"regional_hub"` (ex: `"Polo-Nordeste-01"`).
-   - Defina os códigos padrão de escola, oficina e turma. Valores que ainda começarem com `CONFIGURE_` aparecerão vazios na primeira abertura.
-   - Ajuste `activity_id` e as perguntas somente após aprovação da versão do protocolo.
-   - Configure `"config_remote_url"` com a URL raw do seu repositório pessoal:
-     ```
-     https://raw.githubusercontent.com/vfamim/pulselab/main/config/config.json
-     ```
-2. Realize o commit e envie para a branch `main` ou de release ativa.
-
-Sede, regional, escola, oficina, turma, atividade e tamanho do grupo são persistidos em `%LOCALAPPDATA%\PulseLab\installation.json` após a primeira confirmação válida. Na próxima execução, a preparação reaparece preenchida para conferência e edição. A confirmação das autorizações nunca é reutilizada: precisa ser marcada em cada oficina. Atualizações remotas do protocolo não substituem a identidade local da instalação.
-
----
-
-## Instalação segura no Windows
-
-O pacote público não contém URL privada, token de enrollment, senha ou chave administrativa. A instalação é por usuário porque o DPAPI vincula a sessão à conta do Windows.
-
-### 1. Preparar o backend
-
-1. Aplique as migrations de `supabase/migrations/`.
-2. Publique `supabase/functions/enroll-device`.
-3. Mantenha `SUPABASE_SERVICE_ROLE_KEY` somente nos secrets da Edge Function e no ambiente administrativo.
-4. Emita um token por máquina com `supabase/scripts/provision_device.py`; nunca envie a chave administrativa ao computador da oficina.
-
-### 2. Baixar e validar
-
-- Site: `https://pulselab-robotica-edu.web.app/instalador/`
-- GitHub Release: `https://github.com/vfamim/pulselab/releases/tag/v1.6.0`
-
-```powershell
-Get-FileHash .\PulseLab-1.6.0-Windows.zip -Algorithm SHA256
+```bash
+# Compila PWA, gera ZIPs para instalador/downloads e atualiza checksums:
+./scripts/build-offline-package.sh
 ```
 
-### 3. Instalar e executar
-
-1. Extraia todo o ZIP.
-2. Para execução direta sem instalação: dê dois cliques em `Iniciar-Oficina-Oficial.bat`.
-3. Para instalar e criar atalho na Área de Trabalho: dê dois cliques em `Instalar-PulseLab.bat`.
-4. Não é necessário digitar URLs ou chaves: o pacote já vem pré-configurado.
-5. Abra o atalho **Iniciar PulseLab - Oficina de Robótica** ou o arquivo `.bat`.
-
-O aplicativo é instalado em `%LOCALAPPDATA%\PulseLab\App` caso execute o instalador.
-
-### Gerar o pacote reproduzível
+Ou diretamente via Python / PowerShell:
 
 ```bash
 python3 installer/build-installer.py \
-  --output instalador/downloads/PulseLab-1.6.0-Windows.zip
+  --output instalador/downloads/PulseLab-1.7.1-Windows.zip
 ```
 
 ```powershell
 .\installer\build-installer.ps1 `
-  -OutputPath .\instalador\downloads\PulseLab-1.6.0-Windows.zip
+  -OutputPath .\instalador\downloads\PulseLab-1.7.1-Windows.zip
 ```
 
-Os dois builders geram um ZIP pré-configurado, `SHA256SUMS.txt` interno e um arquivo `.zip.sha256` externo.
+Os builders geram o ZIP pré-configurado com a PWA compilada, Bridge local, `SHA256SUMS.txt` interno e manifesto `.zip.sha256`.
 
 ---
 
-## Como Usar na Oficina (Fluxo do Usuário)
+## Como Usar na Oficina (Jornada em 5 Telas da Dupla)
 
-1. O instrutor abre o atalho, revisa os dados operacionais pré-preenchidos e corrige o que mudou, sem nomes de estudantes.
-2. O instrutor confirma que verificou as autorizações e o consentimento aplicáveis.
-3. Cada criança recebe o convite de assentimento. Se qualquer uma recusar, o coletor encerra e a dupla continua normalmente na oficina.
-4. As crianças respondem, separadamente, experiência prévia e autoeficácia.
-5. A atividade recebe uma linha do tempo com heartbeats técnicos minimizados.
-6. Aos **20 e 40 minutos absolutos**, cada participante responde sozinho sobre esforço mental e situação da dupla. A colaboração é perguntada aos 40 minutos por padrão.
-7. Depois do minuto 20, o agente solicita e registra a troca dos papéis por padrão.
-8. Se alguém selecionar “precisamos de ajuda agora”, o agente alerta o instrutor e registra o evento.
-9. A captura opcional registra a região da tela correspondente à janela do SPIKE e é enviada ao bucket privado.
-10. Problemas como atraso, ausência da janela do SPIKE ou falha de captura geram eventos de qualidade.
-11. Depois do último checkpoint, o agente aguarda o instrutor selecionar **Concluir Oficina**.
-12. O instrutor registra desempenho da missão, intervenções e dificuldade principal. Depois, cada participante responde compreensão, afetos e intenção de retorno.
+1. **Preparação:** O instrutor abre o atalho, confere o código da turma/estação e clica em *Iniciar Oficina*.
+2. **Check-in Inicial (15s):** A dupla responde duas perguntas rápidas sobre experiência prévia e confiança para o desafio do dia.
+3. **Oficina em Andamento:** O cronômetro de tempo absoluto inicia e a dupla foca 100% no SPIKE. O Bridge analisa os arquivos `.llsp3` do robô em segundo plano.
+4. **Checkpoints aos 20 e 40 minutos (20s):** Alertas sonoros e visuais avisam os alunos para avaliarem esforço mental, progresso e colaboração (com botão de socorro ao professor).
+5. **Check-out Final & Conclusão (30s):** Autoavaliação da compreensão, sensação da equipe e gravação segura na outbox local em IndexedDB.
 
 ---
 
@@ -274,7 +222,7 @@ git pull --ff-only
 ```
 
 
-Confirme que o agente é a versão 1.6.0:
+Confirme que o agente é a versão 1.7.0:
 
 ```powershell
 Select-String .\agent\pulselab-agent.ps1 -Pattern 'Version    :'

@@ -8,7 +8,7 @@ export const TIMELINE_EVENT_TYPES = [
   "checkpoint_started",
   "checkpoint_completed",
   "help_requested",
-  "role_swapped",
+  "spike_telemetry",
   "ending_requested",
   "rubric_completed",
   "session_completed",
@@ -17,10 +17,9 @@ export const TIMELINE_EVENT_TYPES = [
 ];
 
 export const PARTICIPANTS = {
+  grupo: { id: "GRUPO", label: "Grupo" },
   A: { id: "PARTICIPANTE-A", label: "Participante A" },
-  B: { id: "PARTICIPANTE-B", label: "Participante B" },
-  C: { id: "PARTICIPANTE-C", label: "Participante C" },
-  D: { id: "PARTICIPANTE-D", label: "Participante D" }
+  B: { id: "PARTICIPANTE-B", label: "Participante B" }
 };
 
 export function createUuid() {
@@ -38,8 +37,7 @@ export function createUuid() {
 export function getQualityStatus({
   timeline,
   responses,
-  expectedCheckpointCount = 2,
-  participantCount
+  expectedCheckpointCount = 2
 }) {
   if (timeline.some((event) => event.event_type === "session_aborted")) {
     return "aborted";
@@ -65,24 +63,12 @@ export function getQualityStatus({
     (event) => event.event_type === "post" && (event.response_status === "completed" || !event.response_status)
   ).length;
 
-  const sessionStarted = timeline.find(
-    (event) => event.event_type === "session_started"
-  );
-  const pCount =
-    participantCount ||
-    sessionStarted?.details?.participant_count ||
-    (preCompletedCount >= 3 ? 3 : preCompletedCount === 1 ? 1 : 2);
-
-  const minPre = Math.max(1, pCount);
-  const minCheckpoints = expectedCheckpointCount * pCount;
-  const minPost = Math.max(1, pCount);
-
   if (
     qualityIssueCount > 0 ||
     completedCheckpointCount < expectedCheckpointCount ||
-    preCompletedCount < minPre ||
-    checkpointCompletedCount < minCheckpoints ||
-    postCompletedCount < minPost
+    preCompletedCount < 1 ||
+    checkpointCompletedCount < expectedCheckpointCount ||
+    postCompletedCount < 1
   ) {
     return "needs_review";
   }

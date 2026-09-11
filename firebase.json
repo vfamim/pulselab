@@ -6,17 +6,26 @@
       "**/.*",
       "**/node_modules/**",
       "agent/**",
+      "bridge/**",
       "config/**",
       "dashboard/**",
+      "dist-offline/**",
       "docs/**",
       "installer/**",
       "schema/**",
+      "scripts/**",
+      "simulador/**",
+      "supabase/**",
       "tests/**",
+      "tools/**",
       "web/**",
-      "*.ps1",
-      "*.bat",
-      "*.py",
-      "*.sql"
+      "**/*.ps1",
+      "**/*.bat",
+      "**/*.cmd",
+      "**/*.sh",
+      "**/*.py",
+      "**/*.sql",
+      "**/*.exe"
     ],
     "headers": [
       {
@@ -31,8 +40,12 @@
     ],
     "rewrites": [
       {
+        "source": "/alunos/**",
+        "destination": "/alunos/index.html"
+      },
+      {
         "source": "/simulador/**",
-        "destination": "/simulador/index.html"
+        "destination": "/alunos/index.html"
       },
       {
         "source": "/instrutor/**",
@@ -45,6 +58,14 @@
       {
         "source": "/tutorial/**",
         "destination": "/tutorial/index.html"
+      },
+      {
+        "source": "/testes/**",
+        "destination": "/testes/index.html"
+      },
+      {
+        "source": "/lab/**",
+        "destination": "/testes/index.html"
       }
     ]
   }
