@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # PulseLab 1.7.1 - Web-First Bridge & Student WebApp Launcher
 
 [CmdletBinding()]
@@ -7,7 +7,11 @@ param(
     [string]$AppRoot = "",
     [string]$DataDir = "",
     [switch]$NoBrowser,
-    [switch]$Hidden
+    [switch]$Hidden,
+    [switch]$LabMode,
+    [switch]$DebugMode,
+    [switch]$ProductionTest,
+    [switch]$QuickTest
 )
 
 Set-StrictMode -Version Latest
@@ -78,8 +82,12 @@ if (-not $alreadyRunning) {
 }
 
 if (-not $NoBrowser) {
-    Write-Host "Abrindo interface dos alunos no navegador padrao..."
-    Start-Process "http://127.0.0.1:$Port/alunos/"
+    $targetUrl = "http://127.0.0.1:$Port/alunos/"
+    if ($LabMode -or $DebugMode -or $ProductionTest -or $QuickTest) {
+        $targetUrl = "http://127.0.0.1:$Port/alunos/?lab=1"
+    }
+    Write-Host "Abrindo interface dos alunos no navegador padrao ($targetUrl)..."
+    Start-Process $targetUrl
 }
 
 Write-Host "[OK] PulseLab ativo em http://127.0.0.1:$Port/alunos/"

@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # PulseLab — Notificação Toast Nativa e Amigável (Windows Offline)
 # ==============================================================================
 # - Exibe pop-up moderno e não-bloqueante no canto inferior direito
@@ -22,12 +22,14 @@ Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
 Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
 
 try {
-    # Tocar som suave de checkpoint
+    # Tocar som de checkpoint (Asterisk + Beep audível para máxima compatibilidade)
     try {
         [System.Media.SystemSounds]::Asterisk.Play()
-    } catch {
-        try { [System.Console]::Beep(880, 200) } catch {}
-    }
+    } catch {}
+    try {
+        [System.Console]::Beep(1046, 150)
+        [System.Console]::Beep(1318, 200)
+    } catch {}
 
     $form = New-Object System.Windows.Forms.Form
     $form.Text = "PulseLab - Check-in"
@@ -37,6 +39,14 @@ try {
     $form.TopMost = $true
     $form.ShowInTaskbar = $false
     $form.BackColor = [System.Drawing.Color]::FromArgb(24, 18, 44) # #18122c
+
+    # Garantir foco e primeiro plano ao exibir
+    $form.Add_Shown({
+        try {
+            $form.Activate()
+            $form.BringToFront()
+        } catch {}
+    })
 
     # Posicionar no canto inferior direito da área de trabalho
     $screen = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea

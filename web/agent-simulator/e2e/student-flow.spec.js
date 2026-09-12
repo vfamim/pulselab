@@ -86,3 +86,23 @@ test("carrega a aplicação instalada mesmo sem internet", async ({ page, contex
 
   await context.setOffline(false);
 });
+
+test("permite forçar avanço, testar alerta com modal e reiniciar a oficina", async ({ page }) => {
+  // Preencher teste na tela pré
+  await page.getByRole("button", { name: "✨ Preencher teste" }).click();
+  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
+
+  // Testar disparo de som e modal de alerta
+  await page.getByRole("button", { name: "🔔 Testar Som & Pop-up" }).click();
+  await expect(page.getByRole("heading", { name: /Hora do Check-in de 20 minutos!/ })).toBeVisible();
+
+  // Clicar no botão do modal para abrir o checkpoint
+  await page.getByRole("button", { name: "Responder Check-in Agora (30s)" }).click();
+  await expect(page.getByRole("heading", { name: "Como está indo o projeto?" })).toBeVisible();
+
+  // Reiniciar a oficina a qualquer momento
+  page.on("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "🔄 Reiniciar", exact: true }).click();
+  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+});

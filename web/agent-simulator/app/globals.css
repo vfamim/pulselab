@@ -2133,3 +2133,225 @@ select:focus-visible {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ==========================================================================
+   Controles do Instrutor / Demonstração & Modal de Alerta
+   ========================================================================== */
+
+.topbar__controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.topbar-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 14px;
+  border-radius: 9px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.topbar-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.topbar-btn.is-active {
+  background: var(--aqua);
+  color: var(--violet-950);
+  border-color: var(--aqua);
+}
+
+.topbar-btn--danger {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+}
+
+.topbar-btn--danger:hover {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fff;
+}
+
+.instructor-banner {
+  background: #1e1538;
+  border-bottom: 2px solid #7c3aed;
+  padding: 12px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  animation: slideDown 0.2s ease-out;
+}
+
+.instructor-banner__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.instructor-banner__info strong {
+  font-size: 0.92rem;
+  color: #a78bfa;
+}
+
+.instructor-banner__info span {
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.instructor-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.inst-btn {
+  background: #2a1f4d;
+  color: #e2e8f0;
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.inst-btn:hover {
+  background: #3b2c6a;
+  border-color: rgba(167, 139, 250, 0.6);
+  color: #fff;
+}
+
+.inst-btn--accent {
+  background: rgba(0, 167, 160, 0.25);
+  border-color: rgba(0, 195, 187, 0.6);
+  color: #5eead4;
+}
+
+.inst-btn--accent:hover {
+  background: rgba(0, 167, 160, 0.45);
+  color: #fff;
+}
+
+.inst-btn--danger {
+  background: rgba(220, 38, 38, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.inst-btn--danger:hover {
+  background: rgba(220, 38, 38, 0.4);
+  color: #fff;
+}
+
+/* Modal de Alerta de Checkpoint */
+.alert-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 12, 27, 0.78);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  animation: fadeIn 0.2s ease-out;
+  padding: 20px;
+}
+
+.alert-modal {
+  background: #18122c;
+  border: 2px solid #7c3aed;
+  border-radius: 20px;
+  padding: 32px 36px;
+  max-width: 480px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5), 0 0 30px rgba(124, 58, 237, 0.25);
+  animation: popIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.alert-modal__icon {
+  font-size: 3.5rem;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+
+.alert-modal__badge {
+  display: inline-block;
+  background: rgba(124, 58, 237, 0.25);
+  color: #c4b5fd;
+  border: 1px solid rgba(124, 58, 237, 0.4);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+
+.alert-modal__eyebrow {
+  display: block;
+  font-size: 0.82rem;
+  color: #a78bfa;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.alert-modal h2 {
+  color: #5eead4;
+  font-size: 1.6rem;
+  margin: 0 0 12px;
+  font-weight: 800;
+}
+
+.alert-modal p {
+  color: #cbd5e1;
+  font-size: 0.98rem;
+  line-height: 1.5;
+  margin: 0 0 24px;
+}
+
+.alert-modal__actions {
+  display: flex;
+  justify-content: center;
+}
+
+.button--pulse {
+  animation: pulseButton 1.8s infinite;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pulseButton {
+  0% { box-shadow: 0 0 0 0 rgba(73, 217, 206, 0.5); }
+  70% { box-shadow: 0 0 0 14px rgba(73, 217, 206, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(73, 217, 206, 0); }
+}

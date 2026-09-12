@@ -105,6 +105,73 @@ async function fetchBridgeSpikeMetrics() {
   return null;
 }
 
+function playChimeSound() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    const now = ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6 (harmonia agradável e nítida)
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+      gain.gain.setValueAtTime(0.001, now + idx * 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.28, now + idx * 0.12 + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.45);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.12);
+      osc.stop(now + idx * 0.12 + 0.45);
+    });
+  } catch {
+    // Silencioso se navegador restringir autoplay
+  }
+}
+
+async function triggerBridgeAlert(mark = 20) {
+  try {
+    await fetch(`${BRIDGE_URL}/v1/alert`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mark })
+    });
+  } catch {
+    // Operação normal mesmo sem o Bridge
+  }
+}
+
+async function resetBridgeSession() {
+  try {
+    await fetch(`${BRIDGE_URL}/v1/sessions/reset`, {
+      method: "POST"
+    });
+  } catch {
+    // Operação normal mesmo sem o Bridge
+  }
+}
+
+function requestNotificationPermission() {
+  if (typeof Notification !== "undefined" && Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+  }
+}
+
+function showWebNotification(mark) {
+  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+    try {
+      new Notification(`PulseLab: Check-in de ${mark} min!`, {
+        body: "Pausa rápida de 30 segundos no robô para o grupo registrar o progresso.",
+        icon: "/alunos/icon.svg"
+      });
+    } catch {}
+  }
+}
+
 function stepForScreen(screen) {
   if (screen === "pre") return 1;
   if (screen === "activity") return 2;
@@ -249,14 +316,16 @@ function ActivityScreen({ elapsedMs, currentMark, labMode, onOpenCheckpoint, spi
       title="Pode focar no projeto do SPIKE"
       description={`Construam e programem normalmente. O próximo check-in curto será aberto aos ${currentMark} minutos.`}
       footer={
-        labMode ? (
-          <div className="action-row">
-            <span className="footer-hint">No laboratório, não é necessário esperar o relógio real.</span>
-            <button className="button button--primary" onClick={onOpenCheckpoint} type="button">
-              Abrir checkpoint de {currentMark} min
-            </button>
-          </div>
-        ) : null
+        <div className="action-row">
+          <span className="footer-hint">
+            {labMode
+              ? "No laboratório, não é necessário esperar o relógio real."
+              : "Demonstração ou avanço manual: abra o check-in a qualquer momento."}
+          </span>
+          <button className="button button--primary" onClick={onOpenCheckpoint} type="button">
+            Abrir checkpoint de {currentMark} min
+          </button>
+        </div>
       }
     >
       <div className="activity-timer" aria-live="polite">
@@ -465,31 +534,57 @@ function EvidencePanel({ events }) {
   );
 }
 
+function CheckpointAlertModal({ mark, onProceed }) {
+  return (
+    <div className="alert-modal-backdrop" role="dialog" aria-modal="true">
+      <div className="alert-modal">
+        <div className="alert-modal__icon">🤖</div>
+        <span className="alert-modal__eyebrow">Aviso da Oficina · PulseLab</span>
+        <h2>Hora do Check-in de {mark} minutos!</h2>
+        <p>Pausa rápida de 30 segundos na montagem e programação do robô LEGO SPIKE para a dupla registrar como está o progresso.</p>
+        <div className="alert-modal__actions">
+          <button className="button button--primary button--pulse" onClick={onProceed} type="button" autoFocus>
+            Responder Check-in Agora (30s)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentPage() {
   const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
+  const savedSession = useMemo(() => readJson(ACTIVE_SESSION_KEY, null), []);
+
   const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
-  const [resumable, setResumable] = useState(() => readJson(ACTIVE_SESSION_KEY, null));
+  const [resumable, setResumable] = useState(savedSession);
   const [screen, setScreen] = useState(() => {
-    const saved = readJson(ACTIVE_SESSION_KEY, null);
-    return saved?.screen && saved.screen !== "context" ? saved.screen : "pre";
+    return savedSession?.screen && savedSession.screen !== "context" ? savedSession.screen : "pre";
   });
-  const [sessionId, setSessionId] = useState(createUuid);
-  const [groupId, setGroupId] = useState(createUuid);
+  const [sessionId, setSessionId] = useState(() => savedSession?.sessionId || createUuid());
+  const [groupId, setGroupId] = useState(() => savedSession?.groupId || createUuid());
   const [installationId] = useState(getInstallationId);
-  const [startedAt, setStartedAt] = useState(Date.now);
-  const [activityStartedAt, setActivityStartedAt] = useState(null);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [currentMark, setCurrentMark] = useState(20);
-  const [timeline, setTimeline] = useState([]);
-  const [responses, setResponses] = useState([]);
-  const [spikeTelemetry, setSpikeTelemetry] = useState(null);
-  const [preAnswers, setPreAnswers] = useState(PRE_DEFAULT);
-  const [checkpoint20Answers, setCheckpoint20Answers] = useState(CHECKPOINT_DEFAULT);
-  const [checkpoint40Answers, setCheckpoint40Answers] = useState(CHECKPOINT_DEFAULT);
-  const [postAnswers, setPostAnswers] = useState(POST_DEFAULT);
+  const [startedAt, setStartedAt] = useState(() => savedSession?.startedAt || Date.now());
+  const [activityStartedAt, setActivityStartedAt] = useState(() => savedSession?.activityStartedAt || null);
+  const [elapsedMs, setElapsedMs] = useState(() => {
+    if (savedSession?.activityStartedAt) {
+      return Math.max(0, Date.now() - savedSession.activityStartedAt);
+    }
+    return savedSession?.elapsedMs || 0;
+  });
+  const [currentMark, setCurrentMark] = useState(() => savedSession?.currentMark || 20);
+  const [timeline, setTimeline] = useState(() => savedSession?.timeline || []);
+  const [responses, setResponses] = useState(() => savedSession?.responses || []);
+  const [spikeTelemetry, setSpikeTelemetry] = useState(() => savedSession?.spikeTelemetry || null);
+  const [preAnswers, setPreAnswers] = useState(() => savedSession?.preAnswers || PRE_DEFAULT);
+  const [checkpoint20Answers, setCheckpoint20Answers] = useState(() => savedSession?.checkpoint20Answers || CHECKPOINT_DEFAULT);
+  const [checkpoint40Answers, setCheckpoint40Answers] = useState(() => savedSession?.checkpoint40Answers || CHECKPOINT_DEFAULT);
+  const [postAnswers, setPostAnswers] = useState(() => savedSession?.postAnswers || POST_DEFAULT);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState("");
-  const sequenceRef = useRef(0);
+  const [checkpointModalMark, setCheckpointModalMark] = useState(null);
+  const [showInstructorTools, setShowInstructorTools] = useState(labMode);
+  const sequenceRef = useRef(savedSession?.sequence || 0);
   const checkpointOpeningRef = useRef(false);
 
   const allEvents = [...timeline, ...responses];
@@ -592,7 +687,7 @@ export default function StudentPage() {
     setGroupId(resumable.groupId);
     setStartedAt(resumable.startedAt);
     setActivityStartedAt(resumable.activityStartedAt);
-    setElapsedMs(resumable.elapsedMs || 0);
+    setElapsedMs(resumable.activityStartedAt ? Math.max(0, Date.now() - resumable.activityStartedAt) : (resumable.elapsedMs || 0));
     setCurrentMark(resumable.currentMark || 20);
     setTimeline(resumable.timeline || []);
     setResponses(resumable.responses || []);
@@ -607,6 +702,8 @@ export default function StudentPage() {
   }
 
   function submitPre() {
+    requestNotificationPermission();
+
     emitTimeline("session_started", {
       activity_stage: "init",
       details: { runtime: "browser_pwa" }
@@ -632,11 +729,42 @@ export default function StudentPage() {
     setScreen("activity");
   }
 
+  function triggerCheckpointAlert(mark = currentMark) {
+    if (checkpointOpeningRef.current) return;
+    playChimeSound();
+    showWebNotification(mark);
+    void triggerBridgeAlert(mark);
+    setCheckpointModalMark(mark);
+
+    if (document.hidden) {
+      let toggle = false;
+      const originalTitle = document.title;
+      const titleTimer = window.setInterval(() => {
+        document.title = toggle ? `🔔 [Check-in ${mark}m] PulseLab` : "PulseLab - Oficina de Robótica";
+        toggle = !toggle;
+      }, 1000);
+
+      const onFocus = () => {
+        window.clearInterval(titleTimer);
+        document.title = originalTitle;
+        window.removeEventListener("focus", onFocus);
+      };
+      window.addEventListener("focus", onFocus);
+    }
+  }
+
+  function handleProceedFromModal() {
+    const markToOpen = checkpointModalMark || currentMark;
+    setCheckpointModalMark(null);
+    openCheckpoint(markToOpen);
+  }
+
   function openCheckpoint(mark = currentMark) {
     if (checkpointOpeningRef.current) return;
     checkpointOpeningRef.current = true;
-    const checkpointElapsed = labMode ? mark * 60 * 1000 : elapsedMs;
-    if (labMode) setElapsedMs(checkpointElapsed);
+    setCheckpointModalMark(null);
+    const checkpointElapsed = Math.max(elapsedMs, mark * 60 * 1000);
+    setElapsedMs(checkpointElapsed);
     void notifyBridgeCheckpointAck(sessionId, mark);
     emitTimeline("checkpoint_started", {
       activity_stage: `checkpoint_${mark}`,
@@ -709,6 +837,7 @@ export default function StudentPage() {
 
   function resetToPre() {
     localStorage.removeItem(ACTIVE_SESSION_KEY);
+    void resetBridgeSession();
     const nextSessionId = createUuid();
     const nextGroupId = createUuid();
     setSessionId(nextSessionId);
@@ -724,10 +853,72 @@ export default function StudentPage() {
     setCheckpoint20Answers(CHECKPOINT_DEFAULT);
     setCheckpoint40Answers(CHECKPOINT_DEFAULT);
     setPostAnswers(POST_DEFAULT);
+    setCheckpointModalMark(null);
     sequenceRef.current = 0;
     checkpointOpeningRef.current = false;
     setResumable(null);
     setScreen("pre");
+    flash("Oficina reiniciada do zero com sucesso.");
+  }
+
+  function handleConfirmReset() {
+    const confirmed = window.confirm(
+      "Deseja realmente reiniciar a oficina do zero?\n\nIsso apagará a sessão atual neste computador e iniciará uma nova oficina limpa."
+    );
+    if (!confirmed) return;
+    resetToPre();
+  }
+
+  function forceCheckpoint(mark = currentMark) {
+    if (screen === "pre") {
+      const now = Date.now();
+      setActivityStartedAt(now);
+      setElapsedMs(mark * 60 * 1000);
+      setScreen("activity");
+    }
+    triggerCheckpointAlert(mark);
+  }
+
+  function forcePost() {
+    checkpointOpeningRef.current = false;
+    setCheckpointModalMark(null);
+    setScreen("post");
+    flash("Avançado para a finalização pós-oficina.");
+  }
+
+  function addMinutes(minutes = 5) {
+    if (!activityStartedAt) {
+      const now = Date.now();
+      setActivityStartedAt(now - minutes * 60 * 1000);
+      setElapsedMs(minutes * 60 * 1000);
+    } else {
+      setActivityStartedAt((prev) => prev - minutes * 60 * 1000);
+      setElapsedMs((prev) => prev + minutes * 60 * 1000);
+    }
+    flash(`Cronômetro adiantado em +${minutes} minutos.`);
+  }
+
+  function testSoundAndAlert() {
+    triggerCheckpointAlert(currentMark);
+    flash("Som e Pop-up disparados para demonstração!");
+  }
+
+  function autoFillCurrentStep() {
+    if (screen === "pre") {
+      setPreAnswers({ experience: 2, confidence: 3 });
+      flash("Início preenchido. Clique em 'Começar Atividade!'");
+    } else if (screen === "activity") {
+      triggerCheckpointAlert(currentMark);
+    } else if (screen === "checkpoint20") {
+      setCheckpoint20Answers({ effort: 2, progress: "progressing_with_doubt", collaboration: 3, help: false });
+      flash("Check-in 20m preenchido. Clique em 'Salvar e continuar'");
+    } else if (screen === "checkpoint40") {
+      setCheckpoint40Answers({ effort: 3, progress: "progressing_independently", collaboration: 4, help: false });
+      flash("Check-in 40m preenchido. Clique em 'Salvar e continuar'");
+    } else if (screen === "post") {
+      setPostAnswers({ understanding: 3, affect: "confident", returnIntent: 4 });
+      flash("Finalização preenchida. Clique em 'Concluir Oficina'");
+    }
   }
 
   function downloadSession() {
@@ -758,18 +949,18 @@ export default function StudentPage() {
   }, []);
 
   useEffect(() => {
-    if (screen !== "activity" || !activityStartedAt || labMode) return undefined;
+    if (screen !== "activity" || !activityStartedAt) return undefined;
     const tick = () => {
       const nextElapsed = Math.max(0, Date.now() - activityStartedAt);
       setElapsedMs(nextElapsed);
-      if (nextElapsed >= currentMark * 60 * 1000 && !checkpointOpeningRef.current) {
-        openCheckpoint(currentMark);
+      if (nextElapsed >= currentMark * 60 * 1000 && !checkpointOpeningRef.current && checkpointModalMark === null) {
+        triggerCheckpointAlert(currentMark);
       }
     };
     tick();
     const timer = window.setInterval(tick, 1000);
     return () => window.clearInterval(timer);
-  }, [activityStartedAt, currentMark, labMode, screen]);
+  }, [activityStartedAt, checkpointModalMark, currentMark, screen]);
 
   useEffect(() => {
     if (screen === "finished") return;
@@ -854,11 +1045,68 @@ export default function StudentPage() {
           <span>{labMode ? "LAB" : "OFFLINE"}</span>
           <p>{labMode ? "Modo acelerado para testes" : "Sem burocracia · telemetria automática do SPIKE"}</p>
         </div>
-        <div className="topbar__session">
-          <span>Sessão</span>
-          <code>{sessionId.slice(0, 8).toUpperCase()}</code>
+        <div className="topbar__controls">
+          <div className="topbar__session">
+            <span>Sessão</span>
+            <code>{sessionId.slice(0, 8).toUpperCase()}</code>
+          </div>
+          <button
+            className={`topbar-btn ${showInstructorTools ? "is-active" : ""}`}
+            onClick={() => setShowInstructorTools((v) => !v)}
+            title="Abrir controles do instrutor e demonstração rápida"
+            type="button"
+          >
+            ⚙️ Controles
+          </button>
+          <button
+            className="topbar-btn topbar-btn--danger"
+            onClick={handleConfirmReset}
+            title="Reiniciar oficina do zero"
+            type="button"
+          >
+            🔄 Reiniciar
+          </button>
         </div>
       </header>
+
+      {showInstructorTools ? (
+        <div className="instructor-banner">
+          <div className="instructor-banner__info">
+            <strong>🛠️ Controles de Demonstração & Instrutor</strong>
+            <span>Avance etapas instantaneamente ou teste os alertas sonoros e visuais</span>
+          </div>
+          <div className="instructor-banner__actions">
+            <button className="inst-btn" onClick={() => forceCheckpoint(20)} type="button">
+              ⏩ Check-in 20m
+            </button>
+            <button className="inst-btn" onClick={() => forceCheckpoint(40)} type="button">
+              ⏩ Check-in 40m
+            </button>
+            <button className="inst-btn" onClick={forcePost} type="button">
+              🏁 Ir para Finalizar
+            </button>
+            <button className="inst-btn" onClick={() => addMinutes(5)} type="button">
+              ⏱️ +5 min relógio
+            </button>
+            <button className="inst-btn inst-btn--accent" onClick={testSoundAndAlert} type="button">
+              🔔 Testar Som & Pop-up
+            </button>
+            <button className="inst-btn" onClick={autoFillCurrentStep} type="button">
+              ✨ Preencher teste
+            </button>
+            <button className="inst-btn inst-btn--danger" onClick={handleConfirmReset} type="button">
+              🔄 Reiniciar Oficina
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {checkpointModalMark ? (
+        <CheckpointAlertModal
+          mark={checkpointModalMark}
+          onProceed={handleProceedFromModal}
+        />
+      ) : null}
 
       <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
         <aside className="flow-sidebar">

@@ -122,6 +122,7 @@ function Show-NativeCheckpointAlert([int]$mark) {
 
         if ($toastScript) {
             Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
+                "-STA",
                 "-ExecutionPolicy", "Bypass",
                 "-NoProfile",
                 "-WindowStyle", "Hidden",
@@ -306,6 +307,44 @@ try {
                 }
 
                 $respObj = @{ status = "acknowledged"; mark = $mark }
+                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
+                $response.ContentType = "application/json; charset=utf-8"
+                $response.ContentLength64 = $buf.Length
+                $response.OutputStream.Write($buf, 0, $buf.Length)
+                $response.Close()
+                continue
+            }
+
+            if ($path -eq "/v1/alert" -and $request.HttpMethod -eq "POST") {
+                $mark = 20
+                try {
+                    $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
+                    $bodyRaw = $reader.ReadToEnd()
+                    $reader.Close()
+                    if ($bodyRaw) {
+                        $body = $bodyRaw | ConvertFrom-Json
+                        if ($body.mark) { $mark = [int]$body.mark }
+                    }
+                } catch {}
+
+                Show-NativeCheckpointAlert -mark $mark
+                $respObj = @{ status = "triggered"; mark = $mark }
+                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
+                $response.ContentType = "application/json; charset=utf-8"
+                $response.ContentLength64 = $buf.Length
+                $response.OutputStream.Write($buf, 0, $buf.Length)
+                $response.Close()
+                continue
+            }
+
+            if ($path -eq "/v1/sessions/reset" -and $request.HttpMethod -eq "POST") {
+                $script:ActiveSession = $null
+                $script:LastAlertMark = 0
+                $script:AlertCount = 0
+                if (Test-Path $scheduleFile) {
+                    try { Remove-Item -LiteralPath $scheduleFile -Force -ErrorAction SilentlyContinue } catch {}
+                }
+                $respObj = @{ status = "reset" }
                 $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
                 $response.ContentType = "application/json; charset=utf-8"
                 $response.ContentLength64 = $buf.Length
