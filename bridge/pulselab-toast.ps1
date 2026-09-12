@@ -21,6 +21,48 @@ $ErrorActionPreference = "SilentlyContinue"
 Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
 Add-Type -AssemblyName System.Drawing -ErrorAction SilentlyContinue
 
+if (-not ([System.Management.Automation.PSTypeName]'PulseLabToastWin32').Type) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public class PulseLabToastWin32 {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    public static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+}
+"@ -ErrorAction SilentlyContinue
+}
+
+function Focus-ExistingPulseLabWindow {
+    try {
+        $candidates = Get-Process | Where-Object {
+            $_.MainWindowHandle -ne [IntPtr]::Zero -and (
+                $_.MainWindowTitle -match 'PulseLab' -or
+                $_.MainWindowTitle -match 'Atividade dos alunos'
+            )
+        }
+        $proc = $candidates | Select-Object -First 1
+        if ($proc) {
+            # 9 = SW_RESTORE (restaura caso a janela esteja minimizada)
+            [PulseLabToastWin32]::ShowWindow($proc.MainWindowHandle, 9)
+            # Simular toque em tecla Alt para liberar permissão de SetForegroundWindow
+            [PulseLabToastWin32]::keybd_event(0x12, 0, 0, 0)
+            [PulseLabToastWin32]::keybd_event(0x12, 0, 2, 0)
+            [PulseLabToastWin32]::SetForegroundWindow($proc.MainWindowHandle)
+            return $true
+        }
+    } catch {}
+    return $false
+}
+
 try {
     # Tocar som de checkpoint (Asterisk + Beep audível para máxima compatibilidade)
     try {
@@ -138,24 +180,17 @@ try {
     $btnOpen.Cursor = [System.Windows.Forms.Cursors]::Hand
     $btnOpen.Add_Click({
         try {
-            $targetUrl = "http://127.0.0.1:$Port/alunos/"
-            # Focar no navegador padrão
-            $progId = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\Shell\Associations\UrlAssociations\http\UserChoice" -ErrorAction SilentlyContinue).ProgId
-            if ($progId) {
-                $cmd = (Get-ItemProperty "Registry::HKEY_CLASSES_ROOT\$progId\shell\open\command" -ErrorAction SilentlyContinue).'(default)'
-                if ($cmd -match '"([^"]+\.exe)"') {
-                    $exe = $Matches[1]
-                    $exeLower = [System.IO.Path]::GetFileNameWithoutExtension($exe).ToLowerInvariant()
-                    if ($exeLower -match 'brave|chrome|msedge|edge|opera|vivaldi') {
-                        Start-Process -FilePath $exe -ArgumentList @("--app=$targetUrl")
-                        $form.Close()
-                        return
-                    }
-                }
+            # 1. Tentar trazer para o primeiro plano a janela do PulseLab ja aberta
+            if (Focus-ExistingPulseLabWindow) {
+                $form.Close()
+                return
             }
+
+            # 2. Se nenhuma janela aberta for encontrada, abre a URL normalmente no navegador
+            $targetUrl = "http://127.0.0.1:$Port/alunos/"
             Start-Process $targetUrl
         } catch {
-            try { Start-Process $targetUrl } catch {}
+            try { Start-Process "http://127.0.0.1:$Port/alunos/" } catch {}
         }
         $form.Close()
     })

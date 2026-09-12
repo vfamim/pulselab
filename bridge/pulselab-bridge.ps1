@@ -273,9 +273,23 @@ try {
                 $body = $reader.ReadToEnd() | ConvertFrom-Json
                 $reader.Close()
 
+                $parsedStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+                if ($body.started_at) {
+                    $strVal = [string]$body.started_at
+                    if ($strVal -match '^\d+$') {
+                        $parsedStartedAt = [int64]$strVal
+                    } else {
+                        try {
+                            $parsedStartedAt = [DateTimeOffset]::Parse($strVal).ToUnixTimeMilliseconds()
+                        } catch {
+                            $parsedStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+                        }
+                    }
+                }
+
                 $script:ActiveSession = [PSCustomObject]@{
                     session_id = [string]$body.session_id
-                    started_at = [int64]$body.started_at
+                    started_at = $parsedStartedAt
                     marks = if ($body.marks) { @($body.marks) } else { @(20, 40) }
                     acks = @()
                     created_at = [DateTime]::UtcNow.ToString("o")
