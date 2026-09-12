@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS public.research_events (
     site_id                    text,
     participant_id             text         NOT NULL,
     participant_role           text         NOT NULL
-        CHECK (participant_role IN ('computer', 'assembly', 'member_3', 'member_4', 'individual')),
+        CHECK (participant_role IN ('computer', 'assembly', 'member_3', 'member_4', 'individual', 'group')),
     event_type                 text         NOT NULL
         CHECK (event_type IN ('pre', 'checkpoint', 'post')),
     response_status            text         NOT NULL DEFAULT 'completed'
@@ -317,14 +317,15 @@ CREATE TABLE IF NOT EXISTS public.research_session_events (
             'rubric_completed',
             'session_completed',
             'session_aborted',
-            'quality_issue'
+            'quality_issue',
+            'spike_telemetry'
         )),
     severity                   text         NOT NULL DEFAULT 'info'
         CHECK (severity IN ('info', 'warning', 'error')),
     interval_mark              integer      CHECK (interval_mark IS NULL OR interval_mark >= 0),
     participant_id             text,
     participant_role           text
-        CHECK (participant_role IS NULL OR participant_role IN ('computer', 'assembly', 'member_3', 'member_4', 'individual')),
+        CHECK (participant_role IS NULL OR participant_role IN ('computer', 'assembly', 'member_3', 'member_4', 'individual', 'group')),
     activity_stage             text,
 
     elapsed_ms                 bigint       CHECK (elapsed_ms IS NULL OR elapsed_ms >= 0),

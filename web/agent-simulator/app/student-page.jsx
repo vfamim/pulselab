@@ -105,6 +105,18 @@ async function fetchBridgeSpikeMetrics() {
   return null;
 }
 
+async function notifyBridgeEvent(event) {
+  try {
+    await fetch(`${BRIDGE_URL}/v1/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(event)
+    });
+  } catch {
+    // Operação normal mesmo sem o Bridge
+  }
+}
+
 function playChimeSound() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -627,6 +639,7 @@ export default function StudentPage() {
 
   function persist(event) {
     void saveEvent(event).catch(() => flash("Não foi possível salvar no armazenamento local deste navegador."));
+    void notifyBridgeEvent(event);
   }
 
   function emitTimeline(eventType, overrides = {}) {
