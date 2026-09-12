@@ -110,6 +110,8 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
         if (repo_root / "pulselab.ico").is_file():
             shutil.copy2(repo_root / "pulselab.ico", stage / "pulselab.ico")
+        if (repo_root / "tutorial" / "PulseLab-Guia-Ilustrado.pdf").is_file():
+            shutil.copy2(repo_root / "tutorial" / "PulseLab-Guia-Ilustrado.pdf", stage / "PulseLab-Guia-Ilustrado.pdf")
 
         # 7. Instruções e Versão
         (stage / "INSTRUCOES.txt").write_text(
