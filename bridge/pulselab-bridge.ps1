@@ -81,7 +81,9 @@ if (Test-Path $candidateConfig) {
     } catch {}
 }
 
+$script:BridgeVersion = "1.8.0"
 $script:LastSyncAttempt = [DateTime]::MinValue
+$script:LastUpdateAttempt = [DateTime]::MinValue
 $script:SyncedEventIds = [System.Collections.Generic.HashSet[string]]::new()
 $script:SyncedTrackerFile = Join-Path $DataDir "events_synced.txt"
 
@@ -152,6 +154,77 @@ function Sync-EventsToSupabase {
             Write-BridgeLog "Sincronizados $syncedCount evento(s) da oficina com o Supabase com sucesso." "INFO"
         }
     } catch {}
+}
+
+function Check-PulseLabAutoUpdate {
+    try {
+        $versionUrl = "https://pulselab-robotica-edu.web.app/VERSION"
+        $req = [System.Net.WebRequest]::Create($versionUrl)
+        $req.Timeout = 2500
+        $req.Method = "GET"
+        $resp = $req.GetResponse()
+        $stream = $resp.GetResponseStream()
+        $reader = New-Object System.IO.StreamReader($stream)
+        $remoteVer = ($reader.ReadToEnd()).Trim()
+        $reader.Close()
+        $resp.Close()
+
+        if (-not $remoteVer) { return }
+
+        $isNewer = $false
+        try {
+            $vRemote = [System.Version]::Parse($remoteVer)
+            $vLocal = [System.Version]::Parse($script:BridgeVersion)
+            if ($vRemote -gt $vLocal) { $isNewer = $true }
+        } catch {
+            if ($remoteVer -ne $script:BridgeVersion) { $isNewer = $true }
+        }
+
+        if ($isNewer) {
+            Write-BridgeLog "[AUTO-UPDATE] Nova versao v$remoteVer detectada na nuvem! Atualizando PWA e Bridge silenciosamente..." "INFO"
+            $zipUrl = "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip"
+            $tempZip = Join-Path $env:TEMP "PulseLab-Update-$remoteVer.zip"
+            $tempExtract = Join-Path $env:TEMP "PulseLab-Extract-$remoteVer"
+
+            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+            $wc = New-Object System.Net.WebClient
+            $wc.DownloadFile($zipUrl, $tempZip)
+
+            if (Test-Path $tempZip) {
+                if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue }
+                Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempExtract)
+
+                $sourceRoot = $tempExtract
+                $inner = Join-Path $tempExtract "PulseLab-$remoteVer-Windows"
+                if (Test-Path $inner) { $sourceRoot = $inner }
+
+                # Atualizar a pasta da WebApp (PWA estática)
+                $srcApp = Join-Path $sourceRoot "app\alunos"
+                if (Test-Path $srcApp -and Test-Path $AppRoot) {
+                    Copy-Item -Path "$srcApp\*" -Destination $AppRoot -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-BridgeLog "[AUTO-UPDATE] WebApp dos alunos atualizada em tempo real para v$remoteVer!" "OK"
+                }
+
+                # Atualizar arquivos de versão
+                $script:BridgeVersion = $remoteVer
+                try {
+                    $localVerPath = Join-Path $AppRoot "..\..\VERSION"
+                    if (Test-Path (Split-Path -Parent $localVerPath)) {
+                        [System.IO.File]::WriteAllText($localVerPath, $remoteVer, [System.Text.Encoding]::UTF8)
+                    }
+                } catch {}
+
+                # Limpar temporários
+                Remove-Item -Force $tempZip -ErrorAction SilentlyContinue
+                Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
+
+                Write-BridgeLog "[AUTO-UPDATE] Atualizacao concluida com sucesso para v$remoteVer." "OK"
+            }
+        }
+    } catch {
+        # Offline ou timeout: operacao silenciosa
+    }
 }
 
 $script:LogFilePath = Join-Path $DataDir "bridge.log"
@@ -271,7 +344,7 @@ try {
 
 try {
     $listener.Start()
-    Write-BridgeLog "PulseLab Bridge v1.7.1 ativo em $prefix" "INFO"
+    Write-BridgeLog "PulseLab Bridge v$($script:BridgeVersion) ativo em $prefix" "INFO"
     Write-BridgeLog "Pasta da WebApp: $AppRoot" "INFO"
     Write-BridgeLog "Armazenamento:   $DataDir" "INFO"
 } catch {
@@ -297,6 +370,10 @@ try {
             if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
                 $script:LastSyncAttempt = [DateTime]::UtcNow
                 Sync-EventsToSupabase
+            }
+            if (([DateTime]::UtcNow - $script:LastUpdateAttempt).TotalSeconds -ge 120) {
+                $script:LastUpdateAttempt = [DateTime]::UtcNow
+                Check-PulseLabAutoUpdate
             }
         }
 
@@ -338,7 +415,7 @@ try {
             }
 
             # --- ROTAS DA API REST ---
-            if ($path -eq "/health") {
+            if ($path -eq "/health" -or $path -eq "/v1/health") {
                 $uptime = ([DateTime]::UtcNow - $script:StartTime).TotalSeconds
                 $spikeDetected = $false
                 if (Get-Command Find-LatestSpikeProject -ErrorAction SilentlyContinue) {
@@ -346,7 +423,7 @@ try {
                 }
                 $healthObj = @{
                     status = "ok"
-                    version = "1.8.0"
+                    version = $script:BridgeVersion
                     uptime_seconds = [Math]::Round($uptime, 1)
                     port = $Port
                     spike_detected = $spikeDetected
@@ -354,6 +431,20 @@ try {
                 }
                 $json = $healthObj | ConvertTo-Json
                 $buf = [System.Text.Encoding]::UTF8.GetBytes($json)
+                $response.ContentType = "application/json; charset=utf-8"
+                $response.ContentLength64 = $buf.Length
+                $response.OutputStream.Write($buf, 0, $buf.Length)
+                $response.Close()
+                continue
+            }
+
+            if ($path -eq "/update" -or $path -eq "/v1/update") {
+                Check-PulseLabAutoUpdate
+                $updateObj = @{
+                    status = "checked"
+                    version = $script:BridgeVersion
+                }
+                $buf = [System.Text.Encoding]::UTF8.GetBytes(($updateObj | ConvertTo-Json))
                 $response.ContentType = "application/json; charset=utf-8"
                 $response.ContentLength64 = $buf.Length
                 $response.OutputStream.Write($buf, 0, $buf.Length)
