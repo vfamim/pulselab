@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-# PulseLab 1.7.1 - Web-First Bridge & Student WebApp Launcher
+# PulseLab 1.8.0 - Web-First Bridge & Student WebApp Launcher
 
 [CmdletBinding()]
 param(
@@ -48,7 +48,7 @@ if ([string]::IsNullOrWhiteSpace($DataDir)) {
 }
 
 Write-Host "===================================================================="
-Write-Host "               PULSELAB 1.7.1 - OFICINA DE ROBOTICA"
+Write-Host "               PULSELAB 1.8.0 - OFICINA DE ROBOTICA"
 Write-Host "===================================================================="
 Write-Host "Iniciando servidor local do PulseLab na porta $Port..."
 

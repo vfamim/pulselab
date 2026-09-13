@@ -137,10 +137,10 @@ style: |
     Guia Operacional Ilustrado
   </span>
   <h1 style="font-size: 2.8rem; margin-top: 10px; color: #1e40af;">
-    PulseLab 1.7.1
+    PulseLab 1.8.0
   </h1>
   <p style="font-size: 1.15rem; color: #475569; max-width: 860px; margin: 0 auto 20px auto; font-weight: 600;">
-    Instalação 100% offline, controles do pesquisador, telemetria passiva do LEGO SPIKE (.llsp3) e check-ins rápidos por dupla.
+    Instalação 100% offline, controles do pesquisador, telemetria passiva do LEGO SPIKE (.llsp3), sincronização automática na nuvem e check-ins rápidos por dupla.
   </p>
 
   <div style="display: flex; justify-content: center; gap: 14px; margin-top: 8px; flex-wrap: wrap;">
@@ -157,7 +157,7 @@ style: |
     <div class="card-panel" style="background:#fdf4ff; border-color:#f5d0fe; width: 195px; text-align: center;">
       <div style="font-size: 1.5rem; margin-bottom: 2px;">⚙️</div>
       <strong style="color: #86198f; font-size: 0.9rem;">3. Botões & Controles</strong>
-      <p style="font-size: 0.72rem; color:#64748b; margin: 2px 0 0 0;">Reset, avanços e export</p>
+      <p style="font-size: 0.72rem; color:#64748b; margin: 2px 0 0 0;">Reset, avanços e sync</p>
     </div>
     <div class="card-panel" style="background:#faf5ff; border-color:#e9d5ff; width: 195px; text-align: center;">
       <div style="font-size: 1.5rem; margin-bottom: 2px;">🤖</div>
@@ -182,7 +182,7 @@ style: |
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Baixar o ZIP:</strong> Obtenha <code>PulseLab-1.7.1-Windows.zip</code> (~318 KB) pela web ou transporte via pendrive para os computadores da escola.</div>
+        <div><strong>Baixar o ZIP:</strong> Obtenha <code>PulseLab-1.8.0-Windows.zip</code> (~2.4 MB) pela web ou transporte via pendrive para os computadores da escola.</div>
       </li>
       <li class="step-item">
         <span class="step-num">2</span>
@@ -268,6 +268,7 @@ style: |
     <div class="card-panel" style="border-color:#cbd5e1; background:#ffffff;">
       <strong style="color:#1e293b; font-size: 0.88rem;">Botões Operacionais dos Alunos</strong>
       <ul style="font-size: 0.8rem; margin: 4px 0 0 16px; padding: 0; line-height: 1.35;">
+        <li><span class="btn-badge">☁️ Sincronizar</span>: Força o envio imediato da fila local para a nuvem da pesquisa (ocorre automaticamente ao finalizar).</li>
         <li><span class="btn-badge">📥 Exportar Dados</span>: Na barra superior, baixa o arquivo <code>.json</code> completo da oficina para pen-drive ou backup.</li>
         <li><span class="btn-badge">Pedir Ajuda</span>: Notifica necessidade de apoio pedagógico durante a montagem.</li>
         <li><span class="btn-badge">Salvar e Continuar</span>: Confirma as respostas do check-in e volta direto à atividade.</li>
@@ -366,11 +367,11 @@ style: |
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#059669;">3</span>
-        <div><strong>Exportação Manual com 1 Clique:</strong> Basta clicar em <span class="btn-badge">📥 Exportar Dados</span> no topo da página para baixar o arquivo JSON completo para conferência.</div>
+        <div><strong>Sincronização Automática (Store-and-Forward):</strong> Ao concluir ou quando a máquina reconectar à internet, os dados são enviados automaticamente ao Supabase da pesquisa em segundo plano — sem precisar de ação manual dos alunos.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#059669;">4</span>
-        <div><strong>Sincronização em Nuvem:</strong> Se o computador tiver conexão com a internet, os eventos são sincronizados automaticamente com o Supabase da pesquisa.</div>
+        <div><strong>Backup Manual de Segurança:</strong> Em escolas 100% desconectadas, o botão <span class="btn-badge">📥 Exportar Dados</span> no topo permite baixar o arquivo JSON completo para pen-drive a qualquer momento.</div>
       </li>
     </ul>
 

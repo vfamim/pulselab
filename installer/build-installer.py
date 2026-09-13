@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "1.7.1"
+VERSION = "1.8.0"
 
 INSTRUCTIONS = """====================================================================
 PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
@@ -20,11 +20,13 @@ PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
 
 O PulseLab é o ambiente de acompanhamento de oficinas de robótica escolar com LEGO SPIKE.
 Totalmente desacoplado: interface executada diretamente no navegador padrão (PWA 100% offline),
-servidor Bridge local mínimo em loopback (porta 43127) e leitura automática de projetos (.llsp3).
+servidor Bridge local mínimo em loopback (porta 43127), sincronização automática na nuvem (Store-and-Forward)
+e leitura contínua de projetos (.llsp3).
 
 REQUISITOS:
 - Windows 10 ou 11 com Windows PowerShell 5.1 (já nativo no Windows).
-- Zero internet necessária durante a oficina.
+- Zero internet necessária durante a oficina (funciona 100% offline).
+- Envio automático para o banco da pesquisa assim que o computador conectar à internet.
 - Não requer privilégios de administrador.
 
 COMO USAR:
@@ -45,10 +47,11 @@ COMO DESINSTALAR:
 - Dê dois cliques em "Desinstalar-PulseLab.bat".
 
 RECURSOS DO PULSELAB v{version}:
-- Jornada da dupla em 5 etapas rápidas (sem troca excessiva de telas).
+- Jornada da dupla em 4 etapas rápidas (sem troca excessiva de telas).
+- Coleta automática e transparente: sincronização Store-and-Forward sem requerer envio manual dos alunos.
 - Leitura automática de blocos do LEGO SPIKE (.llsp3) para telemetria de código.
-- Alertas nativos aos 20 min e 40 min de oficina.
-- Armazenamento seguro em IndexedDB no navegador.
+- Alertas sonoros e visuais aos 20 min e 40 min de oficina com foco inteligente de janela.
+- Armazenamento duplo resiliente a congelamento (IndexedDB + disco local).
 - Privacidade total (LGPD) — sem captura de webcam, prints ou identificadores pessoais.
 """
 

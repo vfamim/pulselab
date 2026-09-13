@@ -19,7 +19,7 @@ import {
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/1.7.1";
+const CLIENT_VERSION = "student-pwa/1.8.0";
 
 const DEFAULT_CONTEXT = {
   site_id: "POLO-LOCAL",
@@ -1123,7 +1123,7 @@ export default function StudentPage() {
           <span className="brand__mark" aria-hidden="true">P</span>
           <span>
             <strong>PulseLab</strong>
-            <small>oficina de robótica · v1.7.1</small>
+            <small>oficina de robótica · v1.8.0</small>
           </span>
         </div>
         <div className="topbar__notice">

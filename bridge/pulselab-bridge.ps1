@@ -346,7 +346,7 @@ try {
                 }
                 $healthObj = @{
                     status = "ok"
-                    version = "1.7.1"
+                    version = "1.8.0"
                     uptime_seconds = [Math]::Round($uptime, 1)
                     port = $Port
                     spike_detected = $spikeDetected
