@@ -81,6 +81,50 @@ export async function listSessionEvents(sessionId) {
   }
 }
 
+export async function listPendingEvents() {
+  const database = await openDatabase();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readonly");
+      const index = transaction.objectStore(EVENTS_STORE).index("delivery_state");
+      const request = index.getAll(IDBKeyRange.only("queued"));
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function markEventDelivered(eventId) {
+  const database = await openDatabase();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readwrite");
+      const store = transaction.objectStore(EVENTS_STORE);
+      const getReq = store.get(eventId);
+
+      getReq.onsuccess = () => {
+        if (getReq.result) {
+          store.put({
+            ...getReq.result,
+            _delivery_state: "delivered",
+            _synced_at: new Date().toISOString()
+          });
+        }
+      };
+      getReq.onerror = () => reject(getReq.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
 export async function markSessionEvents(sessionId, deliveryState) {
   const database = await openDatabase();
 
@@ -104,3 +148,5 @@ export async function markSessionEvents(sessionId, deliveryState) {
     database.close();
   }
 }
+
+

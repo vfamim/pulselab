@@ -1792,7 +1792,8 @@ select:focus-visible {
 }
 
 .delivery--sent,
-.delivery--synced {
+.delivery--synced,
+.delivery--delivered {
   color: var(--success);
   background: #e8f6f2;
 }

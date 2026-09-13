@@ -5,11 +5,16 @@ import {
   formatEventName
 } from "../lib/contracts.js";
 import {
+  markEventDelivered,
   markSessionEvents,
   removeSession,
   saveEvent,
   saveSession
 } from "../lib/student-store.js";
+import {
+  flushPendingEvents,
+  syncSingleEvent
+} from "../lib/sync-engine.js";
 
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
@@ -507,7 +512,11 @@ function FinishedScreen({ pendingCount, onDownload, onRestart }) {
         <div>
           <span>Sessão concluída</span>
           <h2>Parabéns pelo trabalho!</h2>
-          <p>{pendingCount} registro(s) salvos e prontos para sincronização.</p>
+          {pendingCount === 0 ? (
+            <p>Todos os registros foram sincronizados com a nuvem da pesquisa com sucesso.</p>
+          ) : (
+            <p>{pendingCount} registro(s) salvos no computador. Serão sincronizados automaticamente com a nuvem assim que houver conexão à internet.</p>
+          )}
         </div>
       </div>
     </Card>
@@ -533,7 +542,9 @@ function EvidencePanel({ events }) {
               <strong>{formatEventName(event.event_type)}</strong>
               <small>{event.activity_stage || "sessão"}</small>
             </span>
-            <span className={`delivery delivery--${event._delivery_state}`}>{event._delivery_state}</span>
+            <span className={`delivery delivery--${event._delivery_state}`}>
+              {event._delivery_state === "delivered" || event._delivery_state === "synced" ? "nuvem ✓" : "pendente ⏳"}
+            </span>
           </article>
         )) : (
           <div className="empty-events">
@@ -637,9 +648,27 @@ export default function StudentPage() {
     };
   }
 
+  function updateEventDeliveryState(eventId, state) {
+    setTimeline((prev) =>
+      prev.map((ev) => (ev.event_id === eventId ? { ...ev, _delivery_state: state } : ev))
+    );
+    setResponses((prev) =>
+      prev.map((ev) => (ev.event_id === eventId ? { ...ev, _delivery_state: state } : ev))
+    );
+  }
+
   function persist(event) {
-    void saveEvent(event).catch(() => flash("Não foi possível salvar no armazenamento local deste navegador."));
+    void saveEvent(event).catch(() =>
+      flash("Não foi possível salvar no armazenamento local deste navegador.")
+    );
     void notifyBridgeEvent(event);
+    if (typeof navigator !== "undefined" && navigator.onLine) {
+      void syncSingleEvent(event).then((synced) => {
+        if (synced) {
+          updateEventDeliveryState(event.event_id, "delivered");
+        }
+      });
+    }
   }
 
   function emitTimeline(eventType, overrides = {}) {
@@ -845,6 +874,7 @@ export default function StudentPage() {
 
     void captureSpikeTelemetry("session_completed");
     localStorage.removeItem(ACTIVE_SESSION_KEY);
+    void runSync(true);
     setScreen("finished");
   }
 
@@ -944,20 +974,62 @@ export default function StudentPage() {
     URL.revokeObjectURL(link.href);
   }
 
-  async function simulateSync() {
-    await markSessionEvents(sessionId, "synced");
-    setTimeline((events) => events.map((event) => ({ ...event, _delivery_state: "synced" })));
-    setResponses((events) => events.map((event) => ({ ...event, _delivery_state: "synced" })));
-    flash("Laboratório: envio simulado concluído.");
+  async function runSync(showFeedback = false) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    try {
+      const result = await flushPendingEvents((syncedId) => {
+        updateEventDeliveryState(syncedId, "delivered");
+      });
+      if (result.synced > 0 && showFeedback) {
+        flash(`Sincronizados ${result.synced} registro(s) com a nuvem da pesquisa.`);
+      }
+    } catch {
+      // Falha silenciosa de rede
+    }
+  }
+
+  async function syncNow() {
+    if (!navigator.onLine) {
+      flash("Computador sem conexão com a internet no momento. Os registros continuam salvos com segurança no dispositivo.");
+      return;
+    }
+    flash("Sincronizando com a nuvem da pesquisa...");
+    const result = await flushPendingEvents((syncedId) => {
+      updateEventDeliveryState(syncedId, "delivered");
+    });
+    if (result.synced > 0) {
+      flash(`Sucesso! ${result.synced} registro(s) sincronizados com o Supabase.`);
+    } else if (result.remaining === 0) {
+      flash("Todos os registros já estão sincronizados com a nuvem da pesquisa!");
+    } else {
+      flash("Tentativa concluída. Eventos pendentes continuarão sendo enviados automaticamente.");
+    }
   }
 
   useEffect(() => {
-    const updateOnline = () => setOnline(navigator.onLine);
-    window.addEventListener("online", updateOnline);
-    window.addEventListener("offline", updateOnline);
+    const handleOnline = () => {
+      setOnline(true);
+      void runSync(true);
+    };
+    const handleOffline = () => setOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Sincroniza eventos pendentes logo na inicialização
+    void runSync(false);
+
+    // Varredura periódica a cada 20 segundos
+    const syncTimer = window.setInterval(() => {
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        void runSync(false);
+      }
+    }, 20000);
+
     return () => {
-      window.removeEventListener("online", updateOnline);
-      window.removeEventListener("offline", updateOnline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.clearInterval(syncTimer);
     };
   }, []);
 
@@ -1107,6 +1179,9 @@ export default function StudentPage() {
             <button className="inst-btn" onClick={autoFillCurrentStep} type="button">
               ✨ Preencher teste
             </button>
+            <button className="inst-btn inst-btn--accent" onClick={syncNow} type="button">
+              ☁️ Sincronizar Nuvem
+            </button>
             <button className="inst-btn inst-btn--danger" onClick={handleConfirmReset} type="button">
               🔄 Reiniciar Oficina
             </button>
@@ -1146,13 +1221,13 @@ export default function StudentPage() {
           <div className="stage-toolbar">
             <div>
               <span className={`connection-dot ${online ? "is-online" : ""}`} />
-              <strong>{online ? "Salvo localmente" : "Funcionando 100% offline"}</strong>
-              <small>{pendingCount} registro(s) no dispositivo</small>
+              <strong>{online ? (pendingCount === 0 ? "Nuvem Conectada · Sincronizado" : "Conectado · Sincronizando...") : "Funcionando 100% offline"}</strong>
+              <small>{pendingCount === 0 ? "Todos os registros salvos na nuvem" : `${pendingCount} registro(s) pendente(s)`}</small>
             </div>
             {labMode ? (
               <>
                 <button className="toolbar-button" onClick={() => setOnline((value) => !value)} type="button">Alternar rede</button>
-                <button className="toolbar-button is-accent" disabled={!pendingCount} onClick={simulateSync} type="button">Simular envio</button>
+                <button className="toolbar-button is-accent" onClick={syncNow} type="button">☁️ Sincronizar Nuvem</button>
               </>
             ) : null}
           </div>

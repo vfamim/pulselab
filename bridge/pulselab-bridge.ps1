@@ -65,6 +65,95 @@ if (Test-Path $scheduleFile) {
     }
 }
 
+# 3.1 Supabase Sync Configuration & Tracker (Store-and-forward)
+$script:SupabaseUrl = "https://cylsqbmtglvdfubbarqe.supabase.co"
+$script:SupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU"
+
+$candidateConfig = Join-Path $PSScriptRoot "..\config\config.json"
+if (-not (Test-Path $candidateConfig)) {
+    $candidateConfig = Join-Path $PSScriptRoot "..\..\config\config.json"
+}
+if (Test-Path $candidateConfig) {
+    try {
+        $cfgJson = Get-Content -Path $candidateConfig -Raw | ConvertFrom-Json
+        if ($cfgJson.supabase_url) { $script:SupabaseUrl = $cfgJson.supabase_url }
+        if ($cfgJson.supabase_anon_key) { $script:SupabaseAnonKey = $cfgJson.supabase_anon_key }
+    } catch {}
+}
+
+$script:LastSyncAttempt = [DateTime]::MinValue
+$script:SyncedEventIds = [System.Collections.Generic.HashSet[string]]::new()
+$script:SyncedTrackerFile = Join-Path $DataDir "events_synced.txt"
+
+if (Test-Path $script:SyncedTrackerFile) {
+    try {
+        Get-Content $script:SyncedTrackerFile | ForEach-Object {
+            $tracked = $_.Trim()
+            if ($tracked) { [void]$script:SyncedEventIds.Add($tracked) }
+        }
+    } catch {}
+}
+
+function Sync-EventsToSupabase {
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (-not (Test-Path $eventsFile)) { return }
+
+    try {
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
+    } catch {}
+
+    try {
+        $lines = [System.IO.File]::ReadAllLines($eventsFile)
+        $syncedCount = 0
+        foreach ($line in $lines) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            try {
+                $ev = $line | ConvertFrom-Json
+                $eventId = [string]$ev.event_id
+                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId)) {
+                    continue
+                }
+
+                $targetTable = if ($ev._target_table) { 
+                    $ev._target_table 
+                } elseif ($ev.event_type -in @("pre", "checkpoint", "post")) {
+                    "research_events"
+                } else {
+                    "research_session_events"
+                }
+
+                $cleanDict = [System.Collections.Specialized.OrderedDictionary]::new()
+                foreach ($prop in $ev.PSObject.Properties) {
+                    if (-not $prop.Name.StartsWith("_") -and $null -ne $prop.Value) {
+                        $cleanDict[$prop.Name] = $prop.Value
+                    }
+                }
+
+                $bodyJson = $cleanDict | ConvertTo-Json -Depth 10 -Compress
+                $headers = @{
+                    apikey = $script:SupabaseAnonKey
+                    Authorization = "Bearer $($script:SupabaseAnonKey)"
+                    "Content-Type" = "application/json"
+                    Prefer = "resolution=ignore-duplicates,return=minimal"
+                }
+
+                $uri = "$($script:SupabaseUrl)/rest/v1/$targetTable"
+                Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $bodyJson -TimeoutSec 6 -ErrorAction Stop | Out-Null
+
+                [void]$script:SyncedEventIds.Add($eventId)
+                [System.IO.File]::AppendAllText($script:SyncedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
+                $syncedCount++
+            } catch {
+                # Offline ou timeout: aguarda próxima janela
+                break
+            }
+        }
+        if ($syncedCount -gt 0) {
+            Write-BridgeLog "Sincronizados $syncedCount evento(s) da oficina com o Supabase com sucesso." "INFO"
+        }
+    } catch {}
+}
+
 $script:LogFilePath = Join-Path $DataDir "bridge.log"
 
 function Write-BridgeLog([string]$msg, [string]$level = "INFO") {
@@ -205,6 +294,10 @@ try {
         while (-not $asyncResult.IsCompleted) {
             $asyncResult.AsyncWaitHandle.WaitOne(1000) | Out-Null
             Check-SessionSchedule
+            if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
+                $script:LastSyncAttempt = [DateTime]::UtcNow
+                Sync-EventsToSupabase
+            }
         }
 
         $context = $null
@@ -360,6 +453,7 @@ try {
                     if ($eventJson) {
                         $eventsFile = Join-Path $DataDir "events.jsonl"
                         [System.IO.File]::AppendAllText($eventsFile, "$eventJson`r`n", [System.Text.Encoding]::UTF8)
+                        Sync-EventsToSupabase
                     }
                 } catch {
                     Write-BridgeLog "Falha ao gravar evento no disco: $($_.Exception.Message)" "WARN"
