@@ -1,8 +1,8 @@
 {
-  "version": "1.8.0",
-  "release_date": "2026-09-12",
-  "package_url": "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-1.8.0-Windows.zip",
-  "app_bundle_url": "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v1.8.0.zip",
-  "sha256": "44295cb1635136002010e86621184285a72eb11592a36799a02461a8df180bef",
-  "notes": "Coleta automatica Store-and-Forward e atualizacoes automaticas ao detectar conexao."
+  "version": "1.9.0",
+  "release_date": "2026-09-17",
+  "package_url": "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-1.9.0-Windows.zip",
+  "app_bundle_url": "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v1.9.0.zip",
+  "sha256": "209587f3eedf43afdb2fe2f7509be99bae75ecf18538fb93383a6a5f5dd91642",
+  "notes": "Fontes ampliadas para facil leitura, cores oficiais azul e amarelo do robozinho, barra lateral retratil e remocao de avanco acidental de checkpoint."
 }

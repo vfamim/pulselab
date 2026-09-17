@@ -8,7 +8,11 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$Version = "1.8.0"
+$Version = "1.9.0"
+
+try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+} catch {}
 
 function Write-InstallLog {
     param([ValidateSet("INFO", "OK", "WARN", "ERROR")][string]$Level, [string]$Message)
@@ -22,7 +26,7 @@ if ([string]::IsNullOrWhiteSpace($DestinationDir)) {
 }
 
 $sourceRoot = $PSScriptRoot
-Write-InstallLog "INFO" "Instalando PulseLab $Version para o usuário atual do Windows..."
+Write-InstallLog "INFO" "Instalando PulseLab $Version para o usuario atual do Windows..."
 
 New-Item -ItemType Directory -Path $DestinationDir -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $DestinationDir "data") -Force | Out-Null

@@ -19,7 +19,7 @@ import {
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/1.8.0";
+const CLIENT_VERSION = "student-pwa/1.9.0";
 
 const DEFAULT_CONTEXT = {
   site_id: "POLO-LOCAL",
@@ -324,24 +324,19 @@ function PreScreen({ answers, setAnswers, onSubmit, resumable, onResume }) {
   );
 }
 
-function ActivityScreen({ elapsedMs, currentMark, labMode, onOpenCheckpoint, spikeTelemetry }) {
+function ActivityScreen({ elapsedMs, currentMark, labMode, spikeTelemetry }) {
   const targetMs = currentMark * 60 * 1000;
   const remaining = Math.max(0, targetMs - elapsedMs);
   return (
     <Card
       eyebrow="Desafio em Andamento"
       title="Pode focar no projeto do SPIKE"
-      description={`Construam e programem normalmente. O próximo check-in curto será aberto aos ${currentMark} minutos.`}
+      description={`Construam e programem normalmente. O próximo check-in curto será aberto automaticamente aos ${currentMark} minutos.`}
       footer={
-        <div className="action-row">
-          <span className="footer-hint">
-            {labMode
-              ? "No laboratório, não é necessário esperar o relógio real."
-              : "Demonstração ou avanço manual: abra o check-in a qualquer momento."}
+        <div className="action-row" style={{ justifyContent: "center" }}>
+          <span className="footer-hint" style={{ margin: "0 auto", textAlign: "center", fontSize: "0.95rem", color: "var(--muted)" }}>
+            ⏱️ O check-in de {currentMark} minutos abrirá automaticamente nesta tela.
           </span>
-          <button className="button button--primary" onClick={onOpenCheckpoint} type="button">
-            Abrir checkpoint de {currentMark} min
-          </button>
         </div>
       }
     >
@@ -607,6 +602,7 @@ export default function StudentPage() {
   const [toast, setToast] = useState("");
   const [checkpointModalMark, setCheckpointModalMark] = useState(null);
   const [showInstructorTools, setShowInstructorTools] = useState(labMode);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const sequenceRef = useRef(savedSession?.sequence || 0);
   const checkpointOpeningRef = useRef(false);
 
@@ -1085,7 +1081,7 @@ export default function StudentPage() {
       />
     );
   } else if (screen === "activity") {
-    content = <ActivityScreen currentMark={currentMark} elapsedMs={elapsedMs} labMode={labMode} onOpenCheckpoint={() => openCheckpoint(currentMark)} spikeTelemetry={spikeTelemetry} />;
+    content = <ActivityScreen currentMark={currentMark} elapsedMs={elapsedMs} labMode={labMode} spikeTelemetry={spikeTelemetry} />;
   } else if (screen === "checkpoint20") {
     content = (
       <CheckpointScreen
@@ -1120,10 +1116,12 @@ export default function StudentPage() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand">
-          <span className="brand__mark" aria-hidden="true">P</span>
+          <span className="brand__mark" aria-hidden="true">
+            <img src="/alunos/robot.png" alt="Robô PulseLab" style={{ width: "32px", height: "32px", objectFit: "contain" }} />
+          </span>
           <span>
             <strong>PulseLab</strong>
-            <small>oficina de robótica · v1.8.0</small>
+            <small>oficina de robótica · v1.9.0</small>
           </span>
         </div>
         <div className="topbar__notice">
@@ -1131,6 +1129,14 @@ export default function StudentPage() {
           <p>{labMode ? "Modo acelerado para testes" : "Sem burocracia · telemetria automática do SPIKE"}</p>
         </div>
         <div className="topbar__controls">
+          <button
+            className={`topbar-btn ${sidebarOpen ? "is-active" : ""}`}
+            onClick={() => setSidebarOpen((v) => !v)}
+            title="Ver etapas da oficina (barra lateral retrátil)"
+            type="button"
+          >
+            🧭 Etapas ({activeStep}/4)
+          </button>
           <div className="topbar__session">
             <span>Sessão</span>
             <code>{sessionId.slice(0, 8).toUpperCase()}</code>
@@ -1196,11 +1202,30 @@ export default function StudentPage() {
         />
       ) : null}
 
+      {sidebarOpen ? (
+        <div
+          className="sidebar-backdrop"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      ) : null}
+
       <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
-        <aside className="flow-sidebar">
+        <aside className={`flow-sidebar ${sidebarOpen ? "is-open" : ""}`}>
           <div className="flow-sidebar__header">
-            <span>Progresso da oficina</span>
-            <strong>{activeStep}/4</strong>
+            <div>
+              <span>Progresso da oficina</span>
+              <strong>{activeStep}/4</strong>
+            </div>
+            <button
+              className="sidebar-close-btn"
+              onClick={() => setSidebarOpen(false)}
+              title="Fechar etapas"
+              type="button"
+              aria-label="Fechar etapas"
+            >
+              ✕
+            </button>
           </div>
           <nav aria-label="Etapas da atividade">
             {FLOW_STEPS.map((step) => (
