@@ -3,6 +3,6 @@
   "release_date": "2026-09-17",
   "package_url": "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-1.9.0-Windows.zip",
   "app_bundle_url": "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v1.9.0.zip",
-  "sha256": "209587f3eedf43afdb2fe2f7509be99bae75ecf18538fb93383a6a5f5dd91642",
+  "sha256": "0d657cc2a9c4bc1af1c967018ecdf7a9d303fab5eb04f678a0c13638d5a3e1f9",
   "notes": "Fontes ampliadas para facil leitura, cores oficiais azul e amarelo do robozinho, barra lateral retratil e remocao de avanco acidental de checkpoint."
 }

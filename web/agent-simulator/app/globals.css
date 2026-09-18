@@ -179,33 +179,39 @@ select:focus-visible {
 
 .workspace-shell {
   min-height: calc(100vh - 76px);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
 }
 
 .workspace-shell--student {
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 .workspace-shell--lab {
-  grid-template-columns: minmax(0, 1fr) 360px;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
 }
 
 .flow-sidebar {
   position: fixed;
-  top: 76px;
+  top: 0;
   left: 0;
   bottom: 0;
-  width: 300px;
-  max-width: 85vw;
-  z-index: 1000;
+  width: 320px;
+  max-width: 88vw;
+  z-index: 10000;
   padding: 24px 20px 20px;
   color: #fff;
   background: var(--violet-900);
-  border-right: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 12px 0 35px rgba(0, 0, 0, 0.45);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 15px 0 45px rgba(0, 0, 0, 0.5);
   transform: translateX(-100%);
-  transition: transform 0.26s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
 }
@@ -216,12 +222,10 @@ select:focus-visible {
 
 .sidebar-backdrop {
   position: fixed;
-  top: 76px;
-  inset-inline: 0;
-  bottom: 0;
-  background: rgba(8, 16, 38, 0.55);
-  backdrop-filter: blur(3px);
-  z-index: 999;
+  inset: 0;
+  background: rgba(8, 16, 38, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -407,11 +411,13 @@ select:focus-visible {
 }
 
 .simulator-stage {
+  flex: 1;
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   background:
-    radial-gradient(circle at 10% 0%, rgba(128, 100, 200, 0.11), transparent 22rem),
+    radial-gradient(circle at 10% 0%, rgba(2, 132, 199, 0.08), transparent 22rem),
     var(--canvas);
 }
 
@@ -482,8 +488,9 @@ select:focus-visible {
 
 .stage-scroll {
   flex: 1;
-  padding: 30px clamp(20px, 4vw, 58px) 48px;
-  overflow: auto;
+  width: 100%;
+  padding: 30px clamp(16px, 3vw, 48px) 48px;
+  overflow-y: auto;
 }
 
 .flow-card {
@@ -1960,42 +1967,24 @@ select:focus-visible {
 }
 
 @media (max-width: 1250px) {
-  .workspace-shell {
-    grid-template-columns: 190px minmax(520px, 1fr) 330px;
-  }
-
-  .flow-sidebar {
-    padding-inline: 14px;
-  }
-
   .stage-scroll {
-    padding-inline: 24px;
+    padding-inline: 20px;
   }
 }
 
 @media (max-width: 1040px) {
   .topbar {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: auto 1fr;
+    gap: 16px;
   }
 
   .topbar__notice {
     display: none;
   }
 
-  .workspace-shell {
-    grid-template-columns: 180px minmax(0, 1fr);
-  }
-
-  .workspace-shell--lab .evidence-panel {
-    grid-column: 1 / -1;
-  }
-
   .evidence-panel {
-    grid-column: 1 / -1;
-    min-height: 640px;
-    grid-template-rows: auto auto 330px 310px;
+    min-height: 480px;
     border-top: 1px solid var(--line);
-    border-left: 0;
   }
 }
 
@@ -2003,57 +1992,14 @@ select:focus-visible {
   .topbar {
     min-height: 66px;
     padding: 10px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
   }
 
   .brand small,
   .topbar__session span {
     display: none;
-  }
-
-  .workspace-shell {
-    display: block;
-  }
-
-  .flow-sidebar {
-    padding: 13px;
-  }
-
-  .flow-sidebar__header,
-  .scenario-panel,
-  .sidebar-context,
-  .sidebar-reset {
-    display: none;
-  }
-
-  .flow-sidebar nav {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-  }
-
-  .flow-sidebar nav::before {
-    top: 17px;
-    right: 20px;
-    bottom: auto;
-    left: 20px;
-    width: auto;
-    height: 1px;
-  }
-
-  .flow-step {
-    min-height: auto;
-    align-items: center;
-    flex-direction: column;
-    gap: 5px;
-  }
-
-  .flow-step > span {
-    width: 31px;
-    height: 31px;
-    border-radius: 10px;
-  }
-
-  .flow-step strong {
-    font-size: 0.55rem;
   }
 
   .stage-toolbar {

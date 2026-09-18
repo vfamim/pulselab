@@ -1210,38 +1210,38 @@ export default function StudentPage() {
         />
       ) : null}
 
-      <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
-        <aside className={`flow-sidebar ${sidebarOpen ? "is-open" : ""}`}>
-          <div className="flow-sidebar__header">
-            <div>
-              <span>Progresso da oficina</span>
-              <strong>{activeStep}/4</strong>
+      <aside className={`flow-sidebar ${sidebarOpen ? "is-open" : ""}`}>
+        <div className="flow-sidebar__header">
+          <div>
+            <span>Progresso da oficina</span>
+            <strong>{activeStep}/4</strong>
+          </div>
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setSidebarOpen(false)}
+            title="Fechar etapas"
+            type="button"
+            aria-label="Fechar etapas"
+          >
+            ✕
+          </button>
+        </div>
+        <nav aria-label="Etapas da atividade">
+          {FLOW_STEPS.map((step) => (
+            <div className={`flow-step ${step.id === activeStep ? "is-active" : ""} ${step.id < activeStep ? "is-complete" : ""}`} key={step.id}>
+              <span>{step.id < activeStep ? "✓" : step.id}</span>
+              <strong>{step.label}</strong>
             </div>
-            <button
-              className="sidebar-close-btn"
-              onClick={() => setSidebarOpen(false)}
-              title="Fechar etapas"
-              type="button"
-              aria-label="Fechar etapas"
-            >
-              ✕
-            </button>
-          </div>
-          <nav aria-label="Etapas da atividade">
-            {FLOW_STEPS.map((step) => (
-              <div className={`flow-step ${step.id === activeStep ? "is-active" : ""} ${step.id < activeStep ? "is-complete" : ""}`} key={step.id}>
-                <span>{step.id < activeStep ? "✓" : step.id}</span>
-                <strong>{step.label}</strong>
-              </div>
-            ))}
-          </nav>
-          <div className="sidebar-context">
-            <span>Oficina LEGO SPIKE</span>
-            <strong>Desafio Ativo</strong>
-            <small>Coleta anônima por dupla</small>
-          </div>
-        </aside>
+          ))}
+        </nav>
+        <div className="sidebar-context">
+          <span>Oficina LEGO SPIKE</span>
+          <strong>Desafio Ativo</strong>
+          <small>Coleta anônima por dupla</small>
+        </div>
+      </aside>
 
+      <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
         <section className="simulator-stage">
           <div className="stage-toolbar">
             <div>
