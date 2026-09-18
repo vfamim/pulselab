@@ -56,7 +56,7 @@ const INITIAL_DYAD_ID = "00000000-0000-4000-8000-000000000002";
 
 const SCENARIOS = {
   standard: {
-    label: "Fluxo padrão (Dupla)",
+    label: "Fluxo padrão (Grupo)",
     description: "SPIKE detectado, evidência disponível, troca de papéis e relógio dentro do limite."
   },
   solo: {
@@ -1245,7 +1245,7 @@ export default function AgentSimulatorPage() {
             <strong>Verificação institucional concluída</strong>
             <small>
               Confirmo que a equipe verificou as autorizações e o consentimento
-              aplicáveis para esta dupla.
+              aplicáveis para este grupo.
             </small>
           </span>
         </label>
@@ -1258,7 +1258,7 @@ export default function AgentSimulatorPage() {
       <FormShell
         eyebrow="Etapa 2 de 6 · decisão individual"
         title="Convite para participar"
-        description="A escolha deve ser feita individualmente, sem pressão da equipe ou da outra pessoa da dupla."
+        description="A escolha deve ser feita individualmente, sem pressão da equipe ou de outros colegas."
         compact
       >
         <ParticipantBadge participantKey={participant} />
@@ -1349,7 +1349,7 @@ export default function AgentSimulatorPage() {
       <FormShell
         eyebrow={`Etapa 4 de 6 · relógio acelerado · próximo marco ${currentMark} min`}
         title="Atividade LEGO SPIKE"
-        description="Esta tela representa o período em que o agente real ficaria minimizado enquanto a dupla trabalha."
+        description="Esta tela representa o período em que o agente real ficaria minimizado enquanto o grupo trabalha."
         footer={
           <ActionRow>
             <button className="button button--ghost" onClick={beginEnding}>
@@ -1588,7 +1588,7 @@ export default function AgentSimulatorPage() {
           <div>
             <h2>Os dois checkpoints foram registrados</h2>
             <p>
-              Continue quando a missão terminar e a dupla estiver pronta para a
+              Continue quando a missão terminar e o grupo estiver pronto para a
               avaliação final.
             </p>
           </div>
@@ -1610,14 +1610,14 @@ export default function AgentSimulatorPage() {
       <FormShell
         eyebrow="Etapa 5 de 6 · somente instrutor"
         title="Registro do instrutor"
-        description="Avalie a dupla antes de chamar os participantes para o encerramento."
+        description="Avalie o grupo antes de chamar os participantes para o encerramento."
         footer={
           <ActionRow>
             <button className="button button--ghost" onClick={abortAtRubric}>
               Abortar sessão
             </button>
             <button className="button button--primary" onClick={submitRubric}>
-              Salvar avaliação da dupla
+              Salvar avaliação do grupo
             </button>
           </ActionRow>
         }
@@ -1684,7 +1684,7 @@ export default function AgentSimulatorPage() {
         <div className="privacy-callout">
           <span>i</span>
           <p>
-            A rubrica descreve o desempenho da dupla. Ela não substitui
+            A rubrica descreve o desempenho do grupo. Ela não substitui
             observação detalhada nem mede aprendizagem isoladamente.
           </p>
         </div>

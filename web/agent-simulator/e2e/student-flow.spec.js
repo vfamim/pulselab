@@ -37,22 +37,24 @@ test.beforeEach(async ({ page }) => {
 
 test("conclui a jornada rápida da oficina com checkpoints e finalização", async ({ page }) => {
   // Tela Pré (Início imediato sem burocracia de cadastro)
-  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
   await answerPre(page);
 
   // Tela Atividade
   await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
 
-  // Checkpoint de 20 min
-  await page.getByRole("button", { name: "Abrir checkpoint de 20 min" }).click();
+  // Checkpoint de 20 min via controles do lab
+  await page.getByRole("button", { name: "⏩ Check-in 20m" }).click();
+  await page.getByRole("button", { name: "Responder Check-in Agora (30s)" }).click();
   await expect(page.getByRole("heading", { name: "Como está indo o projeto?" })).toBeVisible();
   await answerCheckpoint(page);
 
   // Volta para a Atividade
   await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
 
-  // Checkpoint de 40 min
-  await page.getByRole("button", { name: "Abrir checkpoint de 40 min" }).click();
+  // Checkpoint de 40 min via controles do lab
+  await page.getByRole("button", { name: "⏩ Check-in 40m" }).click();
+  await page.getByRole("button", { name: "Responder Check-in Agora (30s)" }).click();
   await expect(page.getByRole("heading", { name: "Como está indo o projeto?" })).toBeVisible();
   await answerCheckpoint(page);
 
@@ -66,7 +68,7 @@ test("conclui a jornada rápida da oficina com checkpoints e finalização", asy
 });
 
 test("retoma do ponto salvo depois de recarregar a página", async ({ page }) => {
-  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
   await answerPre(page);
   await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
 
@@ -77,11 +79,11 @@ test("retoma do ponto salvo depois de recarregar a página", async ({ page }) =>
 test("carrega a aplicação instalada mesmo sem internet", async ({ page, context }) => {
   await page.evaluate(() => navigator.serviceWorker.ready);
   await page.reload();
-  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
 
   await context.setOffline(true);
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
   await expect(page.getByText("Modo acelerado para testes")).toBeVisible();
 
   await context.setOffline(false);
@@ -104,5 +106,5 @@ test("permite forçar avanço, testar alerta com modal e reiniciar a oficina", a
   // Reiniciar a oficina a qualquer momento
   page.on("dialog", (dialog) => dialog.accept());
   await page.getByRole("button", { name: "🔄 Reiniciar", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Como a dupla chega para esta oficina\?/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
 });

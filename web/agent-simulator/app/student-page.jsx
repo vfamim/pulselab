@@ -285,7 +285,7 @@ function PreScreen({ answers, setAnswers, onSubmit, resumable, onResume }) {
   return (
     <Card
       eyebrow="Oficina de Robótica · Início rápido (15 segundos)"
-      title="Como a dupla chega para esta oficina?"
+      title="Como vocês chegam para esta oficina?"
       description="Responda rapidamente antes de começar a montar e programar o robô LEGO SPIKE."
       footer={
         <div className="action-row">
@@ -559,7 +559,7 @@ function CheckpointAlertModal({ mark, onProceed }) {
         <div className="alert-modal__icon">🤖</div>
         <span className="alert-modal__eyebrow">Aviso da Oficina · PulseLab</span>
         <h2>Hora do Check-in de {mark} minutos!</h2>
-        <p>Pausa rápida de 30 segundos na montagem e programação do robô LEGO SPIKE para a dupla registrar como está o progresso.</p>
+        <p>Pausa rápida de 30 segundos na montagem e programação do robô LEGO SPIKE para vocês registrarem como está o progresso.</p>
         <div className="alert-modal__actions">
           <button className="button button--primary button--pulse" onClick={onProceed} type="button" autoFocus>
             Responder Check-in Agora (30s)
@@ -1237,7 +1237,7 @@ export default function StudentPage() {
         <div className="sidebar-context">
           <span>Oficina LEGO SPIKE</span>
           <strong>Desafio Ativo</strong>
-          <small>Coleta anônima por dupla</small>
+          <small>Coleta anônima por grupo</small>
         </div>
       </aside>
 
