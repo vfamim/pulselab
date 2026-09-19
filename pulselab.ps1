@@ -84,9 +84,30 @@ function Check-PulseLabUpdate {
             $tempZip = Join-Path $env:TEMP "PulseLab-Update-$remoteVer.zip"
             $tempExtract = Join-Path $env:TEMP "PulseLab-Update-$remoteVer"
             
+            $shaUrl = "$zipUrl.sha256"
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
             $wc = New-Object System.Net.WebClient
             $wc.DownloadFile($zipUrl, $tempZip)
+            
+            # Validacao criptografica do Checksum SHA-256
+            $checksumValid = $true
+            try {
+                $expectedHash = ($wc.DownloadString($shaUrl)).Trim()
+                if ($expectedHash -match "^[A-Fa-f0-9]{64}") {
+                    $actualHash = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash.Trim()
+                    if ($actualHash.ToLower() -ne $expectedHash.ToLower()) {
+                        Write-Host "[ERRO] Checksum SHA-256 do pacote nao confere! Atualizacao abortada por seguranca." -ForegroundColor Red
+                        $checksumValid = $false
+                    }
+                }
+            } catch {
+                Write-Host "[AVISO] Nao foi possivel consultar hash SHA-256 remoto. Prosseguindo com o pacote baixado." -ForegroundColor Yellow
+            }
+
+            if (-not $checksumValid) {
+                Remove-Item -Force $tempZip -ErrorAction SilentlyContinue
+                return
+            }
             
             if (Test-Path $tempZip) {
                 if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue }

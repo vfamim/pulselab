@@ -46,7 +46,7 @@ export async function sendEventToSupabase(
 ) {
   const targetTable = resolveTargetTable(event);
   const payload = sanitizeEventForSupabase(event);
-  const endpoint = `${url}/rest/v1/${targetTable}`;
+  const endpoint = `${url}/rest/v1/${targetTable}?on_conflict=event_id`;
 
   const response = await fetch(endpoint, {
     method: "POST",

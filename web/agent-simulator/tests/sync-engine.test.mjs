@@ -37,3 +37,10 @@ test("sanitizeEventForSupabase strips all underscore-prefixed metadata fields", 
   assert.equal(output._client_occurred_at, undefined);
   assert.equal(output._target_table, undefined);
 });
+
+test("student-store exports listPendingEvents and pruneDeliveredEvents", async () => {
+  const store = await import("../lib/student-store.js");
+  assert.equal(typeof store.listPendingEvents, "function");
+  assert.equal(typeof store.pruneDeliveredEvents, "function");
+});
+

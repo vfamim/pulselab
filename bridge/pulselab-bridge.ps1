@@ -139,19 +139,56 @@ function Sync-EventsToSupabase {
                     Prefer = "resolution=ignore-duplicates,return=minimal"
                 }
 
-                $uri = "$($script:SupabaseUrl)/rest/v1/$targetTable"
+                $uri = "$($script:SupabaseUrl)/rest/v1/$targetTable?on_conflict=event_id"
                 Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $bodyJson -TimeoutSec 6 -ErrorAction Stop | Out-Null
 
                 [void]$script:SyncedEventIds.Add($eventId)
                 [System.IO.File]::AppendAllText($script:SyncedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
                 $syncedCount++
             } catch {
-                # Offline ou timeout: aguarda próxima janela
+                $statusCode = 0
+                try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+                if ($statusCode -eq 409) {
+                    # Conflito: registro já inserido (ex: sincronizado pelo PWA anteriormente).
+                    # Marca como sincronizado para não travar a fila do Bridge.
+                    [void]$script:SyncedEventIds.Add($eventId)
+                    [System.IO.File]::AppendAllText($script:SyncedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
+                    $syncedCount++
+                    continue
+                }
+                # Offline ou erro de rede transitório: interrompe para tentar na próxima janela
                 break
             }
         }
         if ($syncedCount -gt 0) {
             Write-BridgeLog "Sincronizados $syncedCount evento(s) da oficina com o Supabase com sucesso." "INFO"
+        }
+
+        # Compactação periódica: se o arquivo de eventos cresceu além de 150 linhas, arquiva eventos já sincronizados
+        if ($lines.Length -gt 150 -and $script:SyncedEventIds.Count -gt 0) {
+            try {
+                $unsynced = [System.Collections.Generic.List[string]]::new()
+                $archived = [System.Collections.Generic.List[string]]::new()
+                foreach ($l in $lines) {
+                    if ([string]::IsNullOrWhiteSpace($l)) { continue }
+                    try {
+                        $parsed = $l | ConvertFrom-Json
+                        if ($script:SyncedEventIds.Contains([string]$parsed.event_id)) {
+                            $archived.Add($l)
+                        } else {
+                            $unsynced.Add($l)
+                        }
+                    } catch {
+                        $unsynced.Add($l)
+                    }
+                }
+                if ($archived.Count -gt 0) {
+                    $archiveFile = Join-Path $DataDir "events_archive.jsonl"
+                    [System.IO.File]::AppendAllLines($archiveFile, $archived, [System.Text.Encoding]::UTF8)
+                    [System.IO.File]::WriteAllLines($eventsFile, $unsynced, [System.Text.Encoding]::UTF8)
+                    Write-BridgeLog "Compactada fila local: $($archived.Count) evento(s) arquivados com sucesso." "INFO"
+                }
+            } catch {}
         }
     } catch {}
 }
@@ -186,9 +223,27 @@ function Check-PulseLabAutoUpdate {
             $tempZip = Join-Path $env:TEMP "PulseLab-Update-$remoteVer.zip"
             $tempExtract = Join-Path $env:TEMP "PulseLab-Extract-$remoteVer"
 
+            $shaUrl = "$zipUrl.sha256"
             [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
             $wc = New-Object System.Net.WebClient
             $wc.DownloadFile($zipUrl, $tempZip)
+
+            $checksumValid = $true
+            try {
+                $expectedHash = ($wc.DownloadString($shaUrl)).Trim()
+                if ($expectedHash -match "^[A-Fa-f0-9]{64}") {
+                    $actualHash = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash.Trim()
+                    if ($actualHash.ToLower() -ne $expectedHash.ToLower()) {
+                        Write-BridgeLog "[AUTO-UPDATE] Checksum SHA-256 invalido! Atualizacao abortada por seguranca." "WARN"
+                        $checksumValid = $false
+                    }
+                }
+            } catch {}
+
+            if (-not $checksumValid) {
+                Remove-Item -Force $tempZip -ErrorAction SilentlyContinue
+                return
+            }
 
             if (Test-Path $tempZip) {
                 if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue }
@@ -392,10 +447,31 @@ try {
             $request = $context.Request
             $response = $context.Response
 
-            # CORS Local
-            $response.AddHeader("Access-Control-Allow-Origin", "*")
+            # CORS Restrito e Seguro (bloqueia sites externos abertos no navegador)
+            $origin = $request.Headers["Origin"]
+            $isAllowedOrigin = $false
+            if ([string]::IsNullOrEmpty($origin) -or $origin -eq "null") {
+                # Requisições locais, scripts diretos ou apps embarcados sem cabeçalho Origin
+                $isAllowedOrigin = $true
+            } elseif ($origin -match "^https?://(localhost|127\.0\.0\.1)(:\d+)?$" -or $origin -eq "https://pulselab-robotica-edu.web.app") {
+                # Origens oficiais do PulseLab e localhost
+                $isAllowedOrigin = $true
+            }
+
+            if (-not $isAllowedOrigin) {
+                Write-BridgeLog "Tentativa de acesso bloqueada de origem não autorizada: $origin" "WARN"
+                $response.StatusCode = 403
+                $response.Close()
+                continue
+            }
+
+            if (-not [string]::IsNullOrEmpty($origin) -and $origin -ne "null") {
+                $response.AddHeader("Access-Control-Allow-Origin", $origin)
+            } else {
+                $response.AddHeader("Access-Control-Allow-Origin", "*")
+            }
             $response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-            $response.AddHeader("Access-Control-Allow-Headers", "Content-Type")
+            $response.AddHeader("Access-Control-Allow-Headers", "Content-Type, Prefer, apikey, Authorization")
 
             if ($request.HttpMethod -eq "OPTIONS") {
                 $response.StatusCode = 200
