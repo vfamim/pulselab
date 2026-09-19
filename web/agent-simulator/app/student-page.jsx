@@ -22,11 +22,11 @@ const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
 const CLIENT_VERSION = "student-pwa/1.9.0";
 
 const DEFAULT_CONTEXT = {
-  site_id: "POLO-LOCAL",
-  regional: "Regional",
-  school: "Escola",
-  workshop: "Oficina-SPIKE",
-  class: "Turma-Geral",
+  regional: "Nordeste",
+  site_id: "Polo-Nordeste",
+  school: "geral",
+  workshop: "oficina-spike",
+  class: "turma-geral",
   activity: "atividade-01-spike"
 };
 
@@ -253,6 +253,27 @@ function getInstallationId() {
   return created;
 }
 
+function getComputerId(installationId) {
+  const id = installationId || getInstallationId();
+  return `PC-${id.slice(0, 6).toUpperCase()}`;
+}
+
+function getSystemMetadata() {
+  if (typeof window === "undefined") return { os: "Desktop", screen_resolution: "1920x1080" };
+  const userAgent = navigator.userAgent || "";
+  let os = "Desktop";
+  if (userAgent.includes("Windows")) os = "Windows";
+  else if (userAgent.includes("Linux")) os = "Linux";
+  else if (userAgent.includes("Android")) os = "Android";
+  else if (userAgent.includes("Mac")) os = "macOS";
+  else if (userAgent.includes("CrOS")) os = "ChromeOS";
+
+  return {
+    os,
+    screen_resolution: `${window.screen?.width || 0}x${window.screen?.height || 0}`
+  };
+}
+
 function formatClock(milliseconds) {
   const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
   const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
@@ -336,110 +357,83 @@ function Card({ eyebrow, title, description, children, footer, compact = false }
   );
 }
 
-function ContextConfigModal({ isOpen, onClose, context, onSave, onAutoLoad, configHash }) {
-  const [form, setForm] = useState(context);
-  useEffect(() => { setForm(context); }, [context, isOpen]);
+const REGIONS = [
+  { id: "Nordeste", label: "☀️ Nordeste", desc: "Polo Regional Nordeste" },
+  { id: "Sudeste", label: "🏙️ Sudeste", desc: "Polo Regional Sudeste" },
+  { id: "Sul", label: "❄️ Sul", desc: "Polo Regional Sul" },
+  { id: "Norte", label: "🌿 Norte", desc: "Polo Regional Norte" },
+  { id: "Centro-Oeste", label: "🌾 Centro-Oeste", desc: "Polo Regional Centro-Oeste" }
+];
+
+function RegionMetadataModal({ isOpen, onClose, context, onSave, configHash, computerId, systemMetadata }) {
+  const [selectedRegion, setSelectedRegion] = useState(context.regional || "Nordeste");
+  useEffect(() => { setSelectedRegion(context.regional || "Nordeste"); }, [context, isOpen]);
 
   if (!isOpen) return null;
 
   return (
     <div className="alert-modal-backdrop" role="dialog" aria-modal="true">
-      <div className="alert-modal" style={{ maxWidth: "560px", textAlign: "left" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
-          <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#f8fafc" }}>⚙️ Configurar Escola & Turma</h2>
+      <div className="alert-modal" style={{ maxWidth: "520px", textAlign: "left" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+          <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#f8fafc" }}>📍 Região & Metadados do Computador</h2>
           <button className="topbar-btn" onClick={onClose} type="button" style={{ padding: "4px 10px" }}>✕</button>
         </div>
-        <p style={{ color: "#94a3b8", fontSize: "0.84rem", marginTop: 0, marginBottom: "16px" }}>
-          Ajuste as informações da escola e da turma para vincular a telemetria ao contexto multicêntrico real.
+        <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "16px" }}>
+          Selecione apenas a região de onde os dados estão vindo. Os metadados da máquina são detectados automaticamente para o comparativo.
         </p>
 
-        <div className="form-grid" style={{ gap: "10px" }}>
-          <div>
-            <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: "3px" }}>Polo / Sede (site_id):</label>
-            <input
-              type="text"
-              value={form.site_id}
-              onChange={(e) => setForm({ ...form, site_id: e.target.value })}
-              style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: "3px" }}>Polo Regional:</label>
-            <input
-              type="text"
-              value={form.regional}
-              onChange={(e) => setForm({ ...form, regional: e.target.value })}
-              style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: "3px" }}>Código da Escola:</label>
-            <input
-              type="text"
-              value={form.school}
-              onChange={(e) => setForm({ ...form, school: e.target.value })}
-              style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: "3px" }}>Turma:</label>
-            <input
-              type="text"
-              value={form.class}
-              onChange={(e) => setForm({ ...form, class: e.target.value })}
-              style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: "3px" }}>Oficina:</label>
-            <input
-              type="text"
-              value={form.workshop}
-              onChange={(e) => setForm({ ...form, workshop: e.target.value })}
-              style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
-            />
-          </div>
-          <div>
-            <label style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", marginBottom: "3px" }}>Atividade:</label>
-            <input
-              type="text"
-              value={form.activity}
-              onChange={(e) => setForm({ ...form, activity: e.target.value })}
-              style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #334155", background: "#0f172a", color: "#fff" }}
-            />
+        <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#e2e8f0", display: "block", marginBottom: "8px" }}>
+          Região de origem dos dados:
+        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "8px", marginBottom: "18px" }}>
+          {REGIONS.map((r) => {
+            const isSel = selectedRegion === r.id;
+            return (
+              <button
+                key={r.id}
+                type="button"
+                className={`scale-option ${isSel ? "is-selected" : ""}`}
+                onClick={() => setSelectedRegion(r.id)}
+                style={{ padding: "10px 12px", minHeight: "auto", textAlign: "left" }}
+              >
+                <strong style={{ fontSize: "0.92rem" }}>{r.label}</strong>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ padding: "12px 14px", background: "#0f172a", border: "1px solid #1e293b", borderRadius: "10px", fontSize: "0.8rem", color: "#94a3b8" }}>
+          <div style={{ color: "#38bdf8", fontWeight: 700, marginBottom: "6px" }}>💻 Metadados do Computador (automáticos):</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+            <div>ID Dispositivo: <strong style={{ color: "#f1f5f9" }}>{computerId}</strong></div>
+            <div>Sistema: <strong style={{ color: "#f1f5f9" }}>{systemMetadata.os}</strong></div>
+            <div>Resolução Tela: <strong style={{ color: "#f1f5f9" }}>{systemMetadata.screen_resolution}</strong></div>
+            <div>Instrumento: <strong style={{ color: "#34d399" }}>SHA-256 ✓</strong></div>
           </div>
         </div>
 
-        <div style={{ marginTop: "14px", padding: "10px 14px", background: "#0f172a", border: "1px solid #1e293b", borderRadius: "10px", fontSize: "0.8rem", color: "#94a3b8" }}>
-          <div><strong>Integridade do Instrumento (CONFIG_HASH):</strong></div>
-          <code style={{ fontSize: "0.72rem", color: "#38bdf8", wordBreak: "break-all" }}>{configHash}</code>
-          <div style={{ color: "#34d399", marginTop: "4px", fontSize: "0.75rem" }}>✓ SHA-256 verificado de config.json</div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "18px", gap: "10px" }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px", gap: "10px" }}>
           <button
             type="button"
             className="inst-btn"
-            onClick={onAutoLoad}
+            onClick={onClose}
           >
-            🔄 Carregar do config.json
+            Cancelar
           </button>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button
-              type="button"
-              className="inst-btn"
-              onClick={onClose}
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              className="inst-btn inst-btn--accent"
-              onClick={() => { onSave(form); onClose(); }}
-            >
-              💾 Salvar Configurações
-            </button>
-          </div>
+          <button
+            type="button"
+            className="inst-btn inst-btn--accent"
+            onClick={() => {
+              onSave({
+                ...context,
+                regional: selectedRegion,
+                site_id: `Polo-${selectedRegion}`
+              });
+              onClose();
+            }}
+          >
+            💾 Salvar
+          </button>
         </div>
       </div>
     </div>
@@ -928,18 +922,21 @@ export default function StudentPage() {
   function eventBase(eventType, overrides = {}) {
     const now = Date.now();
     sequenceRef.current += 1;
+    const sysMeta = getSystemMetadata();
     return {
       event_id: createUuid(),
       session_id: sessionId,
       dyad_id: groupId,
       installation_id: installationId,
-      site_id: context.site_id,
-      regional_hub: context.regional,
-      school_code: context.school,
-      workshop_code: context.workshop,
-      class_code: context.class,
-      activity_id: context.activity,
-      computer_id: "BROWSER-PWA",
+      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+      regional_hub: context.regional || "Nordeste",
+      school_code: context.school || "geral",
+      workshop_code: context.workshop || "oficina-spike",
+      class_code: context.class || "turma-geral",
+      activity_id: context.activity || "atividade-01-spike",
+      computer_id: getComputerId(installationId),
+      telemetry_foreground_app: sysMeta.os,
+      telemetry_window_title: `Res: ${sysMeta.screen_resolution}`,
       protocol_version: "protocolo-pesquisa-v1",
       occurred_at: new Date(now).toISOString(),
       elapsed_ms: Math.max(0, now - startedAt),
@@ -1073,7 +1070,7 @@ export default function StudentPage() {
   function handleSaveContext(newContext) {
     setContext(newContext);
     localStorage.setItem(CONTEXT_KEY, JSON.stringify(newContext));
-    flash("Configurações da turma salvas com sucesso!");
+    flash(`Região salva com sucesso: ${newContext.regional}!`);
   }
 
   async function handleAutoLoadConfig() {
@@ -1584,10 +1581,10 @@ export default function StudentPage() {
           <button
             className={`topbar-btn ${showContextModal ? "is-active" : ""}`}
             onClick={() => setShowContextModal(true)}
-            title="Configurar escola, polo e turma"
+            title="Configurar região do computador"
             type="button"
           >
-            🏫 Turma
+            📍 Região: {context.regional || "Nordeste"}
           </button>
           <button
             className={`topbar-btn ${sidebarOpen ? "is-active" : ""}`}
@@ -1628,7 +1625,7 @@ export default function StudentPage() {
           </div>
           <div className="instructor-banner__actions">
             <button className="inst-btn inst-btn--accent" onClick={() => setShowContextModal(true)} type="button">
-              ⚙️ Configurar Turma
+              📍 Região ({context.regional || "Nordeste"})
             </button>
             <button className="inst-btn" onClick={() => forceCheckpoint(20)} type="button">
               ⏩ Check-in 20m
@@ -1665,13 +1662,14 @@ export default function StudentPage() {
         />
       ) : null}
 
-      <ContextConfigModal
+      <RegionMetadataModal
         isOpen={showContextModal}
         onClose={() => setShowContextModal(false)}
         context={context}
         onSave={handleSaveContext}
-        onAutoLoad={handleAutoLoadConfig}
         configHash={CONFIG_HASH}
+        computerId={getComputerId(installationId)}
+        systemMetadata={getSystemMetadata()}
       />
 
       {sidebarOpen ? (

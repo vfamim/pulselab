@@ -109,19 +109,18 @@ test("permite forçar avanço, testar alerta com modal e reiniciar a oficina", a
   await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
 });
 
-test("permite configurar escola e turma através do modal de contexto", async ({ page }) => {
-  // Abrir modal de contexto via botão do topo
-  await page.getByRole("button", { name: "🏫 Turma" }).click();
-  await expect(page.getByRole("heading", { name: "⚙️ Configurar Escola & Turma" })).toBeVisible();
+test("permite selecionar a região e verificar os metadados do computador", async ({ page }) => {
+  // Abrir modal de região via botão do topo
+  await page.getByRole("button", { name: /Região:/i }).click();
+  await expect(page.getByRole("heading", { name: "📍 Região & Metadados do Computador" })).toBeVisible();
 
-  // Alterar escola e salvar
-  const schoolInput = page.locator("input").nth(2);
-  await schoolInput.fill("ESCOLA-EXPERIMENTAL-01");
-  await page.getByRole("button", { name: "💾 Salvar Configurações" }).click();
+  // Selecionar região e salvar
+  await page.getByRole("button", { name: /Sudeste/i }).click();
+  await page.getByRole("button", { name: "💾 Salvar" }).click();
 
-  // Confirmar que o modal fechou e o toast foi disparado
-  await expect(page.getByRole("heading", { name: "⚙️ Configurar Escola & Turma" })).not.toBeVisible();
-  await expect(page.getByText("Configurações da turma salvas com sucesso!")).toBeVisible();
+  // Confirmar que o modal fechou e a região foi atualizada
+  await expect(page.getByRole("heading", { name: "📍 Região & Metadados do Computador" })).not.toBeVisible();
+  await expect(page.getByText(/Região salva com sucesso: Sudeste!/i)).toBeVisible();
 });
 
 test("permite recusa informada da pesquisa e avanço direto para a atividade", async ({ page }) => {
