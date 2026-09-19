@@ -108,3 +108,29 @@ test("permite forçar avanço, testar alerta com modal e reiniciar a oficina", a
   await page.getByRole("button", { name: "🔄 Reiniciar", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
 });
+
+test("permite configurar escola e turma através do modal de contexto", async ({ page }) => {
+  // Abrir modal de contexto via botão do topo
+  await page.getByRole("button", { name: "🏫 Turma" }).click();
+  await expect(page.getByRole("heading", { name: "⚙️ Configurar Escola & Turma" })).toBeVisible();
+
+  // Alterar escola e salvar
+  const schoolInput = page.locator("input").nth(2);
+  await schoolInput.fill("ESCOLA-EXPERIMENTAL-01");
+  await page.getByRole("button", { name: "💾 Salvar Configurações" }).click();
+
+  // Confirmar que o modal fechou e o toast foi disparado
+  await expect(page.getByRole("heading", { name: "⚙️ Configurar Escola & Turma" })).not.toBeVisible();
+  await expect(page.getByText("Configurações da turma salvas com sucesso!")).toBeVisible();
+});
+
+test("permite recusa informada da pesquisa e avanço direto para a atividade", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
+
+  // Clicar em recusa voluntária
+  await page.getByRole("button", { name: "Prefiro não responder a pesquisa" }).click();
+
+  // Deve ir diretamente para a atividade sem forçar questionários
+  await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
+  await expect(page.getByText(/Oficina liberada em modo livre/)).toBeVisible();
+});

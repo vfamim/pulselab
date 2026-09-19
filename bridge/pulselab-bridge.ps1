@@ -452,6 +452,21 @@ try {
                 continue
             }
 
+            if ($path -eq "/config" -or $path -eq "/v1/config") {
+                $cfgJson = "{}"
+                if (Test-Path $candidateConfig) {
+                    try {
+                        $cfgJson = Get-Content -Path $candidateConfig -Raw -Encoding UTF8
+                    } catch {}
+                }
+                $buf = [System.Text.Encoding]::UTF8.GetBytes($cfgJson)
+                $response.ContentType = "application/json; charset=utf-8"
+                $response.ContentLength64 = $buf.Length
+                $response.OutputStream.Write($buf, 0, $buf.Length)
+                $response.Close()
+                continue
+            }
+
             if ($path -eq "/v1/sessions" -and $request.HttpMethod -eq "POST") {
                 $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
                 $body = $reader.ReadToEnd() | ConvertFrom-Json

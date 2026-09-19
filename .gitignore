@@ -7,7 +7,8 @@ skills-lock.json
 dist-offline/
 
 # Test directories and non-runtime test scripts
-tests/
+/tests/
+!web/agent-simulator/tests/
 supabase/tests/
 Executar-Testes.bat
 

@@ -1,4 +1,5 @@
-export const CONFIG_HASH = "d".repeat(64);
+// SHA-256 de config/config.json (auditoria e integridade científica)
+export const CONFIG_HASH = "9abf202db5fa4e732e1f38e39a2ade4d18e425fa92a616fd24565363147f9121";
 
 export const TIMELINE_EVENT_TYPES = [
   "session_started",
