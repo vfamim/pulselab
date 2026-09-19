@@ -615,17 +615,20 @@ try {
                 $response.ContentLength64 = $fileBytes.Length
                 $response.OutputStream.Write($fileBytes, 0, $fileBytes.Length)
                 $response.Close()
-            } elseif (Test-Path (Join-Path $AppRoot "index.html")) {
-                # Fallback SPA routing
-                $indexPath = Join-Path $AppRoot "index.html"
-                $response.ContentType = "text/html; charset=utf-8"
-                $fileBytes = [System.IO.File]::ReadAllBytes($indexPath)
-                $response.ContentLength64 = $fileBytes.Length
-                $response.OutputStream.Write($fileBytes, 0, $fileBytes.Length)
-                $response.Close()
             } else {
-                $response.StatusCode = 404
-                $response.Close()
+                $reqExt = [System.IO.Path]::GetExtension($fullPath)
+                # Fallback SPA routing somente para rotas de navegacao sem extensao de arquivo
+                if ([string]::IsNullOrWhiteSpace($reqExt) -and (Test-Path (Join-Path $AppRoot "index.html"))) {
+                    $indexPath = Join-Path $AppRoot "index.html"
+                    $response.ContentType = "text/html; charset=utf-8"
+                    $fileBytes = [System.IO.File]::ReadAllBytes($indexPath)
+                    $response.ContentLength64 = $fileBytes.Length
+                    $response.OutputStream.Write($fileBytes, 0, $fileBytes.Length)
+                    $response.Close()
+                } else {
+                    $response.StatusCode = 404
+                    $response.Close()
+                }
             }
         } catch {
             Write-BridgeLog "Aviso ao atender requisicao $($request.HttpMethod) $path`: $($_.Exception.Message)" "WARN"

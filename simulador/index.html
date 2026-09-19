@@ -4,14 +4,30 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PulseLab — Simulador do Agente</title>
-  <link rel="icon" href="https://robotica-educativa-univasf.vercel.app/icons/favicon-32x32.png" sizes="32x32" type="image/png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/simulador/assets/index-B0dRTt4y.js"></script>
-  <link rel="stylesheet" crossorigin href="/simulador/assets/index-C07EU-3B.css">
+  <link rel="icon" href="/alunos/icon.svg" type="image/svg+xml">
+  <script>
+    if (window.location.protocol === "http:" || window.location.protocol === "https:") {
+      window.location.replace("/alunos/?lab=1");
+    }
+  </script>
 </head>
-<body>
-  <div id="root"></div>
+<body style="margin: 0; background: #070612; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px;">
+  <div style="max-width: 540px; background: #111024; border: 2px solid #0284c7; border-radius: 16px; padding: 32px; box-shadow: 0 16px 36px rgba(0,0,0,0.5); text-align: center;">
+    <div style="font-size: 48px; margin-bottom: 16px;">🤖</div>
+    <h1 style="font-size: 1.4rem; margin: 0 0 12px; color: #38bdf8; font-weight: 800;">PulseLab · Modo Simulador</h1>
+    <p style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin: 0 0 20px;">
+      O simulador oficial e interativo do PulseLab é servido através do servidor local com ferramentas completas de teste e telemetria.
+    </p>
+    <div style="background: #1c1a3a; border-radius: 10px; padding: 16px; margin-bottom: 24px; text-align: left;">
+      <strong style="color: #6ee7b7; display: block; margin-bottom: 8px;">👉 Como abrir o simulador:</strong>
+      <ol style="margin: 0; padding-left: 20px; color: #e2e8f0; font-size: 0.9rem; line-height: 1.6;">
+        <li>Na pasta do PulseLab, dê dois cliques em <strong>Abrir-Simulador.bat</strong>;</li>
+        <li>Ou execute <strong>Iniciar-PulseLab.bat</strong> para a oficina real.</li>
+      </ol>
+    </div>
+    <a href="http://127.0.0.1:43127/alunos/?lab=1" style="display: inline-block; background: #0284c7; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;">
+      Abrir no Servidor Local (127.0.0.1:43127)
+    </a>
+  </div>
 </body>
 </html>

@@ -9,9 +9,56 @@
   <link rel="icon" href="/alunos/icon.svg" type="image/svg+xml">
   <link rel="manifest" href="/alunos/manifest.webmanifest">
 
+  <script>
+    if (window.location.protocol === "file:") {
+      document.addEventListener("DOMContentLoaded", function() {
+        var root = document.getElementById("root");
+        if (root) {
+          root.innerHTML = '<div style="font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; background: #070612; color: #f8fafc; display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center;">' +
+            '<div style="max-width: 540px; background: #111024; border: 2px solid #f59e0b; border-radius: 16px; padding: 32px; box-shadow: 0 16px 36px rgba(0,0,0,0.5);">' +
+              '<div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>' +
+              '<h1 style="font-size: 1.4rem; margin: 0 0 12px; color: #fbbf24; font-weight: 800;">Acesso Direto ao Arquivo Detectado (file://)</h1>' +
+              '<p style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.5; margin: 0 0 20px;">O PulseLab funciona com tecnologia web moderna que requer execução via servidor local para gerenciar o armazenamento offline e a conexão com o LEGO SPIKE.</p>' +
+              '<div style="background: #1c1a3a; border-radius: 10px; padding: 16px; margin-bottom: 24px; text-align: left;">' +
+                '<strong style="color: #6ee7b7; display: block; margin-bottom: 8px;">👉 Para iniciar a oficina:</strong>' +
+                '<ol style="margin: 0; padding-left: 20px; color: #e2e8f0; font-size: 0.9rem; line-height: 1.6;">' +
+                  '<li>Na pasta do PulseLab (ou no atalho da Área de Trabalho);</li>' +
+                  '<li>Execute o arquivo <strong>Iniciar-PulseLab.bat</strong>;</li>' +
+                  '<li>A interface abrirá automaticamente no navegador pronta para preencher.</li>' +
+                '</ol>' +
+              '</div>' +
+              '<a href="http://127.0.0.1:43127/alunos/" style="display: inline-block; background: #0284c7; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 10px; font-weight: 700; font-size: 0.95rem;">Tentar Acessar no Servidor Local (127.0.0.1:43127)</a>' +
+            '</div>' +
+          '</div>';
+        }
+      });
+    }
+  </script>
 </head>
-<body>
-  <div id="root"></div>
+<body style="margin: 0; background: #070612; color: #f8fafc;">
+  <div id="root">
+    <div id="pulselab-splash" style="font-family: system-ui, -apple-system, sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px;">
+      <div style="width: 44px; height: 44px; border: 4px solid rgba(2, 132, 199, 0.2); border-top-color: #0284c7; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;"></div>
+      <style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+      <h2 style="font-size: 1.25rem; font-weight: 700; margin: 0 0 8px; color: #f8fafc;">PulseLab</h2>
+      <p style="font-size: 0.9rem; color: #94a3b8; margin: 0;">Carregando ambiente dos alunos...</p>
+      <div id="loading-timeout" style="display: none; margin-top: 24px; max-width: 400px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 16px;">
+        <p style="font-size: 0.85rem; color: #cbd5e1; margin: 0 0 12px;">Está demorando mais do que o esperado para iniciar?</p>
+        <button onclick="window.location.reload()" style="background: #0284c7; color: white; border: none; padding: 8px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.85rem;">Recarregar Página</button>
+      </div>
+      <script>
+        setTimeout(function() {
+          var el = document.getElementById("loading-timeout");
+          if (el && document.getElementById("pulselab-splash")) { el.style.display = "block"; }
+        }, 5000);
+      </script>
+      <noscript>
+        <div style="margin-top: 20px; background: #7f1d1d; color: #fecaca; padding: 12px 20px; border-radius: 8px; font-size: 0.9rem;">
+          O JavaScript precisa estar ativado no navegador para utilizar o PulseLab.
+        </div>
+      </noscript>
+    </div>
+  </div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>

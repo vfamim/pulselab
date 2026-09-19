@@ -1,23 +1,32 @@
-const CACHE_NAME = "pulselab-student-shell-v2";
+const CACHE_NAME = "pulselab-student-shell-v1.9.0";
 const APP_SHELL = [
   "/alunos/",
   "/alunos/index.html",
   "/alunos/manifest.webmanifest",
-  "/alunos/icon.svg"
+  "/alunos/icon.svg",
+  "/alunos/robot.png"
 ];
 
 async function precacheApplication() {
-  const cache = await caches.open(CACHE_NAME);
-  await cache.addAll(APP_SHELL);
+  try {
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL);
 
-  const response = await fetch("/alunos/index.html", { cache: "reload" });
-  const html = await response.clone().text();
-  const assetPaths = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
-    .map((match) => match[1])
-    .filter((path) => path.startsWith("/alunos/assets/"));
+    const response = await fetch("/alunos/index.html", { cache: "reload" });
+    if (response.ok) {
+      const html = await response.clone().text();
+      const assetPaths = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+        .map((match) => match[1])
+        .filter((path) => path.startsWith("/alunos/assets/"));
 
-  await cache.put("/alunos/index.html", response);
-  await cache.addAll(assetPaths);
+      await cache.put("/alunos/index.html", response);
+      if (assetPaths.length > 0) {
+        await cache.addAll(assetPaths);
+      }
+    }
+  } catch {
+    // Falha silenciosa de precache se estiver offline
+  }
 }
 
 self.addEventListener("install", (event) => {
@@ -27,11 +36,26 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(
-      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-    ))
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    )
   );
   self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+  if (event.data === "CLEAR_CACHES") {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    );
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -44,8 +68,10 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put("/alunos/index.html", copy));
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put("/alunos/index.html", copy));
+          }
           return response;
         })
         .catch(() => caches.match("/alunos/index.html"))
@@ -54,12 +80,15 @@ self.addEventListener("fetch", (event) => {
   }
 
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-      if (response.ok) {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-      }
-      return response;
-    }))
+    caches.match(request).then((cached) => {
+      if (cached) return cached;
+      return fetch(request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      });
+    })
   );
 });

@@ -30,14 +30,8 @@ python3 "${ROOT_DIR}/installer/build-installer.py" \
 python3 "${ROOT_DIR}/installer/build-installer.py" \
     --output "${DOWNLOADS_DIR}/${OFFLINE_PACKAGE_NAME}.zip"
 
-# Atualizar também o Install-Pulselab.zip na raiz do repositório
-cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip" "${ROOT_DIR}/Install-Pulselab.zip"
-cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip.sha256" "${ROOT_DIR}/Install-Pulselab.zip.sha256"
-
-# Copiar para dist-offline para compatibilidade
-mkdir -p "${DIST_ROOT}"
-cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip" "${DIST_ROOT}/PulseLab-Alunos-v${VERSION}.zip"
-cp "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip.sha256" "${DIST_ROOT}/PulseLab-Alunos-v${VERSION}.zip.sha256"
+# Limpar qualquer lixo residual na raiz se houver
+rm -f "${ROOT_DIR}/Install-Pulselab.zip" "${ROOT_DIR}/Install-Pulselab.zip.sha256" "${ROOT_DIR}/"*.zip.sha256
 
 echo "[3/4] Checksums gerados:"
 echo "PulseLab-${VERSION}-Windows.zip: $(cat "${DOWNLOADS_DIR}/PulseLab-${VERSION}-Windows.zip.sha256")"

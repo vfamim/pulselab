@@ -576,8 +576,12 @@ export default function StudentPage() {
 
   const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
   const [resumable, setResumable] = useState(savedSession);
+  const VALID_SCREENS = ["pre", "activity", "checkpoint20", "checkpoint40", "post", "finished"];
   const [screen, setScreen] = useState(() => {
-    return savedSession?.screen && savedSession.screen !== "context" ? savedSession.screen : "pre";
+    if (savedSession?.screen && VALID_SCREENS.includes(savedSession.screen)) {
+      return savedSession.screen;
+    }
+    return "pre";
   });
   const [sessionId, setSessionId] = useState(() => savedSession?.sessionId || createUuid());
   const [groupId, setGroupId] = useState(() => savedSession?.groupId || createUuid());
@@ -594,10 +598,22 @@ export default function StudentPage() {
   const [timeline, setTimeline] = useState(() => savedSession?.timeline || []);
   const [responses, setResponses] = useState(() => savedSession?.responses || []);
   const [spikeTelemetry, setSpikeTelemetry] = useState(() => savedSession?.spikeTelemetry || null);
-  const [preAnswers, setPreAnswers] = useState(() => savedSession?.preAnswers || PRE_DEFAULT);
-  const [checkpoint20Answers, setCheckpoint20Answers] = useState(() => savedSession?.checkpoint20Answers || CHECKPOINT_DEFAULT);
-  const [checkpoint40Answers, setCheckpoint40Answers] = useState(() => savedSession?.checkpoint40Answers || CHECKPOINT_DEFAULT);
-  const [postAnswers, setPostAnswers] = useState(() => savedSession?.postAnswers || POST_DEFAULT);
+  const [preAnswers, setPreAnswers] = useState(() => ({
+    ...PRE_DEFAULT,
+    ...(savedSession?.preAnswers && typeof savedSession.preAnswers === "object" ? savedSession.preAnswers : {})
+  }));
+  const [checkpoint20Answers, setCheckpoint20Answers] = useState(() => ({
+    ...CHECKPOINT_DEFAULT,
+    ...(savedSession?.checkpoint20Answers && typeof savedSession.checkpoint20Answers === "object" ? savedSession.checkpoint20Answers : {})
+  }));
+  const [checkpoint40Answers, setCheckpoint40Answers] = useState(() => ({
+    ...CHECKPOINT_DEFAULT,
+    ...(savedSession?.checkpoint40Answers && typeof savedSession.checkpoint40Answers === "object" ? savedSession.checkpoint40Answers : {})
+  }));
+  const [postAnswers, setPostAnswers] = useState(() => ({
+    ...POST_DEFAULT,
+    ...(savedSession?.postAnswers && typeof savedSession.postAnswers === "object" ? savedSession.postAnswers : {})
+  }));
   const [online, setOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState("");
   const [checkpointModalMark, setCheckpointModalMark] = useState(null);

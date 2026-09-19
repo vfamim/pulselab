@@ -11,7 +11,7 @@ call npm run build
 cd ..\..
 echo.
 echo [2/3] Gerando pacotes ZIP e checksums...
-python installer\build-installer.py --output instalador\downloads\PulseLab-1.7.1-Windows.zip
+python installer\build-installer.py --output instalador\downloads\PulseLab-1.9.0-Windows.zip
 echo.
 echo [3/3] Publicando site e PWA no Firebase Hosting...
 call npx firebase-tools deploy --only hosting

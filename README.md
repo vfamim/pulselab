@@ -44,21 +44,23 @@ Fundação de observação distribuída e controle de qualidade para oficinas de
 
 ---
 
-## Arquitetura do Repositório (v1.7.1)
+## Arquitetura do Repositório (v1.9.0)
 
 ```
-pulselab/
-├── bridge/
-│   ├── pulselab-bridge.ps1     # Bridge HTTP local (porta 43127), relógio e alertas nativos
-│   └── spike-parser.ps1        # Parser offline de arquivos .llsp3 do LEGO SPIKE App 3
-├── alunos/                     # Build de produção estático da PWA dos alunos (HTML/CSS/JS)
-├── web/
-│   └── agent-simulator/        # Código-fonte da PWA (React, Vite, IndexedDB e testes)
+.
+├── alunos/                     # WebApp dos alunos (PWA offline compilada)
+│   ├── assets/                 # Scripts compilados e estilos otimizados
+│   ├── index.html              # Interface do estudante (Início rápido, Checkpoints, Finalização)
+│   ├── manifest.webmanifest    # Manifesto PWA com suporte offline
+│   └── sw.js                   # Service Worker com cache resiliente
+├── bridge/                     # Servidor HTTP loopback (Porta 43127) e companion nativo
+│   ├── pulselab-bridge.ps1     # Daemon HTTP local resiliente + sincronizador Supabase
+│   ├── pulselab-toast.ps1      # Notificação visual de janela ativa
+│   └── spike-parser.ps1        # Parser de telemetria LEGO SPIKE (.llsp3)
 ├── config/
-│   ├── defaults.json           # Configurações padrão offline
-│   └── config.json             # Configuração do protocolo (v1.7.1)
-├── instalador/                 # Página do instalador web e downloads dos pacotes ZIP
-│   └── downloads/              # Pacotes PulseLab-1.7.1-Windows.zip e PulseLab-Alunos-Offline-v1.7.1.zip
+│   └── config.json             # Configuração do protocolo (v1.9.0)
+├── instalador/
+│   └── downloads/              # Pacotes PulseLab-1.9.0-Windows.zip e PulseLab-Alunos-Offline-v1.9.0.zip
 ├── testes/                     # Aba oculta para homologação rápida e download
 ├── tutorial/                   # Guia operacional ilustrado interativo em slides (Marp)
 ├── dashboard/                  # Painel de acompanhamento e visualização
@@ -93,7 +95,7 @@ O Bridge inspeciona o projeto salvo no SPIKE (`Documents\LEGO Education\SPIKE 3`
 ## Como Instalar e Executar
 
 ### 1. Pacote 100% Offline (Recomendado para Escolas)
-1. Baixe `PulseLab-1.7.1-Windows.zip` (~92 KB) em [`instalador/downloads/`](instalador/downloads/).
+1. Baixe `PulseLab-1.9.0-Windows.zip` em [`instalador/downloads/`](instalador/downloads/).
 2. Extraia o ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
 3. Dê 2 cliques em `Instalar-PulseLab.bat` (cria o atalho) ou em `Iniciar-PulseLab.bat` (roda direto).
 4. O navegador padrão abre automaticamente em `http://127.0.0.1:43127/alunos/` com funcionamento autônomo e sem conexão à internet.
@@ -118,12 +120,12 @@ Ou diretamente via Python / PowerShell:
 
 ```bash
 python3 installer/build-installer.py \
-  --output instalador/downloads/PulseLab-1.7.1-Windows.zip
+  --output instalador/downloads/PulseLab-1.9.0-Windows.zip
 ```
 
 ```powershell
 .\installer\build-installer.ps1 `
-  -OutputPath .\instalador\downloads\PulseLab-1.7.1-Windows.zip
+  -OutputPath .\instalador\downloads\PulseLab-1.9.0-Windows.zip
 ```
 
 Os builders geram o ZIP pré-configurado com a PWA compilada, Bridge local, `SHA256SUMS.txt` interno e manifesto `.zip.sha256`.
