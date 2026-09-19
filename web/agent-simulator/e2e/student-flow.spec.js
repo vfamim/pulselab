@@ -108,3 +108,28 @@ test("permite forçar avanço, testar alerta com modal e reiniciar a oficina", a
   await page.getByRole("button", { name: "🔄 Reiniciar", exact: true }).click();
   await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
 });
+
+test("permite selecionar a região e verificar os metadados do computador", async ({ page }) => {
+  // Abrir modal de região via botão do topo
+  await page.getByRole("button", { name: /Região:/i }).click();
+  await expect(page.getByRole("heading", { name: "📍 Região & Metadados do Computador" })).toBeVisible();
+
+  // Selecionar região e salvar
+  await page.getByRole("button", { name: /Sudeste/i }).click();
+  await page.getByRole("button", { name: "💾 Salvar" }).click();
+
+  // Confirmar que o modal fechou e a região foi atualizada
+  await expect(page.getByRole("heading", { name: "📍 Região & Metadados do Computador" })).not.toBeVisible();
+  await expect(page.getByText(/Região salva com sucesso: Sudeste!/i)).toBeVisible();
+});
+
+test("permite recusa informada da pesquisa e avanço direto para a atividade", async ({ page }) => {
+  await expect(page.getByRole("heading", { name: /Como vocês chegam para esta oficina\?/ })).toBeVisible();
+
+  // Clicar em recusa voluntária
+  await page.getByRole("button", { name: "Prefiro não responder a pesquisa" }).click();
+
+  // Deve ir diretamente para a atividade sem forçar questionários
+  await expect(page.getByRole("heading", { name: "Pode focar no projeto do SPIKE" })).toBeVisible();
+  await expect(page.getByText(/Oficina liberada em modo livre/)).toBeVisible();
+});
