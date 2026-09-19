@@ -763,68 +763,73 @@ select:focus-visible {
 
 .scale-option {
   width: 100%;
-  min-height: 76px;
-  padding: 10px 8px;
+  min-height: 94px;
+  padding: 12px 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  gap: 5px;
-  color: #5e566a;
-  background: #fbfafc;
-  border: 1px solid #dfd9e5;
-  border-radius: 12px;
+  gap: 4px;
+  color: #475569;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 14px;
   text-align: center;
-  transition: all 0.15s ease-in-out;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
 }
 
-.scale-option > span {
-  width: auto;
-  min-width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #6c617a;
-  background: transparent !important;
-  border-radius: 0;
-  font-size: 1.45rem;
+.scale-option__icon {
+  font-size: 1.85rem;
+  line-height: 1.1;
+  margin-bottom: 2px;
+  display: block;
+  transition: transform 0.18s ease;
+}
+
+.scale-option__title {
+  font-size: 0.96rem;
   font-weight: 850;
-  line-height: 1;
-  transition: color 0.15s ease-in-out, transform 0.15s ease-in-out;
+  color: #1e293b;
+  line-height: 1.25;
 }
 
-.scale-option small {
-  font-size: 0.85rem;
+.scale-option__sub {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
   line-height: 1.25;
-  font-weight: 650;
-  text-align: center;
-  word-break: break-word;
+  margin-top: 1px;
 }
 
 .scale-option:hover {
-  border-color: var(--violet-500);
-  background: #fff;
+  border-color: #0284c7;
+  background: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(2, 132, 199, 0.12);
 }
 
 .scale-option.is-selected {
-  color: var(--violet-950);
-  background: var(--violet-100);
-  border-color: var(--violet-600);
-  box-shadow: inset 0 0 0 2px var(--violet-600);
+  color: #0369a1;
+  background: #f0f9ff;
+  border-color: #0284c7;
+  box-shadow: inset 0 0 0 2px #0284c7, 0 6px 18px rgba(2, 132, 199, 0.18);
+  transform: translateY(-2px);
 }
 
-.scale-option.is-selected > span {
-  color: var(--violet-950);
-  background: transparent !important;
+.scale-option.is-selected .scale-option__icon {
+  transform: scale(1.18);
+}
+
+.scale-option.is-selected .scale-option__title {
+  color: #0369a1;
   font-weight: 900;
-  transform: scale(1.15);
 }
 
-.scale-option.is-selected small {
-  color: var(--violet-900);
-  font-weight: 750;
+.scale-option.is-selected .scale-option__sub {
+  color: #0284c7;
+  font-weight: 700;
 }
 
 .assent-copy {
@@ -885,54 +890,153 @@ select:focus-visible {
 }
 
 .option-row {
-  min-height: 84px;
-  padding: 16px 18px;
+  min-height: 72px;
+  padding: 14px 18px;
   display: flex;
-  align-items: flex-start;
-  gap: 14px;
+  align-items: center;
+  gap: 16px;
   text-align: left;
-  background: #fbfafc;
-  border: 1px solid #dfd9e5;
+  background: #ffffff;
+  border: 2px solid #e2e8f0;
   border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+}
+
+.option-row:hover {
+  border-color: #0284c7;
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.option-row__icon {
+  font-size: 1.85rem;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.option-row__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.option-row__body strong {
+  color: #1e293b;
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1.25;
+}
+
+.option-row__body small {
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.84rem;
+  line-height: 1.35;
+  font-weight: 550;
 }
 
 .option-row__radio {
   width: 22px;
   height: 22px;
   flex: 0 0 auto;
-  margin-top: 2px;
   background: #fff;
-  border: 2px solid #c3bacd;
+  border: 2px solid #cbd5e1;
   border-radius: 999px;
+  transition: all 0.15s ease;
 }
 
-.option-row > span:last-child {
+.option-row.is-selected {
+  background: #f0f9ff;
+  border-color: #0284c7;
+  box-shadow: inset 0 0 0 2px #0284c7, 0 4px 14px rgba(2, 132, 199, 0.14);
+}
+
+.option-row.is-selected .option-row__body strong {
+  color: #0369a1;
+}
+
+.option-row.is-selected .option-row__body small {
+  color: #0284c7;
+}
+
+.option-row.is-selected .option-row__radio {
+  background: #0284c7;
+  border: 5px solid #e0f2fe;
+  box-shadow: 0 0 0 1px #0284c7;
+}
+
+/* Card de Ajuda / Chamada de Professor */
+.help-toggle-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  margin-top: 18px;
+}
+
+.help-toggle-btn:hover {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.help-toggle-btn.is-active {
+  background: #fffbeb;
+  border: 2px solid #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.help-toggle-btn__icon {
+  font-size: 2.1rem;
+  flex: 0 0 auto;
+}
+
+.help-toggle-btn__content {
+  flex: 1;
   display: flex;
   flex-direction: column;
 }
 
-.option-row strong {
-  color: #3a3345;
-  font-size: 0.98rem;
-  font-weight: 750;
+.help-toggle-btn__content strong {
+  font-size: 1rem;
+  font-weight: 850;
+  color: #0f172a;
 }
 
-.option-row small {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.45;
+.help-toggle-btn.is-active .help-toggle-btn__content strong {
+  color: #b45309;
 }
 
-.option-row.is-selected {
-  background: var(--violet-100);
-  border-color: var(--violet-500);
+.help-toggle-btn__content small {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin-top: 3px;
+  font-weight: 550;
 }
 
-.option-row.is-selected .option-row__radio {
-  background: var(--violet-700);
-  border: 5px solid #e5dcfb;
-  box-shadow: 0 0 0 1px var(--violet-700);
+.help-toggle-btn__badge {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  background: #e2e8f0;
+  color: #475569;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.help-toggle-btn.is-active .help-toggle-btn__badge {
+  background: #f59e0b;
+  color: #ffffff;
 }
 
 .workspace {

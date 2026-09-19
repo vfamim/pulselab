@@ -6,22 +6,22 @@ async function choose(page, question, answer) {
 }
 
 async function answerPre(page) {
-  await choose(page, /Quanto o grupo já trabalhou/, /Nunca usamos/);
-  await choose(page, /Quão confiantes vocês estão/, /Confiantes$/);
+  await choose(page, /programou robôs/i, /Primeira vez/i);
+  await choose(page, /confiança/i, /Confiantes/i);
   await page.getByRole("button", { name: "Começar Atividade!" }).click();
 }
 
 async function answerCheckpoint(page) {
-  await choose(page, /Quanto esforço mental/, /Pouco$/);
-  await choose(page, /Em que situação o grupo está/, /Avançando/);
-  await choose(page, /Como o grupo está trabalhando junto/, /Decidimos juntos/);
+  await choose(page, /dificuldade/i, /Normal/i);
+  await choose(page, /robô e o código/i, /Avançando/i);
+  await choose(page, /dividindo as tarefas/i, /Em equipe/i);
   await page.getByRole("button", { name: "Salvar e continuar" }).click();
 }
 
 async function answerPost(page) {
-  await choose(page, /Quanto o grupo entende/, /Conseguimos explicar/);
-  await choose(page, /Quanto vocês gostariam de participar/, /Gostaríamos muito/);
-  await choose(page, /Qual palavra melhor resume/, /Orgulho e confiança/);
+  await choose(page, /entenderam sobre o que o robô/i, /Totalmente/i);
+  await choose(page, /outra oficina/i, /Quero sempre/i);
+  await choose(page, /emoji melhor resume/i, /Orgulho/i);
   await page.getByRole("button", { name: "Concluir Oficina" }).click();
 }
 

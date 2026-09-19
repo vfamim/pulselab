@@ -47,31 +47,59 @@ const FLOW_STEPS = [
 ];
 
 const EXPERIENCE_OPTIONS = [
-  [1, "Nunca usamos"],
-  [2, "Usamos poucas vezes"],
-  [3, "Já fizemos projetos"],
-  [4, "Temos bastante prática"]
+  [1, "🐣 Primeira vez", "Nunca mexemos com robôs"],
+  [2, "🧩 Pouca prática", "Já vimos ou usamos 1 ou 2 vezes"],
+  [3, "🚀 Já fizemos", "Montamos ou programamos antes"],
+  [4, "⚡ Muita prática", "Já dominamos e sabemos bem"]
 ];
 
 const CONFIDENCE_OPTIONS = [
-  [1, "Pouco confiantes"],
-  [2, "Razoável"],
-  [3, "Confiantes"],
-  [4, "Muito confiantes"]
+  [1, "😅 Inseguros", "Acho que vai ser difícil"],
+  [2, "🤔 Curiosos", "Vamos descobrir como faz"],
+  [3, "😊 Confiantes", "Acho que vai dar certo"],
+  [4, "🔥 Animados!", "Empolgação total para o desafio"]
+];
+
+const EFFORT_OPTIONS = [
+  [1, "🟢 Muito Fácil", "Estamos tirando de letra"],
+  [2, "🟡 Normal", "Dá pra fazer com calma"],
+  [3, "🟠 Puxado", "Exige bastante atenção"],
+  [4, "🔴 Muito Difícil", "Super desafiador agora"]
 ];
 
 const PROGRESS_OPTIONS = [
-  ["needs_help_now", "Travamos", "Não sabemos como continuar"],
-  ["trying_without_progress", "Começando", "Estamos tentando, mas ainda sem avanço"],
-  ["progressing_with_doubt", "Avançando", "Temos uma parte funcionando, com algumas dúvidas"],
-  ["progressing_independently", "Testando", "Estamos ajustando e testando autonomamente"]
+  ["needs_help_now", "🛑 Travamos", "Não sabemos como sair do lugar"],
+  ["trying_without_progress", "⏳ Tentando", "Testando caminhos, ainda sem funcionar"],
+  ["progressing_with_doubt", "💡 Avançando", "Parte funciona, com algumas dúvidas"],
+  ["progressing_independently", "🚀 Voando!", "Tudo funcionando e testando sozinhos"]
 ];
 
 const COLLABORATION_OPTIONS = [
-  [1, "Cada um por si", "Quase não trocamos ideias"],
-  [2, "Uma pessoa decide", "A participação está desigual"],
-  [3, "Decidimos juntos", "Todos conseguem contribuir"],
-  [4, "Revezamos bem", "Trocamos tarefas naturalmente"]
+  [1, "👤 Pouca troca", "Cada um ficou no seu canto"],
+  [2, "🗣️ Desigual", "Um faz quase tudo, outro só olha"],
+  [3, "🤝 Em equipe", "Decidimos juntos com boa conversa"],
+  [4, "🔄 Revezamento", "Trocamos tarefas de montagem e código"]
+];
+
+const UNDERSTANDING_OPTIONS = [
+  [1, "❓ Quase nada", "Ficou meio confuso pra gente"],
+  [2, "🧩 O básico", "Entendemos uma parte"],
+  [3, "👍 Quase tudo", "Entendemos bem a lógica"],
+  [4, "🧠 Totalmente", "Sabemos explicar para qualquer um"]
+];
+
+const RETURN_OPTIONS = [
+  [1, "👎 Não", "Não gostamos muito"],
+  [2, "🤷 Talvez", "Depende da atividade"],
+  [3, "🙋 Com certeza!", "Foi muito bacana"],
+  [4, "🤩 Quero sempre!", "Adoramos a experiência!"]
+];
+
+const AFFECT_OPTIONS = [
+  ["frustrated", "😤 Frustração", "Não saiu como a gente queria"],
+  ["tired", "🥱 Cansaço", "Foi puxado e exigiu muita energia"],
+  ["curious", "🧐 Curiosidade", "Deu vontade de aprender mais"],
+  ["confident", "🏆 Orgulho!", "Conseguimos vencer o desafio!"]
 ];
 
 const BRIDGE_URL = "http://127.0.0.1:43127";
@@ -226,17 +254,25 @@ function ScaleQuestion({ legend, hint, options, value, onChange }) {
       <legend>{legend}</legend>
       {hint ? <p>{hint}</p> : null}
       <div className="scale-grid">
-        {options.map(([optionValue, label], index) => (
-          <button
-            className={`scale-option ${value === optionValue ? "is-selected" : ""}`}
-            key={optionValue}
-            onClick={() => onChange(optionValue)}
-            type="button"
-          >
-            <span>{index + 1}</span>
-            <small>{label}</small>
-          </button>
-        ))}
+        {options.map(([optionValue, label, sublabel], index) => {
+          const parts = String(label).match(/^(\S+)\s+(.+)$/);
+          const icon = parts ? parts[1] : (index + 1);
+          const title = parts ? parts[2] : label;
+          const isSelected = value === optionValue;
+          return (
+            <button
+              className={`scale-option ${isSelected ? "is-selected" : ""}`}
+              key={optionValue}
+              onClick={() => onChange(optionValue)}
+              type="button"
+              aria-pressed={isSelected}
+            >
+              <span className="scale-option__icon">{icon}</span>
+              <strong className="scale-option__title">{title}</strong>
+              {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
+            </button>
+          );
+        })}
       </div>
     </fieldset>
   );
@@ -247,20 +283,28 @@ function OptionQuestion({ legend, options, value, onChange }) {
     <fieldset className="question-block">
       <legend>{legend}</legend>
       <div className="option-list">
-        {options.map(([optionValue, label, hint]) => (
-          <button
-            className={`option-row ${value === optionValue ? "is-selected" : ""}`}
-            key={optionValue}
-            onClick={() => onChange(optionValue)}
-            type="button"
-          >
-            <span className="option-row__radio" />
-            <span>
-              <strong>{label}</strong>
-              {hint ? <small>{hint}</small> : null}
-            </span>
-          </button>
-        ))}
+        {options.map(([optionValue, label, hint]) => {
+          const parts = String(label).match(/^(\S+)\s+(.+)$/);
+          const icon = parts ? parts[1] : "•";
+          const title = parts ? parts[2] : label;
+          const isSelected = value === optionValue;
+          return (
+            <button
+              className={`option-row ${isSelected ? "is-selected" : ""}`}
+              key={optionValue}
+              onClick={() => onChange(optionValue)}
+              type="button"
+              aria-pressed={isSelected}
+            >
+              <span className="option-row__icon">{icon}</span>
+              <span className="option-row__body">
+                <strong>{title}</strong>
+                {hint ? <small>{hint}</small> : null}
+              </span>
+              <span className="option-row__radio" />
+            </button>
+          );
+        })}
       </div>
     </fieldset>
   );
@@ -309,13 +353,13 @@ function PreScreen({ answers, setAnswers, onSubmit, resumable, onResume }) {
       ) : null}
 
       <ScaleQuestion
-        legend="Quanto o grupo já trabalhou com robótica ou programação?"
+        legend="Já montou ou programou robôs ou blocos antes?"
         onChange={(experience) => setAnswers({ ...answers, experience })}
         options={EXPERIENCE_OPTIONS}
         value={answers.experience}
       />
       <ScaleQuestion
-        legend="Quão confiantes vocês estão para começar o desafio?"
+        legend="Como está a animação e confiança do grupo para o desafio?"
         onChange={(confidence) => setAnswers({ ...answers, confidence })}
         options={CONFIDENCE_OPTIONS}
         value={answers.confidence}
@@ -377,9 +421,9 @@ function CheckpointScreen({ mark, answers, setAnswers, onSubmit }) {
   const ready = answers.effort !== null && answers.progress && answers.collaboration;
   return (
     <Card
-      eyebrow={`Check-in de ${mark} minutos · 20 segundos`}
+      eyebrow={`Check-in de ${mark} minutos · Pausa rápida de 30 segundos`}
       title="Como está indo o projeto?"
-      description="Responda rapidamente como o grupo está trabalhando agora e volte direto para a robótica."
+      description="Respondam como está o andamento da montagem e do código agora para voltarem direto para a robótica."
       footer={
         <div className="action-row">
           <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
@@ -392,39 +436,38 @@ function CheckpointScreen({ mark, answers, setAnswers, onSubmit }) {
         <span className="time-chip">{mark}:00 de atividade</span>
       </div>
       <ScaleQuestion
-        legend="Quanto esforço mental esta atividade está exigindo?"
+        legend="Como está o nível de dificuldade do desafio até aqui?"
         onChange={(effort) => setAnswers({ ...answers, effort })}
-        options={[
-          [1, "Muito pouco"],
-          [2, "Pouco"],
-          [3, "Bastante"],
-          [4, "Muito"]
-        ]}
+        options={EFFORT_OPTIONS}
         value={answers.effort}
       />
       <OptionQuestion
-        legend="Em que situação o grupo está?"
+        legend="Como está o robô e o código agora?"
         onChange={(progress) => setAnswers({ ...answers, progress })}
         options={PROGRESS_OPTIONS}
         value={answers.progress}
       />
-      <OptionQuestion
-        legend="Como o grupo está trabalhando junto?"
+      <ScaleQuestion
+        legend="Como a dupla ou grupo está dividindo as tarefas?"
         onChange={(collaboration) => setAnswers({ ...answers, collaboration })}
         options={COLLABORATION_OPTIONS}
         value={answers.collaboration}
       />
-      <label className="help-check">
-        <input
-          checked={answers.help}
-          onChange={(event) => setAnswers({ ...answers, help: event.target.checked })}
-          type="checkbox"
-        />
-        <span>
-          <strong>Nosso grupo precisa de ajuda do professor agora.</strong>
-          <small>Isso registra um aviso para que o apoio seja oferecido durante a aula.</small>
+      <button
+        type="button"
+        className={`help-toggle-btn ${answers.help ? "is-active" : ""}`}
+        onClick={() => setAnswers({ ...answers, help: !answers.help })}
+        aria-pressed={answers.help}
+      >
+        <span className="help-toggle-btn__icon">{answers.help ? "🚨" : "🙋‍♂️"}</span>
+        <div className="help-toggle-btn__content">
+          <strong>{answers.help ? "Ajuda solicitada ao professor!" : "Precisa de ajuda do professor na bancada?"}</strong>
+          <small>{answers.help ? "O professor já foi avisado. Continuem montando enquanto ele se aproxima." : "Clique aqui para registrar que o grupo quer apoio presencial do professor."}</small>
+        </div>
+        <span className="help-toggle-btn__badge">
+          {answers.help ? "✓ AJUDA CHAMADA" : "CHAMAR PROFESSOR"}
         </span>
-      </label>
+      </button>
     </Card>
   );
 }
@@ -436,9 +479,9 @@ function PostScreen({ answers, setAnswers, onSubmit }) {
     answers.affect;
   return (
     <Card
-      eyebrow="Depois da atividade · finalização rápida"
+      eyebrow="Encerramento da Oficina · Último passo (30 segundos)"
       title="Como foi a experiência do grupo?"
-      description="Últimas 3 perguntas sobre a oficina de hoje."
+      description="Últimas 3 perguntas sobre a oficina de robótica."
       footer={
         <div className="action-row">
           <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
@@ -448,36 +491,21 @@ function PostScreen({ answers, setAnswers, onSubmit }) {
       }
     >
       <ScaleQuestion
-        legend="Quanto o grupo entende sobre o que foi montado e programado?"
+        legend="O quanto vocês entenderam sobre o que o robô faz?"
         onChange={(understanding) => setAnswers({ ...answers, understanding })}
-        options={[
-          [1, "Ainda não entendemos"],
-          [2, "Entendemos um pouco"],
-          [3, "Entendemos bem"],
-          [4, "Conseguimos explicar"]
-        ]}
+        options={UNDERSTANDING_OPTIONS}
         value={answers.understanding}
       />
       <ScaleQuestion
-        legend="Quanto vocês gostariam de participar de outra atividade como esta?"
+        legend="Gostariam de participar de outra oficina como esta?"
         onChange={(returnIntent) => setAnswers({ ...answers, returnIntent })}
-        options={[
-          [1, "Não gostaríamos"],
-          [2, "Talvez não"],
-          [3, "Talvez sim"],
-          [4, "Gostaríamos muito"]
-        ]}
+        options={RETURN_OPTIONS}
         value={answers.returnIntent}
       />
       <OptionQuestion
-        legend="Qual palavra melhor resume a sensação do grupo agora?"
+        legend="Qual emoji melhor resume o sentimento do grupo agora?"
         onChange={(affect) => setAnswers({ ...answers, affect })}
-        options={[
-          ["frustrated", "Frustração"],
-          ["tired", "Cansaço"],
-          ["curious", "Curiosidade"],
-          ["confident", "Orgulho e confiança"]
-        ]}
+        options={AFFECT_OPTIONS}
         value={answers.affect}
       />
     </Card>
