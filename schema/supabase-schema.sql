@@ -403,7 +403,7 @@ WITH timeline AS (
                     WHERE event_type = 'session_started'
                       AND jsonb_typeof(details -> 'expected_checkpoints') = 'array'
                 ),
-            0
+            2
         ) AS expected_checkpoint_count,
         coalesce(
             max((details ->> 'participant_count')::integer)
@@ -411,7 +411,7 @@ WITH timeline AS (
                     WHERE event_type = 'session_started'
                       AND details ->> 'participant_count' IS NOT NULL
                 ),
-            2
+            1
         ) AS participant_count
     FROM public.research_session_events
     GROUP BY session_id
@@ -428,19 +428,19 @@ responses AS (
         count(*) FILTER (WHERE response_status = 'declined') AS declined_response_count,
         count(*) FILTER (WHERE response_status = 'timeout') AS timeout_response_count,
         count(DISTINCT participant_id)
-            FILTER (WHERE event_type = 'pre' AND response_status = 'completed')
+            FILTER (WHERE event_type = 'pre' AND response_status IN ('completed', 'declined'))
             AS distinct_pre_completed_participants,
         count(DISTINCT participant_id)
-            FILTER (WHERE event_type = 'post' AND response_status = 'completed')
+            FILTER (WHERE event_type = 'post' AND response_status IN ('completed', 'declined'))
             AS distinct_post_completed_participants,
         count(DISTINCT (participant_id, interval_mark))
-            FILTER (WHERE event_type = 'checkpoint' AND response_status = 'completed')
+            FILTER (WHERE event_type = 'checkpoint' AND response_status IN ('completed', 'declined'))
             AS distinct_checkpoint_completed_pairs,
         count(DISTINCT interval_mark)
-            FILTER (WHERE event_type = 'checkpoint' AND response_status = 'completed')
+            FILTER (WHERE event_type = 'checkpoint' AND response_status IN ('completed', 'declined'))
             AS distinct_completed_interval_marks,
         count(DISTINCT participant_id)
-            FILTER (WHERE event_type = 'checkpoint' AND response_status = 'completed')
+            FILTER (WHERE event_type = 'checkpoint' AND response_status IN ('completed', 'declined'))
             AS distinct_checkpoint_completed_participants,
         count(DISTINCT interval_mark)
             FILTER (WHERE event_type = 'checkpoint' AND screenshot_path IS NOT NULL)

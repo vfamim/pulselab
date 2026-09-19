@@ -5,8 +5,10 @@ import {
   formatEventName
 } from "../lib/contracts.js";
 import {
+  listPendingEvents,
   markEventDelivered,
   markSessionEvents,
+  pruneDeliveredEvents,
   removeSession,
   saveEvent,
   saveSession
@@ -690,11 +692,11 @@ function CheckpointScreen({
       >
         <span className="help-toggle-btn__icon">{answers.help ? "🚨" : "🙋‍♂️"}</span>
         <div className="help-toggle-btn__content">
-          <strong>{answers.help ? "Ajuda solicitada ao professor!" : "Precisa de ajuda do professor na bancada?"}</strong>
-          <small>{answers.help ? "O professor já foi avisado. Continuem montando enquanto ele se aproxima." : "Clique aqui para registrar que o grupo quer apoio presencial do professor."}</small>
+          <strong>{answers.help ? "Ajuda registrada para a pesquisa!" : "Precisa de ajuda do professor na bancada?"}</strong>
+          <small>{answers.help ? "Pedido registrado no sistema! Por favor, levantem a mão na sala para o professor localizar sua bancada." : "Clique aqui para registrar a dúvida e levantem a mão na sala para chamar o professor."}</small>
         </div>
         <span className="help-toggle-btn__badge">
-          {answers.help ? "✓ AJUDA CHAMADA" : "CHAMAR PROFESSOR"}
+          {answers.help ? "✓ LEVANTAR A MÃO" : "CHAMAR PROFESSOR"}
         </span>
       </button>
     </Card>
@@ -910,8 +912,25 @@ export default function StudentPage() {
     }
   }, []);
 
+  const [dbPendingCount, setDbPendingCount] = useState(0);
+
+  const refreshPendingCount = React.useCallback(async () => {
+    try {
+      const pending = await listPendingEvents();
+      setDbPendingCount(pending.length);
+    } catch {
+      // IndexedDB indisponível em fallback
+    }
+  }, []);
+
+  useEffect(() => {
+    pruneDeliveredEvents(7).catch(() => {});
+    refreshPendingCount();
+  }, [refreshPendingCount]);
+
   const allEvents = [...timeline, ...responses];
-  const pendingCount = allEvents.filter((event) => event._delivery_state === "queued").length;
+  const memoryPendingCount = allEvents.filter((event) => event._delivery_state === "queued").length;
+  const pendingCount = Math.max(memoryPendingCount, dbPendingCount);
   const activeStep = stepForScreen(screen);
 
   function flash(message) {
@@ -958,10 +977,13 @@ export default function StudentPage() {
     setResponses((prev) =>
       prev.map((ev) => (ev.event_id === eventId ? { ...ev, _delivery_state: state } : ev))
     );
+    void refreshPendingCount();
   }
 
   function persist(event) {
-    void saveEvent(event).catch(() =>
+    void saveEvent(event).then(() => {
+      void refreshPendingCount();
+    }).catch(() =>
       flash("Não foi possível salvar no armazenamento local deste navegador.")
     );
     void notifyBridgeEvent(event);
@@ -970,6 +992,7 @@ export default function StudentPage() {
         if (synced) {
           updateEventDeliveryState(event.event_id, "delivered");
         }
+        void refreshPendingCount();
       });
     }
   }
@@ -1099,7 +1122,13 @@ export default function StudentPage() {
 
     emitTimeline("session_started", {
       activity_stage: "init",
-      details: { runtime: "browser_pwa", team_role: teamRole, ethical_assent: assentAgreed }
+      details: {
+        runtime: "browser_pwa",
+        team_role: teamRole,
+        ethical_assent: assentAgreed,
+        participant_count: 1,
+        expected_checkpoints: [20, 40]
+      }
     });
 
     emitResponse("pre", {
@@ -1126,7 +1155,12 @@ export default function StudentPage() {
     setAssentAgreed(false);
     emitTimeline("session_started", {
       activity_stage: "init",
-      details: { runtime: "browser_pwa", research_declined: true }
+      details: {
+        runtime: "browser_pwa",
+        research_declined: true,
+        participant_count: 1,
+        expected_checkpoints: [20, 40]
+      }
     });
     emitResponse("pre", {
       activity_stage: "pre",
@@ -1408,6 +1442,7 @@ export default function StudentPage() {
       const result = await flushPendingEvents((syncedId) => {
         updateEventDeliveryState(syncedId, "delivered");
       });
+      await refreshPendingCount();
       if (result.synced > 0 && showFeedback) {
         flash(`Sincronizados ${result.synced} registro(s) com a nuvem da pesquisa.`);
       }
@@ -1425,6 +1460,7 @@ export default function StudentPage() {
     const result = await flushPendingEvents((syncedId) => {
       updateEventDeliveryState(syncedId, "delivered");
     });
+    await refreshPendingCount();
     if (result.synced > 0) {
       flash(`Sucesso! ${result.synced} registro(s) sincronizados com o Supabase.`);
     } else if (result.remaining === 0) {
@@ -1716,8 +1752,8 @@ export default function StudentPage() {
           <div className="stage-toolbar">
             <div>
               <span className={`connection-dot ${online ? "is-online" : ""}`} />
-              <strong>{online ? (pendingCount === 0 ? "Nuvem Conectada · Sincronizado" : "Conectado · Sincronizando...") : "Funcionando 100% offline"}</strong>
-              <small>{pendingCount === 0 ? "Todos os registros salvos na nuvem" : `${pendingCount} registro(s) pendente(s)`}</small>
+              <strong>{online ? (pendingCount === 0 ? "Dispositivo Conectado · Sincronizado" : "Dispositivo Conectado · Enviando dados...") : "Modo Offline (salvando localmente)"}</strong>
+              <small>{pendingCount === 0 ? "Todos os registros salvos na nuvem da pesquisa" : `${pendingCount} registro(s) pendente(s) de envio`}</small>
             </div>
             {labMode ? (
               <>

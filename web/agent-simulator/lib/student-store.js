@@ -149,4 +149,39 @@ export async function markSessionEvents(sessionId, deliveryState) {
   }
 }
 
+/**
+ * Remove eventos já entregues com mais de `maxAgeDays` dias para evitar
+ * crescimento descontrolado do IndexedDB em máquinas compartilhadas.
+ */
+export async function pruneDeliveredEvents(maxAgeDays = 7) {
+  const database = await openDatabase();
+  const thresholdMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
 
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readwrite");
+      const index = transaction.objectStore(EVENTS_STORE).index("delivery_state");
+      const request = index.openCursor(IDBKeyRange.only("delivered"));
+      let prunedCount = 0;
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+
+        const event = cursor.value;
+        const eventTime = new Date(event._synced_at || event.occurred_at || 0).getTime();
+        if (eventTime > 0 && eventTime < thresholdMs) {
+          cursor.delete();
+          prunedCount++;
+        }
+        cursor.continue();
+      };
+
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(prunedCount);
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
