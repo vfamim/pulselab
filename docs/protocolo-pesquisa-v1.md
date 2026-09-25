@@ -1,5 +1,9 @@
 # Protocolo de Pesquisa PulseLab v1
 
+> Histórico: este protocolo descreve a coleta individual v1. A branch de teste
+> usa o [protocolo de bancada v2](protocolo-pesquisa-v2-teste.md). Não agrupar dados
+> dessas versões como se fossem o mesmo instrumento ou unidade de análise.
+
 > Status: versão de trabalho para revisão pedagógica, ética e estatística.
 > Compatibilidade técnica: agente e schema 1.5.0.
 > População: estudantes participantes de oficinas pontuais de robótica educacional com LEGO SPIKE, com idade máxima prevista de 15 anos. A idade mínima ainda precisa ser definida para adequar linguagem, assentimento e instrumentos.

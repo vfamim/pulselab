@@ -1,192 +1,91 @@
-/**
- * Parser estrutural de projetos LEGO SPIKE (.llsp3 / scratch.sb3 / python).
- * Extrai métricas agregadas de programação para inferência de progresso técnico
- * garantindo privacidade estrita (sem nomes de variáveis, strings livres ou código bruto).
- */
+import { unzipSync, strFromU8 } from "fflate";
 
-export const MOTOR_OPCODES = [
-  "spike_motor",
-  "wedo_setmotorpower",
-  "wedo_motor",
-  "boost_motor",
-  "ev3_motor",
-  "motors",
-  "motion_movesteps",
-  "motion_turnright",
-  "motion_turnleft",
-  "motion_pointindirection"
-];
+export const PARSER_VERSION = "spike-structure-2.0.0-test.1";
+const MAX_BYTES = 2 * 1024 * 1024;
 
-export const SENSOR_OPCODES = [
-  "spike_sensor",
-  "sensing_touchingobject",
-  "sensing_distanceto",
-  "sensing_color",
-  "sensing_loudness",
-  "sensing_timer",
-  "wedo_whendistance",
-  "boost_whencolor",
-  "ev3_sensor",
-  "ultrasonic",
-  "distance",
-  "color",
-  "force",
-  "gyro",
-  "yaw",
-  "pitch",
-  "roll"
-];
-
-export const LOOP_OPCODES = [
-  "control_repeat",
-  "control_forever",
-  "control_repeat_until",
-  "control_while"
-];
-
-export const CONDITION_OPCODES = [
-  "control_if",
-  "control_if_else",
-  "control_wait_until"
-];
-
-export function classifyOpcode(opcode = "") {
-  const lower = opcode.toLowerCase();
-  return {
-    isMotor: MOTOR_OPCODES.some((pattern) => lower.includes(pattern)),
-    isSensor: SENSOR_OPCODES.some((pattern) => lower.includes(pattern)),
-    isLoop: LOOP_OPCODES.some((pattern) => lower.includes(pattern)),
-    isCondition: CONDITION_OPCODES.some((pattern) => lower.includes(pattern)),
-    isEvent: lower.startsWith("event_") || lower.includes("when"),
-    isVariable: lower.startsWith("data_") || lower.includes("variable"),
-    isProcedure: lower.startsWith("procedures_") || lower.includes("custom_block")
+export function parseProjectJson(project) {
+  if (
+    !Array.isArray(project?.targets) ||
+    !project.targets.some((t) => t.blocks && typeof t.blocks === "object")
+  ) {
+    throw new Error(
+      "Formato não suportado. Use um projeto de blocos com project.json; Python não é analisado nesta versão.",
+    );
+  }
+  let total = 0,
+    nonShadow = 0,
+    stacks = 0;
+  const features = {
+    motor: false,
+    sensor: false,
+    loop: false,
+    condition: false,
+    variable: false,
+    procedure: false,
   };
-}
-
-export function inferStage(metrics) {
-  const { executable_blocks, uses_motor, uses_sensor, uses_loop, uses_condition } = metrics;
-
-  if (!executable_blocks || executable_blocks === 0) {
-    return { stage: "empty", confidence: 0.99 };
-  }
-
-  if (uses_motor && uses_sensor && (uses_loop || uses_condition)) {
-    return { stage: "integrated_mission", confidence: 0.92 };
-  }
-
-  if (uses_motor && uses_loop) {
-    return { stage: "autonomous_loop", confidence: 0.88 };
-  }
-
-  if (uses_motor && uses_sensor) {
-    return { stage: "sensor_reactive", confidence: 0.85 };
-  }
-
-  if (uses_motor) {
-    return { stage: "basic_movement", confidence: 0.85 };
-  }
-
-  if (executable_blocks > 0 && !uses_motor && !uses_sensor) {
-    return { stage: "initial_setup", confidence: 0.80 };
-  }
-
-  return { stage: "exploring", confidence: 0.70 };
-}
-
-export function parseProjectJson(projectJson, previousMetrics = null) {
-  if (!projectJson || typeof projectJson !== "object") {
-    return {
-      source: "spike_project",
-      project_saved: false,
-      format: "unknown",
-      executable_blocks: 0,
-      top_level_stacks: 0,
-      uses_motor: false,
-      uses_sensor: false,
-      uses_loop: false,
-      uses_condition: false,
-      uses_variable: false,
-      uses_procedure: false,
-      blocks_added_since_previous: 0,
-      blocks_removed_since_previous: 0,
-      inferred_stage: "empty",
-      inference_confidence: 0.99
-    };
-  }
-
-  const targets = Array.isArray(projectJson.targets) ? projectJson.targets : [];
-  let totalBlocks = 0;
-  let executableBlocks = 0;
-  let topLevelStacks = 0;
-
-  let usesMotor = false;
-  let usesSensor = false;
-  let usesLoop = false;
-  let usesCondition = false;
-  let usesVariable = false;
-  let usesProcedure = false;
-
-  const currentBlockIds = new Set();
-
-  for (const target of targets) {
-    const blocks = target.blocks || {};
-    for (const [blockId, blockData] of Object.entries(blocks)) {
-      if (!blockData || typeof blockData !== "object") continue;
-
-      currentBlockIds.add(blockId);
-      totalBlocks += 1;
-
-      // Bloco sombra (argumento interno) não é bloco executável principal
-      if (blockData.shadow !== true) {
-        executableBlocks += 1;
-      }
-
-      if (blockData.topLevel === true) {
-        topLevelStacks += 1;
-      }
-
-      const opcode = blockData.opcode || "";
-      const classification = classifyOpcode(opcode);
-
-      if (classification.isMotor) usesMotor = true;
-      if (classification.isSensor) usesSensor = true;
-      if (classification.isLoop) usesLoop = true;
-      if (classification.isCondition) usesCondition = true;
-      if (classification.isVariable) usesVariable = true;
-      if (classification.isProcedure) usesProcedure = true;
+  for (const target of project.targets) {
+    for (const block of Object.values(target.blocks || {})) {
+      if (!block || typeof block !== "object") continue;
+      total++;
+      if (block.shadow === true) continue;
+      nonShadow++;
+      if (block.topLevel === true) stacks++;
+      const opcode = String(block.opcode || "").toLowerCase();
+      features.motor ||= /motor|^motion_|^spike_move|^movement_/.test(opcode);
+      features.sensor ||=
+        /sensor|distance|ultrasonic|color|force|touch|gyro/.test(opcode);
+      features.loop ||= /^control_(repeat|forever|repeat_until|while)$/.test(
+        opcode,
+      );
+      features.condition ||= /^control_(if|if_else|wait_until)$/.test(opcode);
+      features.variable ||= /^data_|variable/.test(opcode);
+      features.procedure ||= /^procedures_|custom_block/.test(opcode);
     }
   }
-
-  let blocksAdded = 0;
-  let blocksRemoved = 0;
-
-  if (previousMetrics && typeof previousMetrics.executable_blocks === "number") {
-    const delta = executableBlocks - previousMetrics.executable_blocks;
-    if (delta > 0) blocksAdded = delta;
-    if (delta < 0) blocksRemoved = Math.abs(delta);
-  }
-
-  const baseMetrics = {
-    source: "spike_project",
-    project_saved: true,
-    format: "llsp3",
-    language: "word-blocks",
-    total_blocks: totalBlocks,
-    executable_blocks: executableBlocks,
-    top_level_stacks: topLevelStacks,
-    uses_motor: usesMotor,
-    uses_sensor: usesSensor,
-    uses_loop: usesLoop,
-    uses_condition: usesCondition,
-    uses_variable: usesVariable,
-    uses_procedure: usesProcedure,
-    blocks_added_since_previous: blocksAdded,
-    blocks_removed_since_previous: blocksRemoved
+  return {
+    parser_version: PARSER_VERSION,
+    format: "scratch-blocks",
+    total_blocks: total,
+    non_shadow_blocks: nonShadow,
+    top_level_stacks: stacks,
+    features,
+    interpretation: "structure_only_not_execution_or_learning",
   };
+}
 
-  const inference = inferStage(baseMetrics);
-  baseMetrics.inferred_stage = inference.stage;
-  baseMetrics.inference_confidence = inference.confidence;
+function unpack(bytes, depth = 0) {
+  if (depth > 1 || bytes.length > MAX_BYTES)
+    throw new Error("Projeto excede o limite de leitura (2 MB).");
+  const files = unzipSync(bytes, {
+    filter: (f) => {
+      if (!["project.json", "scratch.sb3"].includes(f.name)) return false;
+      if (f.originalSize > MAX_BYTES)
+        throw new Error("Conteúdo descompactado excede 2 MB.");
+      return true;
+    },
+  });
+  if (files["project.json"])
+    return JSON.parse(strFromU8(files["project.json"]));
+  if (files["scratch.sb3"]) return unpack(files["scratch.sb3"], depth + 1);
+  throw new Error(
+    "O arquivo não contém um projeto de blocos reconhecido. Python não é analisado.",
+  );
+}
 
-  return baseMetrics;
+export async function readProjectFile(file) {
+  if (file.size > MAX_BYTES) throw new Error("Escolha um projeto de até 2 MB.");
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const project = file.name.toLowerCase().endsWith(".json")
+    ? JSON.parse(strFromU8(bytes))
+    : unpack(bytes);
+  return parseProjectJson(project);
+}
+
+export function artifactSnapshot(metrics, previous = null) {
+  return {
+    ...metrics,
+    net_block_count_change: previous
+      ? metrics.non_shadow_blocks - previous.non_shadow_blocks
+      : null,
+  };
 }
