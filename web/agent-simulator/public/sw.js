@@ -1,94 +1,64 @@
-const CACHE_NAME = "pulselab-student-shell-v1.9.0";
-const APP_SHELL = [
+const CACHE_PREFIX = "pulselab-test-v2-";
+const CACHE_NAME = CACHE_PREFIX + "2.0.0-test.1";
+const SHELL = [
   "/alunos/",
   "/alunos/index.html",
   "/alunos/manifest.webmanifest",
   "/alunos/icon.svg",
-  "/alunos/robot.png"
+  "/alunos/robot.png",
 ];
-
-async function precacheApplication() {
-  try {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_SHELL);
-
-    const response = await fetch("/alunos/index.html", { cache: "reload" });
-    if (response.ok) {
-      const html = await response.clone().text();
-      const assetPaths = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
-        .map((match) => match[1])
-        .filter((path) => path.startsWith("/alunos/assets/"));
-
-      await cache.put("/alunos/index.html", response);
-      if (assetPaths.length > 0) {
-        await cache.addAll(assetPaths);
-      }
-    }
-  } catch {
-    // Falha silenciosa de precache se estiver offline
-  }
-}
-
 self.addEventListener("install", (event) => {
-  event.waitUntil(precacheApplication());
-  self.skipWaiting();
+  event.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.addAll(SHELL);
+      const response = await fetch("/alunos/index.html", { cache: "reload" });
+      const html = await response.text();
+      const assets = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+        .map((m) => m[1])
+        .filter((p) => p.startsWith("/alunos/assets/"));
+      await cache.addAll(assets);
+      await self.skipWaiting();
+    })(),
+  );
 });
-
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
         keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((key) => caches.delete(key))
-      )
-    )
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME)
+          .map((k) => caches.delete(k)),
+      );
+      await self.clients.claim();
+    })(),
   );
-  self.clients.claim();
 });
-
-self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") {
-    self.skipWaiting();
-  }
-  if (event.data === "CLEAR_CACHES") {
-    event.waitUntil(
-      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-    );
-  }
-});
-
 self.addEventListener("fetch", (event) => {
-  const request = event.request;
-  const url = new URL(request.url);
-
-  if (request.method !== "GET" || url.origin !== self.location.origin) return;
-
-  if (request.mode === "navigate") {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put("/alunos/index.html", copy));
-          }
-          return response;
-        })
-        .catch(() => caches.match("/alunos/index.html"))
-    );
+  const url = new URL(event.request.url);
+  if (
+    event.request.method !== "GET" ||
+    url.origin !== self.location.origin ||
+    !url.pathname.startsWith("/alunos/")
+  )
     return;
-  }
-
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      if (event.request.mode === "navigate") {
+        try {
+          return await fetch(event.request);
+        } catch {
+          return await cache.match("/alunos/index.html");
         }
-        return response;
-      });
-    })
+      }
+      // Only same-origin static files are cached. Dev servers may add Vary: Origin;
+      // module/style requests use CORS while install-time requests do not.
+      return (
+        (await cache.match(event.request, { ignoreVary: true })) ||
+        fetch(event.request)
+      );
+    })(),
   );
 });

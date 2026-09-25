@@ -5,11 +5,12 @@
 .agents/
 skills-lock.json
 dist-offline/
+dist-test/
 
 # Test directories and non-runtime test scripts
 /tests/
 !web/agent-simulator/tests/
-supabase/tests/
+!supabase/tests/
 Executar-Testes.bat
 
 # Offline queue and student data (LGPD compliance)
@@ -61,5 +62,6 @@ dist/
 .vite/
 .wrangler/
 .firebase/
+supabase/.temp/
 web/agent-simulator/test-results/
 web/agent-simulator/playwright-report/
