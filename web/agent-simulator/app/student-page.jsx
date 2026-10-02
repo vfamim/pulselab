@@ -23,6 +23,7 @@ import {
   removeSession,
   pruneExpiredSessions,
 } from "../lib/student-store.js";
+import { syncSession, flushPendingEvents } from "../lib/sync-engine.js";
 import { readProjectFile, artifactSnapshot } from "../lib/spike-parser.js";
 import "./pilot.css";
 
@@ -434,6 +435,7 @@ export default function StudentPage() {
         await pruneExpiredSessions();
         const saved = await listSessions();
         if (alive) setHistory(saved);
+        void flushPendingEvents().catch(() => {});
       } catch {
         if (alive)
           setError(
@@ -443,6 +445,10 @@ export default function StudentPage() {
         if (alive) setBusy(false);
       }
     })();
+    const onOnline = () => {
+      void flushPendingEvents().catch(() => {});
+    };
+    window.addEventListener("online", onOnline);
     const timer = setInterval(() => {
       if (alive) setNow(Date.now());
     }, 1000);
@@ -450,6 +456,7 @@ export default function StudentPage() {
       alive = false;
       release?.();
       clearInterval(timer);
+      window.removeEventListener("online", onOnline);
     };
   }, []);
 
@@ -499,6 +506,7 @@ export default function StudentPage() {
     sessionRef.current = next;
     setSession(next);
     setRoles(next.roles);
+    void syncSession(next).catch(() => {});
   }
 
   async function start() {

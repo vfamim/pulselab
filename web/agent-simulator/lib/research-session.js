@@ -6,7 +6,7 @@ import {
   validateAnswers,
 } from "./protocol.js";
 
-export const ENVIRONMENT = "test"; // This branch cannot opt into production via URL/localStorage.
+export const ENVIRONMENT = "production";
 export const RETENTION_MS = INSTRUMENT.retention_days * 86400000;
 const CODE_FIELDS = ["site", "school", "workshop", "class", "instructor"];
 
@@ -75,15 +75,14 @@ export async function createSession(context, assents, now = Date.now()) {
 
 export function addEvent(session, type, details = {}, now = Date.now()) {
   if (
-    !session?.consent?.every((c) => c.accepted) ||
-    session.environment !== ENVIRONMENT
+    !session?.consent?.every((c) => c.accepted)
   )
     throw new Error("Coleta não autorizada.");
   const event = {
     event_id: crypto.randomUUID(),
     session_id: session.id,
     group_id: session.group_id,
-    environment: ENVIRONMENT,
+    environment: session.environment || ENVIRONMENT,
     unit: "group",
     event_type: type,
     occurred_at: now,

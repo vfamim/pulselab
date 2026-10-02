@@ -31,7 +31,6 @@ async function transaction(mode, operation) {
 
 export function saveSession(session) {
   if (
-    session.environment !== ENVIRONMENT ||
     !session.consent?.length ||
     !session.consent.every((c) => c.accepted)
   ) {

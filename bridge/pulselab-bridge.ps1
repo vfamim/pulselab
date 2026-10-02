@@ -52,7 +52,10 @@ try {
                 } else {
                     $path = [Uri]::UnescapeDataString(($rawPath -split '\?', 2)[0])
                     if ($path -eq "/health") {
-                        $bytes = [Text.Encoding]::UTF8.GetBytes('{"environment":"test","version":"2.0.0-test.1","cloud_enabled":false}')
+                        $bridgeVer = "2.0.1"
+                        $vFile = Join-Path $PSScriptRoot "..\VERSION"
+                        if (Test-Path -LiteralPath $vFile) { try { $bridgeVer = (Get-Content $vFile -Raw).Trim() } catch {} }
+                        $bytes = [Text.Encoding]::UTF8.GetBytes(('{"environment":"production","version":"' + $bridgeVer + '","cloud_enabled":true}'))
                         $type = "application/json"
                     } elseif (-not $path.StartsWith("/alunos/") -or $path.Contains(":") -or $path.Contains([string][char]0)) {
                         $status = 404

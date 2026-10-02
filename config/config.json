@@ -1,8 +1,8 @@
 {
-  "version": "2.0.0-test.1",
-  "environment": "test",
-  "protocol_version": "pulselab-bancada-v2-test",
-  "cloud_enabled": false,
+  "version": "2.0.1",
+  "environment": "production",
+  "protocol_version": "pulselab-bancada-v2",
+  "cloud_enabled": true,
   "screenshot_enabled": false,
   "automatic_project_scan": false,
   "retention_days": 7,
