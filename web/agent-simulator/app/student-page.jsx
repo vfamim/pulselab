@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CONFIG_HASH,
+  INSTRUMENT_MANIFEST,
+  INSTRUMENT_VERSION,
+  PROTOCOL_VERSION,
   createUuid,
   formatEventName
 } from "../lib/contracts.js";
@@ -21,7 +24,7 @@ import {
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.1.0";
+const CLIENT_VERSION = "student-pwa/2.2.0";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -32,14 +35,15 @@ const DEFAULT_CONTEXT = {
   activity: "atividade-01-spike"
 };
 
-const PRE_DEFAULT = { experience: null, confidence: null };
-const CHECKPOINT_DEFAULT = {
-  effort: null,
-  progress: null,
-  collaboration: null,
-  help: false
+const PRE_DEFAULT = { experience: null };
+const CHECKPOINT_DEFAULT = { impasse: null };
+const POST_DEFAULT = {
+  missionResult: null,
+  executionScore: null,
+  explanationScore: null,
+  assistanceCount: null,
+  nextAction: null
 };
-const POST_DEFAULT = { understanding: null, affect: null, returnIntent: null };
 
 const FLOW_STEPS = [
   { id: 1, label: "Início" },
@@ -49,59 +53,37 @@ const FLOW_STEPS = [
 ];
 
 const EXPERIENCE_OPTIONS = [
-  [1, "🐣 Primeira vez", "Nunca mexemos com robôs"],
-  [2, "🧩 Pouca prática", "Já vimos ou usamos 1 ou 2 vezes"],
-  [3, "🚀 Já fizemos", "Montamos ou programamos antes"],
-  [4, "⚡ Muita prática", "Já dominamos e sabemos bem"]
+  [1, "🐣 Primeira vez", "Ninguém na bancada mexeu com robôs"],
+  [2, "🧩 Pouca prática", "Alguém já viu ou usou 1 ou 2 vezes"],
+  [3, "🚀 Já praticamos", "Já montamos ou programamos antes"],
+  [4, "⚡ Muita prática", "Temos facilidade com montagem e código"]
 ];
 
-const CONFIDENCE_OPTIONS = [
-  [1, "😅 Inseguros", "Acho que vai ser difícil"],
-  [2, "🤔 Curiosos", "Vamos descobrir como faz"],
-  [3, "😊 Confiantes", "Acho que vai dar certo"],
-  [4, "🔥 Animados!", "Empolgação total para o desafio"]
+const IMPASSE_OPTIONS = [
+  ["no", "🟢 Não", "Estávamos conseguindo tentar ideias e testar caminhos"],
+  ["yes", "🛑 Sim", "Travamos sem saber o que tentar para avançar"],
+  ["off_task", "💬 Fora da tarefa", "Pausa, conversa paralela ou aguardando peça/professor"],
+  ["no_consensus", "🤝 Sem acordo", "O grupo não chegou a uma resposta conjunta"]
 ];
 
-const EFFORT_OPTIONS = [
-  [1, "🟢 Muito Fácil", "Estamos tirando de letra"],
-  [2, "🟡 Normal", "Dá pra fazer com calma"],
-  [3, "🟠 Puxado", "Exige bastante atenção"],
-  [4, "🔴 Muito Difícil", "Super desafiador agora"]
+const MISSION_RESULT_OPTIONS = [
+  ["full", "🏆 Sucesso Completo", "Robô parou a menos de 10 cm nas 3 tentativas"],
+  ["partial", "🧩 Parcial", "Funcionou em 1 ou 2 tentativas"],
+  ["in_progress", "⏳ Em andamento", "Ainda estávamos ajustando código ou montagem"]
 ];
 
-const PROGRESS_OPTIONS = [
-  ["needs_help_now", "🛑 Travamos", "Não sabemos como sair do lugar"],
-  ["trying_without_progress", "⏳ Tentando", "Testando caminhos, ainda sem funcionar"],
-  ["progressing_with_doubt", "💡 Avançando", "Parte funciona, com algumas dúvidas"],
-  ["progressing_independently", "🚀 Voando!", "Tudo funcionando e testando sozinhos"]
+const EXPLANATION_OPTIONS = [
+  [0, "0 · Não relaciona", "Não soube associar o sensor à parada do robô"],
+  [1, "1 · Identifica peças", "Reconhece o sensor e motor, mas sem explicar a lógica"],
+  [2, "2 · Explica parada", "Explica que a distância menor que 10 cm aciona a parada"],
+  [3, "3 · Explica parada e loop", "Explica a condição do sensor e a necessidade de repetição contínua"]
 ];
 
-const COLLABORATION_OPTIONS = [
-  [1, "👤 Pouca troca", "Cada um ficou no seu canto"],
-  [2, "🗣️ Desigual", "Um faz quase tudo, outro só olha"],
-  [3, "🤝 Em equipe", "Decidimos juntos com boa conversa"],
-  [4, "🔄 Revezamento", "Trocamos tarefas de montagem e código"]
-];
-
-const UNDERSTANDING_OPTIONS = [
-  [1, "❓ Quase nada", "Ficou meio confuso pra gente"],
-  [2, "🧩 O básico", "Entendemos uma parte"],
-  [3, "👍 Quase tudo", "Entendemos bem a lógica"],
-  [4, "🧠 Totalmente", "Sabemos explicar para qualquer um"]
-];
-
-const RETURN_OPTIONS = [
-  [1, "👎 Não", "Não gostamos muito"],
-  [2, "🤷 Talvez", "Depende da atividade"],
-  [3, "🙋 Com certeza!", "Foi muito bacana"],
-  [4, "🤩 Quero sempre!", "Adoramos a experiência!"]
-];
-
-const AFFECT_OPTIONS = [
-  ["frustrated", "😤 Frustração", "Não saiu como a gente queria"],
-  ["tired", "🥱 Cansaço", "Foi puxado e exigiu muita energia"],
-  ["curious", "🧐 Curiosidade", "Deu vontade de aprender mais"],
-  ["confident", "🏆 Orgulho!", "Conseguimos vencer o desafio!"]
+const NEXT_ACTION_OPTIONS = [
+  ["repeat_sensor", "🔁 Repetir desafio do sensor"],
+  ["more_time", "⏱️ Mais tempo de depuração autônoma"],
+  ["revise_logic", "💡 Revisar lógica de repetição e condições"],
+  ["advance_challenge", "🚀 Avançar para o próximo desafio"]
 ];
 
 const BRIDGE_URL = "http://127.0.0.1:43127";
@@ -454,12 +436,12 @@ function PreScreen({
   assentAgreed,
   setAssentAgreed
 }) {
-  const ready = !assentAgreed || (answers.experience !== null && answers.confidence !== null);
+  const ready = !assentAgreed || answers.experience !== null;
   return (
     <Card
-      eyebrow="Oficina de Robótica · Início rápido"
+      eyebrow="Oficina de Robótica · Início da Bancada"
       title="Como vocês chegam para esta oficina?"
-      description="Responda rapidamente antes de começar a montar e programar o robô LEGO SPIKE."
+      description="Respondam rapidamente para caracterizar a bancada antes de começar a montar e programar o robô LEGO SPIKE."
       footer={
         <div className="action-row">
           <span className="footer-hint">Sua resposta fica salva assim que você clica em começar.</span>
@@ -521,9 +503,9 @@ function PreScreen({
         </span>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
           {[
-            ["dyad", "👫 Dupla com Papéis", "1 no código e 1 na montagem, com revezamento"],
-            ["individual", "👤 Individual", "1 estudante realizando todas as tarefas"],
-            ["group", "👥 Equipe Conjunta", "Grupo compartilhando a mesma tela"]
+            ["dyad", "👫 Dupla de Trabalho", "Dois estudantes compartilhando computador e peças"],
+            ["individual", "👤 Individual", "1 estudante realizando todas as etapas"],
+            ["group", "👥 Bancada Coletiva", "3 a 4 estudantes colaborando no mesmo desafio"]
           ].map(([val, label, sub]) => {
             const isSel = teamRole === val;
             return (
@@ -543,52 +525,80 @@ function PreScreen({
       </div>
 
       {assentAgreed ? (
-        <>
-          <ScaleQuestion
-            legend="Já montou ou programou robôs ou blocos antes?"
-            onChange={(experience) => setAnswers({ ...answers, experience })}
-            options={EXPERIENCE_OPTIONS}
-            value={answers.experience}
-          />
-          <ScaleQuestion
-            legend="Como está a animação e confiança do grupo para o desafio?"
-            onChange={(confidence) => setAnswers({ ...answers, confidence })}
-            options={CONFIDENCE_OPTIONS}
-            value={answers.confidence}
-          />
-        </>
+        <ScaleQuestion
+          legend="Vocês na bancada já montaram ou programaram robôs ou blocos antes?"
+          onChange={(experience) => setAnswers({ ...answers, experience })}
+          options={EXPERIENCE_OPTIONS}
+          value={answers.experience}
+        />
       ) : null}
     </Card>
   );
 }
 
-function ActivityScreen({ elapsedMs, currentMark, labMode, spikeTelemetry }) {
+function ActivityScreen({
+  elapsedMs,
+  currentMark,
+  labMode,
+  spikeTelemetry,
+  helpActive,
+  onToggleHelp,
+  onFinishActivity,
+  assentAgreed
+}) {
   const targetMs = currentMark * 60 * 1000;
   const remaining = Math.max(0, targetMs - elapsedMs);
   return (
     <Card
       eyebrow="Desafio em Andamento"
       title="Pode focar no projeto do SPIKE"
-      description={`Construam e programem normalmente. O próximo check-in curto será aberto automaticamente aos ${currentMark} minutos.`}
+      description={assentAgreed
+        ? `Construam e programem normalmente. O próximo check-in rápido de 15 segundos será aberto aos ${currentMark} minutos.`
+        : "Construam e programem normalmente. O aplicativo está em modo pedagógico livre."
+      }
       footer={
-        <div className="action-row" style={{ justifyContent: "center" }}>
-          <span className="footer-hint" style={{ margin: "0 auto", textAlign: "center", fontSize: "0.95rem", color: "var(--muted)" }}>
-            ⏱️ O check-in de {currentMark} minutos abrirá automaticamente nesta tela.
+        <div className="action-row" style={{ justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+          <span className="footer-hint" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+            {assentAgreed ? `⏱️ Próximo check-in rápido previsto para os ${currentMark} min.` : "Oficina livre sem coleta de dados."}
           </span>
+          <button
+            className="button button--primary"
+            onClick={onFinishActivity}
+            type="button"
+          >
+            🏁 Finalizar Desafio da Oficina
+          </button>
         </div>
       }
     >
       <div className="activity-timer" aria-live="polite">
         <span>Tempo de atividade</span>
         <strong>{formatClock(elapsedMs)}</strong>
-        <small>Próximo check-in em {formatClock(remaining)}</small>
+        <small>{assentAgreed ? `Próximo check-in em ${formatClock(remaining)}` : "Atividade livre"}</small>
       </div>
 
       {spikeTelemetry ? (
         <div style={{ background: "rgba(73, 217, 206, 0.1)", border: "1px solid rgba(73, 217, 206, 0.3)", borderRadius: "10px", padding: "12px 16px", margin: "16px 0", fontSize: "0.85rem", color: "#6ee7b7" }}>
-          <span>🤖 <strong>LEGO SPIKE Conectado:</strong> {spikeTelemetry.executable_blocks || 0} blocos detectados · Estágio: <em>{spikeTelemetry.inferred_stage || "em edição"}</em></span>
+          <span>🤖 <strong>LEGO SPIKE Conectado:</strong> {spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: <em>{spikeTelemetry.inferred_stage || "em edição"}</em></span>
         </div>
       ) : null}
+
+      <button
+        type="button"
+        className={`help-toggle-btn ${helpActive ? "is-active" : ""}`}
+        onClick={onToggleHelp}
+        aria-pressed={helpActive}
+        style={{ margin: "18px 0" }}
+      >
+        <span className="help-toggle-btn__icon">{helpActive ? "🚨" : "🙋‍♂️"}</span>
+        <div className="help-toggle-btn__content">
+          <strong>{helpActive ? "Ajuda solicitada ao professor!" : "Precisa de ajuda do professor na bancada?"}</strong>
+          <small>{helpActive ? "Pedido registrado no sistema. Por favor, levantem a mão na sala para o professor localizar a bancada." : "Clique aqui para registrar o chamado e levantem a mão na sala para chamar o professor."}</small>
+        </div>
+        <span className="help-toggle-btn__badge">
+          {helpActive ? "✓ PROFESSOR ATENDENDO" : "CHAMAR PROFESSOR"}
+        </span>
+      </button>
 
       <div className="activity-instructions">
         <article>
@@ -599,12 +609,12 @@ function ActivityScreen({ elapsedMs, currentMark, labMode, spikeTelemetry }) {
         <article>
           <span>2</span>
           <strong>Programem e testem à vontade</strong>
-          <p>O PulseLab captura o avanço do código do SPIKE de forma 100% segura e anônima.</p>
+          <p>O PulseLab acompanha a estrutura do código do SPIKE de forma anônima e segura.</p>
         </article>
         <article>
           <span>3</span>
-          <strong>Respondam aos 20 e 40 minutos</strong>
-          <p>Um alerta sonoro e visual avisará quando for a hora do check-in de 30 segundos.</p>
+          <strong>Aviso sonoro aos 20 e 40 minutos</strong>
+          <p>{assentAgreed ? "Um alerta suave indicará o momento de registrar se a bancada está conseguindo avançar." : "Use o cronômetro para controlar seu tempo de oficina."}</p>
         </article>
       </div>
     </Card>
@@ -614,32 +624,28 @@ function ActivityScreen({ elapsedMs, currentMark, labMode, spikeTelemetry }) {
 function CheckpointScreen({
   mark,
   answers,
-  setAnswers,
-  onSubmit,
-  onDecline,
+  onSelectOption,
+  onSkip,
   teamRole,
   currentRole,
   onRoleSwap
 }) {
-  const ready = answers.effort !== null && answers.progress && answers.collaboration;
   return (
     <Card
-      eyebrow={`Check-in de ${mark} minutos · Pausa rápida de 30 segundos`}
-      title="Como está indo o projeto?"
-      description="Respondam como está o andamento da montagem e do código agora para voltarem direto para a robótica."
+      eyebrow={`Check-in de ${mark} minutos · Registro rápido da bancada`}
+      title="Como esteve a bancada nos últimos instantes?"
+      description="Uma única pergunta sobre os 2 minutos recentes da atividade para voltarem imediatamente ao robô."
       footer={
         <div className="action-row">
           <button
             className="button button--ghost"
-            onClick={onDecline}
+            onClick={onSkip}
             type="button"
             style={{ marginRight: "auto" }}
           >
-            Prefiro não responder
+            Pular este check-in
           </button>
-          <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
-            Salvar e continuar
-          </button>
+          <span className="footer-hint">Clique na opção para salvar e retornar à atividade na hora.</span>
         </div>
       }
     >
@@ -648,71 +654,68 @@ function CheckpointScreen({
       </div>
 
       {teamRole === "dyad" ? (
-        <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "12px", padding: "12px 18px", marginBottom: "18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+        <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "12px", padding: "10px 16px", marginBottom: "16px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
           <div>
-            <span style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#059669", fontWeight: 800 }}>Papel no Check-in:</span>
-            <div style={{ fontSize: "1rem", fontWeight: 700, color: "#065f46" }}>
-              {currentRole === "computer" ? "💻 Participante A (Computador / Código)" : "🛠️ Participante B (Montagem / Testes)"}
+            <span style={{ fontSize: "0.78rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#059669", fontWeight: 800 }}>Papel Atual na Bancada:</span>
+            <div style={{ fontSize: "0.95rem", fontWeight: 700, color: "#065f46" }}>
+              {currentRole === "computer" ? "💻 Participante no Computador / Código" : "🛠️ Participante na Montagem / Testes"}
             </div>
           </div>
           <button
             type="button"
             className="inst-btn"
-            style={{ background: "#d1fae5", color: "#065f46", borderColor: "#a7f3d0", fontWeight: 700 }}
+            style={{ background: "#d1fae5", color: "#065f46", borderColor: "#a7f3d0", fontWeight: 700, fontSize: "0.8rem", padding: "6px 12px" }}
             onClick={onRoleSwap}
+            title="Alternar papéis voluntariamente"
           >
-            🔄 Trocar Papéis da Dupla
+            🔄 Trocar Papéis (Opcional)
           </button>
         </div>
       ) : null}
 
-      <ScaleQuestion
-        legend="Como está o nível de dificuldade do desafio até aqui?"
-        onChange={(effort) => setAnswers({ ...answers, effort })}
-        options={EFFORT_OPTIONS}
-        value={answers.effort}
-      />
-      <OptionQuestion
-        legend="Como está o robô e o código agora?"
-        onChange={(progress) => setAnswers({ ...answers, progress })}
-        options={PROGRESS_OPTIONS}
-        value={answers.progress}
-      />
-      <ScaleQuestion
-        legend="Como a dupla ou grupo está dividindo as tarefas?"
-        onChange={(collaboration) => setAnswers({ ...answers, collaboration })}
-        options={COLLABORATION_OPTIONS}
-        value={answers.collaboration}
-      />
-      <button
-        type="button"
-        className={`help-toggle-btn ${answers.help ? "is-active" : ""}`}
-        onClick={() => setAnswers({ ...answers, help: !answers.help })}
-        aria-pressed={answers.help}
-      >
-        <span className="help-toggle-btn__icon">{answers.help ? "🚨" : "🙋‍♂️"}</span>
-        <div className="help-toggle-btn__content">
-          <strong>{answers.help ? "Ajuda registrada para a pesquisa!" : "Precisa de ajuda do professor na bancada?"}</strong>
-          <small>{answers.help ? "Pedido registrado no sistema! Por favor, levantem a mão na sala para o professor localizar sua bancada." : "Clique aqui para registrar a dúvida e levantem a mão na sala para chamar o professor."}</small>
+      <fieldset className="question-block">
+        <legend className="question-legend" style={{ fontSize: "1.1rem", marginBottom: "12px", color: "#f8fafc", fontWeight: 700 }}>
+          Nos dois minutos antes deste aviso, a bancada ficou sem saber o que tentar para avançar?
+        </legend>
+        <div className="option-list">
+          {IMPASSE_OPTIONS.map(([val, title, desc]) => {
+            const isSelected = answers.impasse === val;
+            return (
+              <label
+                key={val}
+                className={`option-row ${isSelected ? "is-selected" : ""}`}
+                style={{ cursor: "pointer", transition: "all 0.2s ease" }}
+                onClick={() => onSelectOption(val)}
+              >
+                <input
+                  type="radio"
+                  name={`impasse-${mark}`}
+                  value={val}
+                  checked={isSelected}
+                  onChange={() => {}}
+                  style={{ display: "none" }}
+                />
+                <span className="option-row__body">
+                  <strong style={{ fontSize: "1rem", color: "#f1f5f9" }}>{title}</strong>
+                  <small style={{ color: "#94a3b8", display: "block", marginTop: "2px" }}>{desc}</small>
+                </span>
+                <span className="option-row__radio" />
+              </label>
+            );
+          })}
         </div>
-        <span className="help-toggle-btn__badge">
-          {answers.help ? "✓ LEVANTAR A MÃO" : "CHAMAR PROFESSOR"}
-        </span>
-      </button>
+      </fieldset>
     </Card>
   );
 }
 
 function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
-  const ready =
-    answers.understanding !== null &&
-    answers.returnIntent !== null &&
-    answers.affect;
+  const ready = answers.missionResult !== null || answers.executionScore !== null;
   return (
     <Card
-      eyebrow="Encerramento da Oficina · Último passo (30 segundos)"
-      title="Como foi a experiência do grupo?"
-      description="Últimas 3 perguntas sobre a oficina de robótica."
+      eyebrow="Encerramento da Oficina · Avaliação Pedagógica"
+      title="Desfecho do Desafio & Rubrica do Instrutor"
+      description="Registro objetivo da execução física do robô e avaliação conceitual da bancada."
       footer={
         <div className="action-row">
           <button
@@ -721,32 +724,121 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
             type="button"
             style={{ marginRight: "auto" }}
           >
-            Prefiro não responder
+            Pular rubrica e finalizar
           </button>
           <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
-            Concluir Oficina
+            Concluir e Salvar Oficina
           </button>
         </div>
       }
     >
-      <ScaleQuestion
-        legend="O quanto vocês entenderam sobre o que o robô faz?"
-        onChange={(understanding) => setAnswers({ ...answers, understanding })}
-        options={UNDERSTANDING_OPTIONS}
-        value={answers.understanding}
-      />
-      <ScaleQuestion
-        legend="Gostariam de participar de outra oficina como esta?"
-        onChange={(returnIntent) => setAnswers({ ...answers, returnIntent })}
-        options={RETURN_OPTIONS}
-        value={answers.returnIntent}
-      />
-      <OptionQuestion
-        legend="Qual emoji melhor resume o sentimento do grupo agora?"
-        onChange={(affect) => setAnswers({ ...answers, affect })}
-        options={AFFECT_OPTIONS}
-        value={answers.affect}
-      />
+      <fieldset className="question-block">
+        <legend className="question-legend" style={{ fontSize: "1.05rem", color: "#f8fafc", fontWeight: 700, marginBottom: "10px" }}>
+          1. Desfecho da Bancada: O robô conseguiu parar diante do obstáculo a menos de 10 cm?
+        </legend>
+        <div className="option-list">
+          {MISSION_RESULT_OPTIONS.map(([val, title, desc]) => {
+            const isSelected = answers.missionResult === val;
+            return (
+              <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer" }}>
+                <input
+                  type="radio"
+                  name="mission-result"
+                  value={val}
+                  checked={isSelected}
+                  onChange={() => setAnswers({ ...answers, missionResult: val })}
+                  style={{ display: "none" }}
+                />
+                <span className="option-row__body">
+                  <strong style={{ fontSize: "0.95rem", color: "#f1f5f9" }}>{title}</strong>
+                  <small style={{ color: "#94a3b8" }}>{desc}</small>
+                </span>
+                <span className="option-row__radio" />
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      <div style={{ marginTop: "24px", padding: "16px 18px", background: "rgba(36, 86, 77, 0.15)", border: "1px solid rgba(73, 217, 206, 0.3)", borderRadius: "14px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px" }}>
+          <span style={{ fontSize: "1.2rem" }}>📋</span>
+          <strong style={{ fontSize: "1rem", color: "#49d9ce" }}>Rubrica de Observação do Instrutor / Monitor</strong>
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
+            Tentativas bem-sucedidas em 3 testes idênticos na pista (0 a 3):
+          </label>
+          <div style={{ display: "flex", gap: "8px" }}>
+            {[0, 1, 2, 3].map((score) => {
+              const isSelected = answers.executionScore === score;
+              return (
+                <button
+                  key={score}
+                  type="button"
+                  className={`scale-option ${isSelected ? "is-selected" : ""}`}
+                  style={{ padding: "8px 16px", minHeight: "auto", textAlign: "center", flex: 1 }}
+                  onClick={() => setAnswers({ ...answers, executionScore: score })}
+                >
+                  <strong style={{ fontSize: "1.1rem" }}>{score}</strong>
+                  <small style={{ fontSize: "0.75rem", display: "block" }}>{score === 3 ? "Perfeito" : `${score} acerto(s)`}</small>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div style={{ marginBottom: "16px" }}>
+          <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
+            Nível de explicação conceitual demonstrado pela bancada:
+          </label>
+          <div className="option-list">
+            {EXPLANATION_OPTIONS.map(([score, title, desc]) => {
+              const isSelected = answers.explanationScore === score;
+              return (
+                <label key={score} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer", padding: "8px 12px" }}>
+                  <input
+                    type="radio"
+                    name="explanation-score"
+                    value={score}
+                    checked={isSelected}
+                    onChange={() => setAnswers({ ...answers, explanationScore: score })}
+                    style={{ display: "none" }}
+                  />
+                  <span className="option-row__body">
+                    <strong style={{ fontSize: "0.88rem", color: "#f1f5f9" }}>{title}</strong>
+                    <small style={{ color: "#94a3b8", fontSize: "0.78rem" }}>{desc}</small>
+                  </span>
+                  <span className="option-row__radio" />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
+          <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
+            Próxima ação pedagógica recomendada para esta bancada:
+          </label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            {NEXT_ACTION_OPTIONS.map(([actKey, label]) => {
+              const isSelected = answers.nextAction === actKey;
+              return (
+                <button
+                  key={actKey}
+                  type="button"
+                  className={`scale-option ${isSelected ? "is-selected" : ""}`}
+                  style={{ padding: "8px 12px", minHeight: "auto", textAlign: "left", fontSize: "0.82rem" }}
+                  onClick={() => setAnswers({ ...answers, nextAction: actKey })}
+                >
+                  <strong style={{ fontSize: "0.84rem" }}>{label}</strong>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -819,23 +911,56 @@ function EvidencePanel({ events }) {
   );
 }
 
-function CheckpointAlertModal({ mark, onProceed }) {
+function CheckpointAlertModal({ mark, onSelectOption, onSkip }) {
   return (
-    <div className="alert-modal-backdrop" role="dialog" aria-modal="true">
-      <div className="alert-modal">
+    <div className="alert-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="checkpoint-modal-title">
+      <div className="alert-modal" style={{ maxWidth: "580px", width: "92%", padding: "26px 24px" }}>
         <div className="alert-modal__icon">🤖</div>
-        <span className="alert-modal__eyebrow">Aviso da Oficina · PulseLab</span>
-        <h2>Hora do Check-in de {mark} minutos!</h2>
-        <p>Pausa rápida de 30 segundos na montagem e programação do robô LEGO SPIKE para vocês registrarem como está o progresso.</p>
-        <div className="alert-modal__actions">
-          <button className="button button--primary button--pulse" onClick={onProceed} type="button" autoFocus>
-            Responder Check-in Agora (30s)
+        <span className="alert-modal__eyebrow">Check-in de {mark} minutos · Registro Rápido</span>
+        <h2 id="checkpoint-modal-title" style={{ fontSize: "1.25rem", margin: "10px 0 6px" }}>
+          Hora do Check-in ({mark} min)
+        </h2>
+        <p style={{ fontSize: "0.95rem", color: "#cbd5e1", marginBottom: "16px", lineHeight: "1.45" }}>
+          <strong>Nos dois minutos antes deste aviso, a bancada ficou sem saber o que tentar para avançar?</strong>
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+          {IMPASSE_OPTIONS.map(([val, title, desc]) => (
+            <button
+              key={val}
+              type="button"
+              className="scale-option"
+              onClick={() => onSelectOption(val)}
+              style={{
+                textAlign: "left",
+                padding: "10px 12px",
+                minHeight: "auto",
+                border: "1px solid rgba(255, 255, 255, 0.12)",
+                background: "rgba(255, 255, 255, 0.05)",
+                borderRadius: "10px",
+                cursor: "pointer",
+                transition: "all 0.15s ease"
+              }}
+            >
+              <strong style={{ fontSize: "0.94rem", display: "block", color: "#f8fafc", marginBottom: "3px" }}>{title}</strong>
+              <small style={{ fontSize: "0.75rem", color: "#94a3b8", display: "block", lineHeight: "1.3" }}>{desc}</small>
+            </button>
+          ))}
+        </div>
+        <div style={{ display: "flex", justifyContent: "center" }}>
+          <button
+            className="button button--ghost"
+            onClick={onSkip}
+            type="button"
+            style={{ fontSize: "0.86rem", padding: "8px 18px", color: "var(--muted)" }}
+          >
+            Pular este check-in
           </button>
         </div>
       </div>
     </div>
   );
 }
+
 
 export default function StudentPage() {
   const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
@@ -884,6 +1009,8 @@ export default function StudentPage() {
   const [teamRole, setTeamRole] = useState(() => savedSession?.teamRole || "dyad");
   const [currentRole, setCurrentRole] = useState(() => savedSession?.currentRole || "computer");
   const [assentAgreed, setAssentAgreed] = useState(() => savedSession?.assentAgreed ?? true);
+  const [helpActive, setHelpActive] = useState(() => savedSession?.helpActive || false);
+  const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || false);
   const [showContextModal, setShowContextModal] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState("");
@@ -892,6 +1019,10 @@ export default function StudentPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const sequenceRef = useRef(savedSession?.sequence || 0);
   const checkpointOpeningRef = useRef(false);
+  const checkpointPromptedAtRef = useRef(null);
+  const lastCheckpointCompletedAtRef = useRef(0);
+  const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || false);
+
 
   useEffect(() => {
     const storedContext = localStorage.getItem(CONTEXT_KEY);
@@ -955,18 +1086,17 @@ export default function StudentPage() {
       class_code: context.class || "turma-geral",
       activity_id: context.activity || "atividade-01-spike",
       computer_id: getComputerId(installationId),
-      telemetry_foreground_app: sysMeta.os,
-      telemetry_window_title: `Res: ${sysMeta.screen_resolution}`,
-      protocol_version: "protocolo-pesquisa-v1",
+      protocol_version: PROTOCOL_VERSION,
       occurred_at: new Date(now).toISOString(),
       elapsed_ms: Math.max(0, now - startedAt),
       client_version: CLIENT_VERSION,
-      config_version: "student-pwa-v1",
+      config_version: "student-pwa-v2",
       config_hash: CONFIG_HASH,
       _delivery_state: "queued",
       _sequence: sequenceRef.current,
       _client_occurred_at: new Date(now).toISOString(),
       event_type: eventType,
+      ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
       ...overrides
     };
   }
@@ -999,6 +1129,7 @@ export default function StudentPage() {
   }
 
   function emitTimeline(eventType, overrides = {}) {
+    const sysMeta = getSystemMetadata();
     const event = eventBase(eventType, {
       _target_table: "research_session_events",
       severity: "info",
@@ -1007,7 +1138,12 @@ export default function StudentPage() {
       participant_role: null,
       activity_stage: null,
       scheduled_at: null,
-      details: { runtime: "browser_pwa" },
+      details: {
+        runtime: "browser_pwa",
+        os: sysMeta.os,
+        screen_resolution: sysMeta.screen_resolution,
+        ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {})
+      },
       ...overrides
     });
     setTimeline((current) => [...current, event]);
@@ -1016,18 +1152,22 @@ export default function StudentPage() {
   }
 
   function emitResponse(eventType, overrides = {}) {
+    const sysMeta = getSystemMetadata();
     const role = teamRole === "individual" ? "individual" : (teamRole === "group" ? "group" : currentRole);
-    const participantSuffix = role === "computer" ? "A" : (role === "assembly" ? "B" : (role === "individual" ? "IND" : "GRUPO"));
+    const participantSuffix = teamRole === "individual" ? "IND" : (teamRole === "group" ? "GRUPO" : "BANCADA");
     const groupSize = teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2);
 
     const event = eventBase(eventType, {
       _target_table: "research_events",
-      participant_id: `${sessionId.slice(0, 8).toUpperCase()}-${participantSuffix}`,
+      participant_id: `${groupId.slice(0, 8).toUpperCase()}-${participantSuffix}`,
       participant_role: role,
       response_status: overrides.response_status || "completed",
       interval_mark: null,
       group_size: groupSize,
       activity_stage: null,
+      telemetry_window_title: `Res: ${sysMeta.screen_resolution}`,
+      telemetry_foreground_app: sysMeta.os,
+      ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
       ...overrides
     });
     setResponses((current) => [...current, event]);
@@ -1072,6 +1212,8 @@ export default function StudentPage() {
     setTeamRole(resumable.teamRole || "dyad");
     setCurrentRole(resumable.currentRole || "computer");
     setAssentAgreed(resumable.assentAgreed ?? true);
+    setHelpActive(resumable.helpActive || false);
+    setIsSyntheticSession(resumable.isSyntheticSession || false);
     sequenceRef.current = resumable.sequence || 0;
     setScreen(resumable.screen);
     flash("Sessão retomada do armazenamento local.");
@@ -1088,7 +1230,7 @@ export default function StudentPage() {
         scheduled_swap: false
       }
     });
-    flash(`Papéis trocados! Agora: ${nextRole === "computer" ? "💻 Computador / Programação" : "🛠️ Montagem / Testes"}.`);
+    flash(`Papéis trocados! Agora: ${nextRole === "computer" ? "💻 Computador / Código" : "🛠️ Montagem / Testes"}.`);
   }
 
   function handleSaveContext(newContext) {
@@ -1127,15 +1269,15 @@ export default function StudentPage() {
         runtime: "browser_pwa",
         team_role: teamRole,
         ethical_assent: assentAgreed,
-        participant_count: 1,
-        expected_checkpoints: [20, 40]
+        participant_count: teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2),
+        expected_checkpoints: assentAgreed ? [20, 40] : []
       }
     });
 
     emitResponse("pre", {
       activity_stage: "pre",
       prior_robotics: preAnswers.experience,
-      self_efficacy_pre: preAnswers.confidence
+      response_status: "completed"
     });
 
     const activityStart = Date.now();
@@ -1159,8 +1301,8 @@ export default function StudentPage() {
       details: {
         runtime: "browser_pwa",
         research_declined: true,
-        participant_count: 1,
-        expected_checkpoints: [20, 40]
+        participant_count: teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2),
+        expected_checkpoints: []
       }
     });
     emitResponse("pre", {
@@ -1170,19 +1312,21 @@ export default function StudentPage() {
     const activityStart = Date.now();
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
-    void notifyBridgeSession(sessionId, activityStart, [20, 40]);
+    void notifyBridgeSession(sessionId, activityStart, []);
     emitTimeline("phase_completed", { activity_stage: "pre" });
     emitTimeline("activity_started", {
       activity_stage: "activity",
-      details: { runtime: "browser_pwa", checkpoints_minutes: [20, 40] }
+      details: { runtime: "browser_pwa", free_pedagogical_mode: true }
     });
     setResumable(null);
     setScreen("activity");
-    flash("Oficina liberada em modo livre (sem envio de respostas de pesquisa).");
+    flash("Oficina liberada em modo livre (sem avisos ou registros de pesquisa).");
   }
 
   function triggerCheckpointAlert(mark = currentMark) {
+    if (!assentAgreed) return;
     if (checkpointOpeningRef.current) return;
+    checkpointPromptedAtRef.current = Date.now();
     playChimeSound();
     showWebNotification(mark);
     void triggerBridgeAlert(mark);
@@ -1231,87 +1375,177 @@ export default function StudentPage() {
     setScreen(mark === 20 ? "checkpoint20" : "checkpoint40");
   }
 
-  function submitCheckpoint(mark) {
-    const answers = mark === 20 ? checkpoint20Answers : checkpoint40Answers;
+  function handleSelectImpasse(mark, impasseChoice) {
+    const now = Date.now();
+    const promptedMs = checkpointPromptedAtRef.current || now;
+    const scheduledMs = activityStartedAt ? activityStartedAt + mark * 60 * 1000 : now;
+    const responseLatencyMs = Math.max(0, now - promptedMs);
+    const checkpointLatenessMs = Math.max(0, promptedMs - scheduledMs);
+    const scheduledAt = new Date(scheduledMs).toISOString();
+    const promptedAt = new Date(promptedMs).toISOString();
+    const capturedAt = new Date(now).toISOString();
+    checkpointPromptedAtRef.current = null;
+    lastCheckpointCompletedAtRef.current = now;
+
+    if (mark === 20) {
+      setCheckpoint20Answers({ impasse: impasseChoice });
+    } else {
+      setCheckpoint40Answers({ impasse: impasseChoice });
+    }
+
+    const progressMap = {
+      no: "progressing_independently",
+      yes: "needs_help_now",
+      off_task: "trying_without_progress",
+      no_consensus: "progressing_with_doubt"
+    };
+
     emitResponse("checkpoint", {
       activity_stage: `checkpoint_${mark}`,
       interval_mark: mark,
-      mental_effort: answers.effort,
-      progress_state: answers.progress,
-      collaboration: answers.collaboration,
-      help_requested: answers.help
+      progress_state: progressMap[impasseChoice] || "trying_without_progress",
+      scheduled_at: scheduledAt,
+      prompted_at: promptedAt,
+      captured_at: capturedAt,
+      response_latency_ms: responseLatencyMs,
+      checkpoint_lateness_ms: checkpointLatenessMs,
+      knowledge_answers: {
+        target_construct: "impasse_percebido",
+        recall_window: "2_minutes",
+        impasse_state: impasseChoice
+      },
+      response_status: "completed"
     });
-
-    if (answers.help) {
-      emitTimeline("help_requested", {
-        activity_stage: `checkpoint_${mark}`,
-        details: { runtime: "browser_pwa" }
-      });
-    }
 
     void notifyBridgeCheckpointAck(sessionId, mark);
     emitTimeline("checkpoint_completed", {
       activity_stage: `checkpoint_${mark}`,
       interval_mark: mark,
       elapsed_ms: elapsedMs,
-      details: { runtime: "browser_pwa" }
+      scheduled_at: scheduledAt,
+      details: {
+        runtime: "browser_pwa",
+        impasse_state: impasseChoice,
+        response_latency_ms: responseLatencyMs,
+        checkpoint_lateness_ms: checkpointLatenessMs
+      }
     });
 
     void captureSpikeTelemetry(`checkpoint_${mark}_done`);
     checkpointOpeningRef.current = false;
+    setCheckpointModalMark(null);
 
     if (mark === 20) {
       setCurrentMark(40);
-      if (teamRole === "dyad") {
-        const nextRole = currentRole === "computer" ? "assembly" : "computer";
-        setCurrentRole(nextRole);
-        emitTimeline("role_swapped", {
-          activity_stage: "checkpoint_20",
-          details: { from_role: currentRole, to_role: nextRole, scheduled_swap: true }
-        });
-      }
-      setScreen("activity");
-    } else {
-      setScreen("post");
     }
+    setScreen("activity");
+    flash("Registro da bancada salvo com sucesso!");
   }
 
-  function handleDeclineCheckpoint(mark) {
+  function handleSkipCheckpoint(mark) {
+    const now = Date.now();
+    const promptedMs = checkpointPromptedAtRef.current || now;
+    const scheduledMs = activityStartedAt ? activityStartedAt + mark * 60 * 1000 : now;
+    const responseLatencyMs = Math.max(0, now - promptedMs);
+    const checkpointLatenessMs = Math.max(0, promptedMs - scheduledMs);
+    const scheduledAt = new Date(scheduledMs).toISOString();
+    const promptedAt = new Date(promptedMs).toISOString();
+    const capturedAt = new Date(now).toISOString();
+    checkpointPromptedAtRef.current = null;
+    lastCheckpointCompletedAtRef.current = now;
+
     emitResponse("checkpoint", {
       activity_stage: `checkpoint_${mark}`,
       interval_mark: mark,
-      response_status: "declined"
+      scheduled_at: scheduledAt,
+      prompted_at: promptedAt,
+      captured_at: capturedAt,
+      response_latency_ms: responseLatencyMs,
+      checkpoint_lateness_ms: checkpointLatenessMs,
+      response_status: "declined",
+      knowledge_answers: {
+        target_construct: "impasse_percebido",
+        action: "skipped"
+      }
     });
     void notifyBridgeCheckpointAck(sessionId, mark);
     emitTimeline("checkpoint_completed", {
       activity_stage: `checkpoint_${mark}`,
       interval_mark: mark,
       elapsed_ms: elapsedMs,
-      details: { runtime: "browser_pwa", response_status: "declined" }
+      scheduled_at: scheduledAt,
+      details: {
+        runtime: "browser_pwa",
+        response_status: "skipped",
+        response_latency_ms: responseLatencyMs,
+        checkpoint_lateness_ms: checkpointLatenessMs
+      }
     });
     checkpointOpeningRef.current = false;
+    setCheckpointModalMark(null);
     if (mark === 20) {
       setCurrentMark(40);
-      if (teamRole === "dyad") {
-        const nextRole = currentRole === "computer" ? "assembly" : "computer";
-        setCurrentRole(nextRole);
-        emitTimeline("role_swapped", {
-          activity_stage: "checkpoint_20",
-          details: { from_role: currentRole, to_role: nextRole, scheduled_swap: true }
-        });
-      }
-      setScreen("activity");
+    }
+    setScreen("activity");
+    flash("Check-in pulado. Retornando ao desafio.");
+  }
+
+  function handleFinishActivity() {
+    checkpointOpeningRef.current = false;
+    setCheckpointModalMark(null);
+    setScreen("post");
+    flash("Desafio concluído na bancada. Prosseguindo para a rubrica do instrutor.");
+  }
+
+  function handleToggleHelp() {
+    const nextState = !helpActive;
+    setHelpActive(nextState);
+    if (nextState) {
+      emitTimeline("help_requested", {
+        activity_stage: "activity",
+        details: { runtime: "browser_pwa", requested_by: "student_button" }
+      });
+      flash("🚨 Ajuda solicitada! Levantem a mão na sala para o professor localizar a bancada.");
     } else {
-      setScreen("post");
+      emitTimeline("help_resolved", {
+        activity_stage: "activity",
+        details: { runtime: "browser_pwa", resolved_by: "student_button" }
+      });
+      flash("✓ Ajuda marcada como atendida pelo professor.");
     }
   }
 
   function submitPost() {
+    const issueMap = {
+      repeat_sensor: "sensor",
+      more_time: "technical",
+      revise_logic: "logic",
+      advance_challenge: "none"
+    };
+
     emitResponse("post", {
       activity_stage: "post",
-      post_understanding: postAnswers.understanding,
-      post_affects: [postAnswers.affect],
-      post_return_intent: postAnswers.returnIntent
+      mission_performance: postAnswers.executionScore !== null ? postAnswers.executionScore : null,
+      primary_issue: issueMap[postAnswers.nextAction] || "none",
+      knowledge_answers: {
+        mission_result: postAnswers.missionResult,
+        execution_score: postAnswers.executionScore,
+        explanation_score: postAnswers.explanationScore,
+        assistance_count: postAnswers.assistanceCount,
+        next_action: postAnswers.nextAction
+      },
+      response_status: "completed"
+    });
+
+    emitTimeline("rubric_completed", {
+      activity_stage: "post",
+      details: {
+        runtime: "browser_pwa",
+        mission_result: postAnswers.missionResult,
+        execution_score: postAnswers.executionScore,
+        explanation_score: postAnswers.explanationScore,
+        next_action: postAnswers.nextAction
+      }
     });
 
     emitTimeline("phase_completed", { activity_stage: "post" });
@@ -1355,6 +1589,9 @@ export default function StudentPage() {
     setTimeline([]);
     setResponses([]);
     setSpikeTelemetry(null);
+    setHelpActive(false);
+    isSyntheticSessionRef.current = false;
+    setIsSyntheticSession(false);
     setPreAnswers(PRE_DEFAULT);
     setCheckpoint20Answers(CHECKPOINT_DEFAULT);
     setCheckpoint40Answers(CHECKPOINT_DEFAULT);
@@ -1410,20 +1647,26 @@ export default function StudentPage() {
   }
 
   function autoFillCurrentStep() {
+    isSyntheticSessionRef.current = true;
+    setIsSyntheticSession(true);
     if (screen === "pre") {
-      setPreAnswers({ experience: 2, confidence: 3 });
-      flash("Início preenchido. Clique em 'Começar Atividade!'");
+      setPreAnswers({ experience: 2 });
+      flash("Início preenchido com dados sintéticos de teste. Clique em 'Começar Atividade!'");
     } else if (screen === "activity") {
       triggerCheckpointAlert(currentMark);
-    } else if (screen === "checkpoint20") {
-      setCheckpoint20Answers({ effort: 2, progress: "progressing_with_doubt", collaboration: 3, help: false });
-      flash("Check-in 20m preenchido. Clique em 'Salvar e continuar'");
-    } else if (screen === "checkpoint40") {
-      setCheckpoint40Answers({ effort: 3, progress: "progressing_independently", collaboration: 4, help: false });
-      flash("Check-in 40m preenchido. Clique em 'Salvar e continuar'");
+    } else if (screen.startsWith("checkpoint")) {
+      const mark = screen === "checkpoint20" ? 20 : 40;
+      handleSelectImpasse(mark, "no");
+      flash(`Check-in de ${mark}m preenchido com dados sintéticos.`);
     } else if (screen === "post") {
-      setPostAnswers({ understanding: 3, affect: "confident", returnIntent: 4 });
-      flash("Finalização preenchida. Clique em 'Concluir Oficina'");
+      setPostAnswers({
+        missionResult: "full",
+        executionScore: 3,
+        explanationScore: 3,
+        assistanceCount: 1,
+        nextAction: "advance_challenge"
+      });
+      flash("Rubrica pós-oficina preenchida com dados sintéticos. Clique em 'Concluir e Salvar'");
     }
   }
 
@@ -1503,8 +1746,64 @@ export default function StudentPage() {
     const tick = () => {
       const nextElapsed = Math.max(0, Date.now() - activityStartedAt);
       setElapsedMs(nextElapsed);
-      if (nextElapsed >= currentMark * 60 * 1000 && !checkpointOpeningRef.current && checkpointModalMark === null) {
-        triggerCheckpointAlert(currentMark);
+
+      // Verificação de expiração de modal aberto há mais de 10 minutos
+      if (checkpointModalMark !== null && checkpointPromptedAtRef.current) {
+        const timeInModal = Date.now() - checkpointPromptedAtRef.current;
+        if (timeInModal >= 10 * 60 * 1000) {
+          const expiredMark = checkpointModalMark;
+          const scheduledMs = activityStartedAt + expiredMark * 60 * 1000;
+          emitTimeline("checkpoint_expired", {
+            activity_stage: `checkpoint_${expiredMark}`,
+            interval_mark: expiredMark,
+            elapsed_ms: nextElapsed,
+            scheduled_at: new Date(scheduledMs).toISOString(),
+            details: { runtime: "browser_pwa", reason: "modal_timeout_10_minutes" }
+          });
+          emitResponse("checkpoint", {
+            activity_stage: `checkpoint_${expiredMark}`,
+            interval_mark: expiredMark,
+            scheduled_at: new Date(scheduledMs).toISOString(),
+            prompted_at: new Date(checkpointPromptedAtRef.current).toISOString(),
+            captured_at: new Date().toISOString(),
+            response_status: "timeout",
+            knowledge_answers: { target_construct: "impasse_percebido", reason: "modal_timeout" }
+          });
+          setCheckpointModalMark(null);
+          checkpointPromptedAtRef.current = null;
+          checkpointOpeningRef.current = false;
+          lastCheckpointCompletedAtRef.current = Date.now();
+          if (expiredMark === 20) {
+            setCurrentMark(40);
+          }
+          flash(`Check-in de ${expiredMark}m expirou após 10 minutos sem resposta.`);
+          return;
+        }
+      }
+
+      // Disparo de novo checkpoint se o tempo atingiu a marca e respeitou intervalo mínimo
+      if (
+        nextElapsed >= currentMark * 60 * 1000 &&
+        !checkpointOpeningRef.current &&
+        checkpointModalMark === null
+      ) {
+        const msSinceLast = Date.now() - lastCheckpointCompletedAtRef.current;
+        if (lastCheckpointCompletedAtRef.current === 0 || msSinceLast >= 10 * 60 * 1000) {
+          const lateness = nextElapsed - currentMark * 60 * 1000;
+          if (lateness > 10 * 60 * 1000) {
+            emitTimeline("checkpoint_expired", {
+              activity_stage: `checkpoint_${currentMark}`,
+              interval_mark: currentMark,
+              elapsed_ms: nextElapsed,
+              details: { runtime: "browser_pwa", reason: "scheduled_window_passed", lateness_ms: lateness }
+            });
+            if (currentMark === 20) {
+              setCurrentMark(40);
+            }
+          } else {
+            triggerCheckpointAlert(currentMark);
+          }
+        }
       }
     };
     tick();
@@ -1558,15 +1857,25 @@ export default function StudentPage() {
       />
     );
   } else if (screen === "activity") {
-    content = <ActivityScreen currentMark={currentMark} elapsedMs={elapsedMs} labMode={labMode} spikeTelemetry={spikeTelemetry} />;
+    content = (
+      <ActivityScreen
+        currentMark={currentMark}
+        elapsedMs={elapsedMs}
+        labMode={labMode}
+        spikeTelemetry={spikeTelemetry}
+        helpActive={helpActive}
+        onToggleHelp={handleToggleHelp}
+        onFinishActivity={handleFinishActivity}
+        assentAgreed={assentAgreed}
+      />
+    );
   } else if (screen === "checkpoint20") {
     content = (
       <CheckpointScreen
         answers={checkpoint20Answers}
         mark={20}
-        setAnswers={setCheckpoint20Answers}
-        onSubmit={() => submitCheckpoint(20)}
-        onDecline={() => handleDeclineCheckpoint(20)}
+        onSelectOption={(val) => handleSelectImpasse(20, val)}
+        onSkip={() => handleSkipCheckpoint(20)}
         teamRole={teamRole}
         currentRole={currentRole}
         onRoleSwap={handleRoleSwap}
@@ -1577,9 +1886,8 @@ export default function StudentPage() {
       <CheckpointScreen
         answers={checkpoint40Answers}
         mark={40}
-        setAnswers={setCheckpoint40Answers}
-        onSubmit={() => submitCheckpoint(40)}
-        onDecline={() => handleDeclineCheckpoint(40)}
+        onSelectOption={(val) => handleSelectImpasse(40, val)}
+        onSkip={() => handleSkipCheckpoint(40)}
         teamRole={teamRole}
         currentRole={currentRole}
         onRoleSwap={handleRoleSwap}
@@ -1695,7 +2003,8 @@ export default function StudentPage() {
       {checkpointModalMark ? (
         <CheckpointAlertModal
           mark={checkpointModalMark}
-          onProceed={handleProceedFromModal}
+          onSelectOption={(val) => handleSelectImpasse(checkpointModalMark, val)}
+          onSkip={() => handleSkipCheckpoint(checkpointModalMark)}
         />
       ) : null}
 

@@ -44,3 +44,27 @@ test("student-store exports listPendingEvents and pruneDeliveredEvents", async (
   assert.equal(typeof store.pruneDeliveredEvents, "function");
 });
 
+test("sanitizeEventForSupabase nests non-schema columns in details for research_session_events", () => {
+  const input = {
+    event_id: "1234",
+    session_id: "5678",
+    event_type: "session_started",
+    _target_table: "research_session_events",
+    telemetry_window_title: "PulseLab",
+    telemetry_foreground_app: "Chrome",
+    is_synthetic: true,
+    details: { existing: 1 }
+  };
+
+  const output = sanitizeEventForSupabase(input);
+  assert.equal(output.event_id, "1234");
+  assert.equal(output.session_id, "5678");
+  assert.equal(output.telemetry_window_title, undefined);
+  assert.equal(output.telemetry_foreground_app, undefined);
+  assert.equal(output.details.existing, 1);
+  assert.equal(output.details.telemetry_window_title, "PulseLab");
+  assert.equal(output.details.telemetry_foreground_app, "Chrome");
+  assert.equal(output.details.is_synthetic, true);
+});
+
+

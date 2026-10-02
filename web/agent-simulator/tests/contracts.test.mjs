@@ -31,3 +31,17 @@ test("considera completa uma sessão de oficina com dois checkpoints", () => {
 test("mantém sessão incompleta fora do estado de sucesso", () => {
   assert.equal(getQualityStatus({ timeline: [], responses: [] }), "in_progress");
 });
+
+test("CONFIG_HASH corresponde exatamente ao SHA-256 do INSTRUMENT_MANIFEST", async () => {
+  const { INSTRUMENT_MANIFEST } = await import("../lib/contracts.js");
+  const crypto = await import("node:crypto");
+  const calculated = crypto.createHash("sha256").update(JSON.stringify(INSTRUMENT_MANIFEST)).digest("hex");
+  assert.equal(CONFIG_HASH, calculated);
+});
+
+test("TIMELINE_EVENT_TYPES inclui checkpoint_expired e help_resolved", async () => {
+  const { TIMELINE_EVENT_TYPES } = await import("../lib/contracts.js");
+  assert.ok(TIMELINE_EVENT_TYPES.includes("checkpoint_expired"));
+  assert.ok(TIMELINE_EVENT_TYPES.includes("help_resolved"));
+});
+

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>PulseLab — Ganhos com e sem questionário</title>
+  <style>
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:2rem}body{margin:0;background:#fafaf8;color:#242424;font:17px/1.75 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}main{max-width:1060px;margin:auto;padding:60px 30px 70px}header{padding-bottom:28px;border-bottom:1px solid #deded8}.eyebrow{color:#65655f;font-size:12px;font-weight:650;letter-spacing:.12em;text-transform:uppercase}h1{max-width:760px;font-size:clamp(30px,5vw,44px);line-height:1.18;letter-spacing:-.035em;margin:12px 0 18px}h2{font-size:26px;line-height:1.3;letter-spacing:-.02em;margin:0 0 22px}h3{font-size:20px;line-height:1.4;margin:30px 0 14px}p{margin:0 0 20px}p,ul,ol,blockquote{max-width:80ch}strong{font-weight:650}a{color:#24564d;text-underline-offset:3px;overflow-wrap:anywhere}a:hover{color:#142f28}a:focus-visible,[tabindex]:focus-visible{outline:2px solid #24564d;outline-offset:5px}nav{display:flex;flex-wrap:wrap;gap:9px 23px;font-size:14px;margin-top:22px}section{border-top:1px solid #deded8;margin-top:42px;padding-top:30px}.intro{margin-top:30px}.lead{font-size:19px;line-height:1.65}.note{color:#5e5e58;font-size:15px}.table-wrap{overflow-x:auto;margin:24px 0;border:1px solid #deded8;border-radius:5px;background:#fff}table{width:100%;border-collapse:collapse;font-size:15px;line-height:1.6;min-width:660px}th,td{text-align:left;vertical-align:top;padding:15px 16px;border-bottom:1px solid #deded8}th{background:#eff0eb;font-size:13px;font-weight:650}tr:last-child td{border-bottom:0}.phases th:first-child{width:17%}.phases th:nth-child(2){width:39%}.phases th:nth-child(3){width:44%}.gain th:first-child{width:22%}.gain th:nth-child(2){width:40%}.gain th:nth-child(3){width:38%}ul,ol{padding-left:24px;margin:0 0 24px}li{padding-left:4px;margin-bottom:12px}blockquote{margin:24px 0;padding:18px 22px;background:#eff3ef;border-left:3px solid #839c90}blockquote p:last-child{margin-bottom:0}code{font: .86em ui-monospace,SFMono-Regular,Consolas,monospace;background:#eeefea;border-radius:3px;padding:2px 5px;overflow-wrap:anywhere}.verdict{border-top:1px solid #deded8;padding-top:24px;margin-top:30px}footer{margin-top:42px;padding-top:20px;border-top:1px solid #deded8;font-size:13px;color:#65655f}@media(max-width:640px){body{font-size:16px}main{padding:32px 19px 45px}h2{font-size:23px}.lead{font-size:18px}th,td{padding:12px}section{margin-top:32px;padding-top:24px}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{@page{margin:18mm 15mm}body{background:white;color:black;font-size:10.5pt;line-height:1.5}main{max-width:none;padding:0}nav,footer{display:none}h1{font-size:26pt}h2{font-size:17pt}h3{font-size:13pt}h2,h3{break-after:avoid}.lead{font-size:12pt}p,li{orphans:3;widows:3}.table-wrap{overflow:visible}table{min-width:0;font-size:9pt}thead{display:table-header-group}tr,blockquote{break-inside:avoid}th,td{padding:8px}a{color:inherit}}
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <p class="eyebrow">PulseLab · Análise de decisão</p>
+    <h1>O que ganhamos mantendo ou retirando o questionário?</h1>
+    <p>Tutorial no LEGO SPIKE, experimentação dos comandos, montagem guiada, testes e ajustes do robô e corrida final.</p>
+    <nav aria-label="Navegação pela análise">
+      <a href="#fases">1. Etapas da aula</a>
+      <a href="#ganho">2. Ganho por pergunta</a>
+      <a href="#decisao">3. Comparação dos desenhos</a>
+      <a href="#verificacao">4. Como verificar o ganho</a>
+    </nav>
+  </header>
+
+  <div class="intro">
+    <p class="lead"><strong>Para investigar o processo de programação e o desempenho dos robôs nessa aula, eu retiraria o questionário atual do fluxo obrigatório. O ganho adicional que ele oferece parece insuficiente para justificar os entraves relatados. Preservaria perguntas apenas quando a experiência subjetiva dos alunos fosse um resultado explícito da pesquisa.</strong></p>
+    <p>Esse é um julgamento de desenho apoiado no instrumento auditado e na dinâmica descrita pelo professor. <strong>Não é uma estimativa empírica de efeito:</strong> ainda não temos tempos observados de preenchimento e retomada, taxas de resposta reconciliadas com a coleta local ou uma comparação controlada entre os desenhos. Não há base para afirmar que retirar o questionário aumentaria a qualidade em determinada porcentagem.</p>
+    <p>A comparação correta envolve três coisas diferentes: a informação que só a pergunta pode fornecer, a confiabilidade dessa informação no instrumento atual e o custo de obtê-la. Acrescentar colunas ao banco não demonstra ganho científico.</p>
+    <p>A nova descrição também desloca o problema: as crianças alternam instrução guiada, trabalho físico e experimentação. Por isso, <strong>o contexto da fase e o resultado das tentativas são especialmente valiosos</strong>. O questionário genérico não registra adequadamente esse contexto, e os registros da tela tampouco o recuperam automaticamente.</p>
+  </div>
+
+  <section id="fases" aria-labelledby="titulo-fases">
+    <h2 id="titulo-fases">1. O ganho muda conforme a etapa da aula</h2>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Comparação por etapa da aula">
+      <table class="phases">
+        <thead><tr><th scope="col">Etapa</th><th scope="col">O que a coleta silenciosa pode acrescentar</th><th scope="col">O que o questionário acrescenta e seus limites</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Tutorial e experimentação dos comandos</strong></td><td>Sequências de alterações, execuções e revisões; parâmetros explorados; retorno às instruções, se a navegação estiver instrumentada. Seguir o tutorial e produzir o programa esperado não comprova compreensão.</td><td>Uma pergunta bem formulada pode distinguir facilidade percebida e esforço. As perguntas atuais sobre dificuldade e confiança têm interpretação limitada. “Entendi” não resolve a distinção entre reprodução e compreensão.</td></tr>
+          <tr><td><strong>Montagem guiada</strong></td><td>A tela pode permanecer no mesmo passo enquanto a bancada trabalha intensamente com as peças. O tempo sem teclado ou mouse não identifica desengajamento. Mesmo um avanço de página não garante que a montagem foi concluída.</td><td>Uma pergunta contextual poderia revelar dificuldade mecânica ou impasse, mas o item atual mistura robô, código e autonomia. Interromper para responder também exige afastar a atenção da montagem e negociar a resposta coletiva.</td></tr>
+          <tr><td><strong>Testes e configuração do robô</strong></td><td>É a etapa com maior potencial para relacionar versões do programa, alterações de parâmetros e tentativas. É preciso observar o resultado físico: comando enviado ao robô não equivale a teste bem-sucedido.</td><td>O autorrelato pode informar que a bancada não sabe o que tentar ou percebe dificuldade. Isso é informação subjetiva adicional, mas não identifica sozinho a causa do erro nem o resultado da execução.</td></tr>
+          <tr><td><strong>Corrida final</strong></td><td>Tempo no percurso, conclusão, saídas da pista, falhas e consistência entre tentativas, quando disponíveis. A classificação depende dos adversários; o resultado deve ser ligado à versão usada e às condições do teste.</td><td>O questionário pode investigar a experiência da competição. Uma resposta afetiva após a corrida também pode refletir vitória ou derrota; serve para essa experiência, mas não representa automaticamente o tutorial, a montagem ou toda a oficina.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">As capacidades acima pressupõem instrumentação adequada. Não são funcionalidades confirmadas da API do SPIKE nem do coletor atual. A PWA auditada obtém retratos de arquivos salvos associados às etapas do questionário; isso ainda não constitui um registro completo de ações.</p>
+    <p><strong>O intervalo fixo de 20 minutos prejudica a comparabilidade entre bancadas em fases diferentes.</strong> Uma pode estar montando, outra explorando comandos e outra testando na pista. Comparar as respostas sem registrar essas fases mistura demandas diferentes. Remover o questionário não corrige essa mistura: a telemetria também precisa de contexto.</p>
+    <p>Se todas as bancadas passam de fase juntas, o instrutor pode registrar a transição uma vez para a turma. Se avançam em ritmos diferentes, esse marcador coletivo é apenas contexto geral; a fase de cada bancada exige outro registro ou uma inferência validada.</p>
+  </section>
+
+  <section id="ganho" aria-labelledby="titulo-ganho">
+    <h2 id="titulo-ganho">2. Ganho marginal das perguntas atuais</h2>
+    <p>“Ganho” significa aqui acrescentar uma informação relevante que os registros de interação não fornecem. As classificações são avaliações metodológicas para este contexto, não resultados estatísticos medidos.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Ganho marginal de cada grupo de perguntas">
+      <table class="gain">
+        <thead><tr><th scope="col">Pergunta ou grupo</th><th scope="col">Ganho possível em relação aos logs</th><th scope="col">Decisão para este estudo</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Experiência prévia</strong></td><td>Informa uma característica que pode explicar diferenças entre bancadas e não é identificada com segurança pelas ações atuais. Porém, exposição anterior e competência não são equivalentes.</td><td><strong>Ganho útil de contexto.</strong> Obter uma vez por participante ou composição da bancada, com referente claro, ou aproveitar registros existentes. Não exige checkpoints recorrentes.</td></tr>
+          <tr><td><strong>Animação/confiança inicial</strong></td><td>Poderia informar expectativa subjetiva. No item atual, curiosidade, confiança e entusiasmo são misturados em uma escala numérica.</td><td><strong>Ganho interpretável baixo na forma atual.</strong> Retirar. Só substituir por autoeficácia específica se essa for uma pergunta de pesquisa.</td></tr>
+          <tr><td><strong>Dificuldade/esforço</strong></td><td>Duas bancadas com a mesma sequência de ações podem perceber demandas diferentes. Essa diferença subjetiva é informação real que a telemetria isolada não identifica.</td><td><strong>Potencial relevante, condicionado ao objetivo.</strong> O item atual mede dificuldade de modo amplo, é gravado como esforço e não situa a fase. Reformular e amostrar pontualmente apenas se essa experiência for central.</td></tr>
+          <tr><td><strong>Progresso e ajuda</strong></td><td>Podem sinalizar necessidade percebida de apoio, inclusive fora da tela. O progresso atual mistura funcionamento, dúvida e autonomia; ausência de clique em ajuda não significa ausência de necessidade.</td><td><strong>Ganho possível para mediação.</strong> Uma ação voluntária de ajuda ou registro de intervenção pode ser mais útil operacionalmente. Ela não representa todos os episódios de dificuldade e não deve virar medida completa de necessidade.</td></tr>
+          <tr><td><strong>Divisão das tarefas</strong></td><td>A organização social é pouco visível nos logs de um computador compartilhado. O grupo pode informar aspectos que o sistema não vê.</td><td><strong>Lacuna real, item atual fraco.</strong> Não há escala ordinal coerente, privacidade ou registro de discordância. Para estudar colaboração, seria necessário outro desenho. Retirar o item não permite alegar colaboração medida passivamente.</td></tr>
+          <tr><td><strong>Compreensão percebida</strong></td><td>Informa o quanto os alunos acreditam ter entendido. Pode ser útil para estudar calibração entre percepção e desempenho.</td><td><strong>Pouco ganho para demonstrar aprendizagem.</strong> Na aula guiada, uma pequena tarefa de previsão ou transferência fornece evidência mais direta. Sem critério independente, “entendemos” continua sendo percepção.</td></tr>
+          <tr><td><strong>Sentimento e intenção de retorno</strong></td><td>Informam experiência subjetiva e aceitabilidade, que não podem ser substituídas por número de cliques ou velocidade do robô.</td><td><strong>Ganho relevante se avaliar a experiência for um objetivo.</strong> Para o processo de programação e o desempenho, têm menor prioridade. Usar ocasionalmente, com itens adequados, sem tornar o fechamento da aula dependente deles.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>O ganho exclusivo mais claro do questionário está na experiência percebida.</strong> Ele pode revelar uma bancada que executa bem, mas considera a atividade muito difícil, ou uma bancada que erra bastante e ainda assim está interessada. Esses exemplos justificam autorrelato quando essa diferença importa à pesquisa. Eles não demonstram que o instrumento atual a mede bem.</p>
+    <p>Schuessler, Fischer e Walpuski mostram que dificuldade percebida e esforço investido capturam aspectos distintos e que o momento da avaliação importa. Isso sustenta a possibilidade de ganho de um item bem definido, sem validar a mistura atual. <a href="https://link.springer.com/article/10.1007/s11251-024-09692-6">Estudo, 2025</a>.</p>
+    <p><strong>Retirar o questionário elimina essas oportunidades de conhecer a percepção dos alunos.</strong> Essa perda é aceitável se a pesquisa delimitar seu objeto ao comportamento e ao desempenho observável. Não é aceitável retirar as perguntas e continuar prometendo medir emoções, motivação ou percepção de dificuldade com os mesmos dados.</p>
+  </section>
+
+  <section id="decisao" aria-labelledby="titulo-decisao">
+    <h2 id="titulo-decisao">3. Qual desenho oferece o melhor saldo?</h2>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Comparação dos desenhos de coleta">
+      <table>
+        <thead><tr><th scope="col">Desenho</th><th scope="col">Ganho</th><th scope="col">Custo ou perda</th><th scope="col">Avaliação</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Telemetria + questionário atual</strong></td><td>Adiciona relatos de percepção e alguma caracterização inicial.</td><td>Onze escolhas obrigatórias para completar todos os formulários; dois checkpoints por relógio; custo de atenção e coordenação; baixa adesão relatada; ambiguidades nos itens e na identidade do respondente.</td><td><strong>Não manter como padrão.</strong> O ganho líquido favorável não foi demonstrado e há limitações verificáveis na interpretação das respostas.</td></tr>
+          <tr><td><strong>Somente registros de tela/interação</strong></td><td>Elimina o preenchimento; permite estudar sequências observáveis sem avisos de pesquisa durante a tarefa.</td><td>Não identifica bem a montagem, as interações sociais nem o resultado físico do robô; perde a perspectiva subjetiva.</td><td><strong>Viável para processo digital.</strong> Exige restringir as conclusões ao que foi observado e validar a captura.</td></tr>
+          <tr><td><strong>Telemetria + fases + resultados físicos</strong></td><td>Relaciona alterações e testes ao contexto e ao desempenho efetivo.</td><td>Exige instrumentar o resultado ou um registro breve do instrutor; não mede experiência subjetiva. O trabalho de registro do professor deve entrar no custo.</td><td><strong>Minha escolha para a pesquisa de processo e desempenho.</strong> Dispensa questionário recorrente dos alunos, embora possa exigir observação complementar.</td></tr>
+          <tr><td><strong>Base anterior + item subjetivo pontual</strong></td><td>Permite investigar uma dimensão experiencial específica e verificar se ela acrescenta informação.</td><td>Introduz algum atrito, não resposta e necessidade de validação do item e da amostragem.</td><td><strong>Escolha condicional.</strong> Usar se a pergunta científica depender dessa percepção, em transição natural ou subamostra.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>Retirar os avisos garante a eliminação do custo de responder a esses avisos; não garante aumento de aprendizagem ou de adesão ao sistema.</strong> Esses efeitos precisam ser medidos. Também não garante telemetria mais completa: no código auditado, parte da captura depende das transições do questionário. A coleta precisa ser desacoplada antes da retirada.</p>
+    <p>Há evidência de que o tamanho dos questionários pode prejudicar quantidade e qualidade de respostas, mas não uma regra universal que permita deduzir o efeito dos 20 minutos nesta aula. Um experimento com 163 estudantes encontrou prejuízos associados a questionários mais longos, sem o mesmo padrão para maior frequência. Seus questionários e contexto eram diferentes dos do PulseLab. <a href="https://pubmed.ncbi.nlm.nih.gov/32909448/">Eisele et al., 2022</a>.</p>
+    <p>Um estudo de 2026 também encontrou diferenças entre adultos e adolescentes nos efeitos do contexto social sobre a resposta, com influência aparentemente pequena na qualidade dos dados. Isso reforça a necessidade de observar o custo real na oficina, em vez de assumir que a interação entre crianças necessariamente invalida o autorrelato. <a href="https://pubmed.ncbi.nlm.nih.gov/41870366/">Eisele et al., 2026</a>.</p>
+
+    <h3>O maior ganho adicional para essa aula</h3>
+    <p>Minha prioridade de investimento seria registrar <strong>fase da atividade, versão do programa e resultado de cada tentativa relevante</strong>. Na etapa final, isso permitiria investigar, por exemplo, se determinadas alterações antecedem melhor desempenho no percurso. A associação exige registrar também mudanças mecânicas relevantes e intervenções do professor quando ocorrerem; alterações no código não são a única causa possível de melhoria.</p>
+    <ul>
+      <li><strong>Tutorial:</strong> saber qual instrução estava sendo seguida, quando disponível, evita interpretar reprodução prescrita como descoberta independente.</li>
+      <li><strong>Programa:</strong> comparar versões permite identificar o que foi alterado, em vez de presumir que mais blocos significam mais aprendizagem.</li>
+      <li><strong>Tentativa física:</strong> ligar a versão ao resultado ajuda a distinguir exploração com efeito observável de sucessivas mudanças sem melhoria.</li>
+      <li><strong>Corrida:</strong> usar tempo e conclusão, além da classificação. Vencer depende dos adversários e de condições como montagem, pista e bateria; não é uma medida isolada de aprendizagem.</li>
+    </ul>
+    <p>Se o objetivo incluir compreensão, uma atividade breve incorporada à aula — prever o efeito de mudar um parâmetro e depois testar a previsão — pode fornecer evidência mais direta que a pergunta “vocês entenderam?”. Ela ainda tem custo e precisa de critérios de avaliação. É uma avaliação de desempenho, não um questionário de sentimento; para alegar ganho ao longo da aula, precisa de uma referência inicial comparável.</p>
+    <p>Também é possível produzir pesquisa relevante exclusivamente sobre trajetórias observáveis, sem transformar toda análise em previsão de notas ou de aprendizagem. Há precedente na LAK para investigar estratégias de depuração identificáveis nos logs e suas relações com depuração bem-sucedida. <a href="https://experts.illinois.edu/en/publications/using-submission-log-data-to-investigate-novice-programmers-emplo/">Liu e Paquette, 2023</a>.</p>
+  </section>
+
+  <section id="verificacao" aria-labelledby="titulo-verificacao">
+    <h2 id="titulo-verificacao">4. Como demonstrar ganho real</h2>
+    <p>Há duas comparações diferentes: <strong>o ganho de informação</strong> proporcionado pelas respostas e <strong>o efeito de pedir que os alunos respondam</strong>. Uma comparação de modelos sozinha não mede o custo da interrupção; uma comparação de adesão sozinha não mede a utilidade científica do dado.</p>
+    <ol>
+      <li><strong>Definir o resultado principal.</strong> Por exemplo, trajetórias de revisão e desempenho em um teste físico padronizado. Se o resultado principal for dificuldade percebida, o autorrelato passa a ser parte da própria definição do alvo; não deve ser julgado apenas por aumentar a previsão da corrida.</li>
+      <li><strong>Comparar políticas de coleta com a mesma base.</strong> Uma condição usa telemetria, fases e resultados; outra usa exatamente a mesma base mais a versão do questionário que se considera manter. Se a escolha for entre o atual e nenhum, o atual é essa condição. Distribuir condições por unidades que evitem contaminação pelos alertas, considerando turma e bancada. Manter comparáveis tarefa, duração e apoio do professor.</li>
+      <li><strong>Medir a execução do protocolo.</strong> Separar avisos previstos, apresentados, respondidos, recusados e expirados; medir tempo de preenchimento e tempo fora da tarefa atribuído ao aviso; registrar esforço de apoio do professor. A retomada durante a montagem precisa de observação ou validação específica, pois a ausência de teclado não a mede.</li>
+      <li><strong>Medir informação adicional.</strong> Na condição com perguntas, comparar análises ou modelos com e sem as respostas, usando o mesmo conjunto de bancadas e um critério independente. Em previsão, reservar bancadas ou turmas inteiras para avaliação, definir previamente a métrica e estimar a incerteza. Avaliar também se o uso real do sistema consegue operar quando não há resposta.</li>
+      <li><strong>Adotar uma regra de manutenção.</strong> Manter um item se ele viabiliza uma pergunta substantiva sobre percepção ou acrescenta informação confiável que altera uma decisão de pesquisa ou mediação, com custo aceitável. Retirá-lo se só produz descrição secundária sem uso, tem baixa interpretabilidade ou impõe custo incompatível com o benefício.</li>
+    </ol>
+    <p>O teste deve distinguir a informação acrescentada pelo questionário da informação sobre quem costuma responder. Respostas ausentes não equivalem a ausência de dificuldade. Analisar apenas os formulários completos pode selecionar as bancadas e os momentos mais fáceis de observar.</p>
+    <p>Não usaria um corte arbitrário como “80% de adesão basta” ou “um ganho de 5% justifica”. A diferença minimamente útil precisa ser estabelecida conforme a decisão, e o planejamento deve considerar o número de bancadas ou turmas independentes. Um piloto pequeno pode estimar viabilidade e variabilidade sem ter precisão para provar superioridade.</p>
+    <p class="verdict"><strong>Decisão recomendada agora: retirar os checkpoints obrigatórios do questionário atual e priorizar uma base de coleta do processo, contextualizada por fase e ligada a resultados observáveis. Manter uma caracterização inicial enxuta quando necessária. Reintroduzir um item subjetivo somente para uma pergunta de pesquisa explícita e com avaliação de seu ganho adicional.</strong></p>
+    <p>Essa escolha preserva a possibilidade de uma pesquisa forte sobre programação e experimentação. O que ela abandona é a pretensão de descrever sistematicamente a experiência subjetiva de todas as bancadas. Caso essa experiência seja central ao estudo, a solução é redesenhar sua medida e reduzir o atrito, não presumir que os logs a substituem.</p>
+  </section>
+  <footer><p>Complemento ao <a href="parecer-questionarios-coleta.html">parecer sobre o instrumento e a arquitetura de coleta</a>. A recomendação não altera o aplicativo nem o protocolo implementado.</p></footer>
+</main>
+</body>
+</html>
