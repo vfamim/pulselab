@@ -97,8 +97,21 @@
     </div>
     <p>Uma transição marcada pelo instrutor para a turma inteira só informa a fase de todas as bancadas quando elas avançam juntas. Caso contrário, registrar a diferença ou tratar o marcador como contexto geral. Não atribuir precisão individual a uma informação coletiva.</p>
     <p>Não registrar manualmente cada tentativa em todas as bancadas se isso comprometer a mediação. O piloto deve verificar o custo. Uma alternativa é ter um resultado padronizado de encerramento para todas as bancadas e observar a sequência detalhada em uma subamostra definida previamente.</p>
-    <p>A hierarquia dos registros deve separar <code>polo → sessão/oficina → bancada → eventos/tentativas</code>. Escola, instrutor e dispositivo são identificados à parte. Uma resposta individual de experiência só precisa de vínculo com a bancada se houver uma análise previamente justificada que exija essa associação; nesse caso, usar identificação temporária dentro da sessão. A máquina pode permanecer; a turma e a bancada observada devem receber novos identificadores a cada encontro.</p>
     <p>O fluxo deve distinguir <strong>zero ocorrências, ausência de resposta e falha de coleta</strong>. Todos os registros precisam identificar a versão do instrumento e do software, e separar instante do evento de instante de recebimento. Dados de demonstração devem permanecer distinguíveis dos dados de campo.</p>
+
+    <h3>4.1 Mediação presencial e arquitetura offline-first</h3>
+    <p><strong>Foco físico e mediação presencial contínua:</strong> O PulseLab não opera em divisão de tela (split-screen) ou aba lateral, nem dispõe de botão virtual para chamar professor. A força pedagógica da oficina reside na presença física do instrutor, que circula continuamente entre as bancadas. Os estudantes utilizam o aplicativo oficial LEGO SPIKE em tela cheia durante a montagem e programação, solicitando auxílio diretamente ao professor em pessoa. A intensidade do apoio prestado (autônomo, apoio pontual ou apoio constante) é registrada na rubrica operacional ao final da oficina.</p>
+
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Fluxo de dados offline e consolidação">
+      <table>
+        <thead><tr><th scope="col">Etapa do Fluxo</th><th scope="col">Mecanismo Local</th><th scope="col">Garantia Metodológica e Técnica</th></tr></thead>
+        <tbody>
+          <tr><td><strong>1. Durante a oficina</strong></td><td>Gravação contínua em <code>dados_locais/sessoes/</code> e <code>events.jsonl</code></td><td>Resiliência total a escolas sem conectividade. Cada bancada gera um snapshot autossuficiente (.json) com metadados, telemetria SPIKE e respostas.</td></tr>
+          <tr><td><strong>2. Fechamento no polo</strong></td><td>Script de 1 clique: <code>Exportar-Dados-Pendrive.bat</code></td><td>Detecção de pendrives USB conectados, cópia estruturada por máquina (<code>Coleta_PC-LAB_DATA/</code>) e geração de manifesto de integridade com hashes SHA-256.</td></tr>
+          <tr><td><strong>3. Consolidação e nuvem</strong></td><td>Script unificador: <code>Importar-Para-Supabase.bat</code> (Python + PowerShell)</td><td>Consolidação em banco local relacional SQLite (<code>pulselab_consolidado.sqlite</code>) para consulta offline imediata e envio idempotente para as tabelas do Supabase com resolução de duplicatas.</td></tr>
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section id="quiz" aria-labelledby="titulo-quiz">

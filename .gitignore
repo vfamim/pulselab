@@ -65,3 +65,11 @@ dist/
 supabase/.temp/
 web/agent-simulator/test-results/
 web/agent-simulator/playwright-report/
+
+# Offline research data storage (LGPD compliance)
+dados_locais/*.json
+dados_locais/*.jsonl
+dados_locais/*.sqlite
+dados_locais/*.txt
+dados_locais/sessoes/*.json
+!dados_locais/sessoes/.gitkeep

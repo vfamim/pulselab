@@ -46,13 +46,25 @@ OPÇÃO 2: INSTALAÇÃO NO SISTEMA (Com atalho na Área de Trabalho)
 COMO DESINSTALAR:
 - Dê dois cliques em "Desinstalar-PulseLab.bat".
 
+COLETA OFFLINE E EXPORTAÇÃO PARA PENDRIVE (SEM INTERNET NA ESCOLA):
+1. Todas as oficinas são salvas automaticamente em disco na pasta "dados_locais".
+2. Ao final do dia de oficinas, conecte um pendrive USB no computador.
+3. Dê dois cliques em "Exportar-Dados-Pendrive.bat".
+4. Todos os arquivos de sessões e eventos serão copiados para o pendrive com manifesto e hash SHA-256.
+5. Quando o pesquisador estiver em um local com internet, dê dois cliques em "Importar-Para-Supabase.bat"
+   para enviar os dados de forma consolidada para a base SQLite local e para o banco central Supabase.
+
 RECURSOS DO PULSELAB v{version}:
-- Jornada da dupla em 4 etapas rápidas (sem troca excessiva de telas).
-- Coleta automática e transparente: sincronização Store-and-Forward sem requerer envio manual dos alunos.
+- Foco total no robô: os alunos utilizam o app oficial LEGO SPIKE em tela cheia.
+- O professor/instrutor está presente fisicamente na sala para mediar e apoiar em pessoa.
+- Zero atrito e zero interrupções por pop-ups ou botões de ajuda virtuais.
+- Questionário pré e pós rápido (4 perguntas cada, respondidas na própria bancada).
+- Banco de dados local permanente em "dados_locais" (100% offline-first).
+- Exportação com 1 clique para pendrive USB ("Exportar-Dados-Pendrive.bat").
+- Consolidador SQLite e importador idempotente para o Supabase ("Importar-Para-Supabase.bat").
 - Leitura automática de blocos do LEGO SPIKE (.llsp3) para telemetria de código.
-- Alertas sonoros e visuais aos 20 min e 40 min de oficina com foco inteligente de janela.
-- Armazenamento duplo resiliente a congelamento (IndexedDB + disco local).
-- Privacidade total (LGPD) — sem captura de webcam, prints ou identificadores pessoais.
+- Alertas sonoros suaves aos 20 min e 40 min de oficina com foco inteligente de janela.
+- Privacidade total (LGPD) — sem captura de webcam, prints ou dados pessoais.
 """
 
 def sha256(path: Path) -> str:
@@ -81,6 +93,8 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         (stage / "bridge").mkdir(parents=True, exist_ok=True)
         (stage / "config").mkdir(parents=True, exist_ok=True)
         (stage / "tools").mkdir(parents=True, exist_ok=True)
+        (stage / "scripts").mkdir(parents=True, exist_ok=True)
+        (stage / "dados_locais" / "sessoes").mkdir(parents=True, exist_ok=True)
 
         # 2. Copiar PWA
         shutil.copytree(alunos_dir, stage / "alunos", dirs_exist_ok=True)
@@ -92,20 +106,32 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         if (repo_root / "bridge" / "pulselab-toast.ps1").is_file():
             shutil.copy2(repo_root / "bridge" / "pulselab-toast.ps1", stage / "bridge" / "pulselab-toast.ps1")
 
-        # 4. Copiar Tools
+        # 4. Copiar Scripts de Exportação e Importação Offline
+        if (repo_root / "scripts" / "exportar-pendrive.ps1").is_file():
+            shutil.copy2(repo_root / "scripts" / "exportar-pendrive.ps1", stage / "scripts" / "exportar-pendrive.ps1")
+        if (repo_root / "scripts" / "importar-para-supabase.py").is_file():
+            shutil.copy2(repo_root / "scripts" / "importar-para-supabase.py", stage / "scripts" / "importar-para-supabase.py")
+        if (repo_root / "scripts" / "importar-para-supabase.ps1").is_file():
+            shutil.copy2(repo_root / "scripts" / "importar-para-supabase.ps1", stage / "scripts" / "importar-para-supabase.ps1")
+
+        # 5. Copiar Tools
         if (repo_root / "tools" / "spike-probe.ps1").is_file():
             shutil.copy2(repo_root / "tools" / "spike-probe.ps1", stage / "tools" / "spike-probe.ps1")
 
-        # 5. Copiar Config
+        # 6. Copiar Config
         if (repo_root / "config" / "defaults.json").is_file():
             shutil.copy2(repo_root / "config" / "defaults.json", stage / "config" / "defaults.json")
         if (repo_root / "config" / "config.json").is_file():
             shutil.copy2(repo_root / "config" / "config.json", stage / "config" / "config.json")
 
-        # 6. Copiar Batch files e Launchers
+        # 7. Copiar Batch files e Launchers
         shutil.copy2(repo_root / "Instalar-PulseLab.bat", stage / "Instalar-PulseLab.bat")
         shutil.copy2(repo_root / "Iniciar-PulseLab.bat", stage / "Iniciar-PulseLab.bat")
         shutil.copy2(repo_root / "Desinstalar-PulseLab.bat", stage / "Desinstalar-PulseLab.bat")
+        if (repo_root / "Exportar-Dados-Pendrive.bat").is_file():
+            shutil.copy2(repo_root / "Exportar-Dados-Pendrive.bat", stage / "Exportar-Dados-Pendrive.bat")
+        if (repo_root / "Importar-Para-Supabase.bat").is_file():
+            shutil.copy2(repo_root / "Importar-Para-Supabase.bat", stage / "Importar-Para-Supabase.bat")
         shutil.copy2(repo_root / "pulselab.ps1", stage / "pulselab.ps1")
         shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
         if (repo_root / "pulselab.ico").is_file():

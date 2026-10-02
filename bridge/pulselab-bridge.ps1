@@ -39,12 +39,39 @@ if (-not $AppRoot) {
 }
 
 if (-not $DataDir) {
-    $localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:USERPROFILE }
-    $DataDir = Join-Path $localAppData "PulseLab\data"
+    # Prioriza pasta portátil dados_locais junto ao aplicativo (offline-first)
+    $candidateDirs = @(
+        (Join-Path $PSScriptRoot "..\dados_locais"),
+        (Join-Path $PSScriptRoot "dados_locais")
+    )
+    $foundDataDir = $null
+    foreach ($cand in $candidateDirs) {
+        if (Test-Path $cand) {
+            $foundDataDir = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ($foundDataDir) {
+        $DataDir = $foundDataDir
+    } else {
+        try {
+            $portableDir = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\dados_locais"))
+            New-Item -ItemType Directory -Path $portableDir -Force | Out-Null
+            $DataDir = $portableDir
+        } catch {
+            $localAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { $env:USERPROFILE }
+            $DataDir = Join-Path $localAppData "PulseLab\dados_locais"
+        }
+    }
 }
 
 if (-not (Test-Path $DataDir)) {
     New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
+}
+
+$sessoesDir = Join-Path $DataDir "sessoes"
+if (-not (Test-Path $sessoesDir)) {
+    New-Item -ItemType Directory -Path $sessoesDir -Force | Out-Null
 }
 
 $scheduleFile = Join-Path $DataDir "active_schedule.json"
@@ -605,6 +632,141 @@ try {
 
                 $respObj = @{ status = "scheduled"; session_id = $script:ActiveSession.session_id }
                 $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
+                $response.ContentType = "application/json; charset=utf-8"
+                $response.ContentLength64 = $buf.Length
+                $response.OutputStream.Write($buf, 0, $buf.Length)
+                $response.Close()
+                continue
+            }
+
+            if ($path -eq "/v1/sessions/save" -and $request.HttpMethod -eq "POST") {
+                $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
+                $rawBody = $reader.ReadToEnd()
+                $reader.Close()
+
+                $saveObj = $null
+                try {
+                    $saveObj = $rawBody | ConvertFrom-Json
+                } catch {
+                    Write-BridgeLog "Payload de sessao invalido recebido em /v1/sessions/save" "WARN"
+                }
+
+                $sessId = if ($saveObj -and $saveObj.session_id) { [string]$saveObj.session_id } else { "sessao_" + [DateTime]::UtcNow.ToString("yyyyMMdd_HHmmss") }
+                $safeSessId = ($sessId -replace '[^a-zA-Z0-9_-]', '_')
+
+                $sessoesDir = Join-Path $DataDir "sessoes"
+                if (-not (Test-Path $sessoesDir)) {
+                    New-Item -ItemType Directory -Path $sessoesDir -Force | Out-Null
+                }
+
+                $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
+                [System.IO.File]::WriteAllText($sessFile, $rawBody, [System.Text.Encoding]::UTF8)
+
+                # Atualiza catalogo local de sessoes (catalogo_sessoes.json)
+                $catFile = Join-Path $DataDir "catalogo_sessoes.json"
+                $catalogList = [System.Collections.Generic.List[object]]::new()
+                if (Test-Path $catFile) {
+                    try {
+                        $existingJson = Get-Content -Path $catFile -Raw -Encoding UTF8
+                        $existing = $existingJson | ConvertFrom-Json
+                        if ($existing -is [System.Collections.IEnumerable]) {
+                            foreach ($item in $existing) {
+                                if ($item.session_id -ne $sessId) {
+                                    $catalogList.Add($item)
+                                }
+                            }
+                        } else {
+                            if ($existing -and $existing.session_id -ne $sessId) {
+                                $catalogList.Add($existing)
+                            }
+                        }
+                    } catch {}
+                }
+
+                $evCount = 0
+                if ($saveObj -and $saveObj.events) {
+                    if ($saveObj.events -is [System.Collections.IEnumerable]) {
+                        $evCount = $saveObj.events.Count
+                    } else {
+                        $evCount = 1
+                    }
+                }
+
+                $summaryRecord = [PSCustomObject]@{
+                    session_id = $sessId
+                    group_id = if ($saveObj) { [string]$saveObj.group_id } else { "" }
+                    school_code = if ($saveObj) { [string]$saveObj.school_code } else { "" }
+                    class_code = if ($saveObj) { [string]$saveObj.class_code } else { "" }
+                    workshop_code = if ($saveObj) { [string]$saveObj.workshop_code } else { "" }
+                    started_at = if ($saveObj) { [string]$saveObj.started_at } else { "" }
+                    completed_at = if ($saveObj) { [string]$saveObj.completed_at } else { "" }
+                    duration_seconds = if ($saveObj -and $saveObj.duration_seconds) { [int]$saveObj.duration_seconds } else { 0 }
+                    team_role = if ($saveObj) { [string]$saveObj.team_role } else { "" }
+                    status = if ($saveObj) { [string]$saveObj.status } else { "completed" }
+                    events_count = $evCount
+                    saved_locally_at = [DateTime]::UtcNow.ToString("o")
+                    file_path = "sessoes/sessao_$safeSessId.json"
+                }
+                $catalogList.Add($summaryRecord)
+
+                $catJson = $catalogList | ConvertTo-Json -Depth 5
+                [System.IO.File]::WriteAllText($catFile, $catJson, [System.Text.Encoding]::UTF8)
+
+                # Persiste tambem todos os eventos da sessao no events.jsonl
+                if ($saveObj -and $saveObj.events) {
+                    $eventsFile = Join-Path $DataDir "events.jsonl"
+                    $linesToAppend = [System.Collections.Generic.List[string]]::new()
+                    if ($saveObj.events -is [System.Collections.IEnumerable]) {
+                        foreach ($ev in $saveObj.events) {
+                            $linesToAppend.Add(($ev | ConvertTo-Json -Compress -Depth 10))
+                        }
+                    } else {
+                        $linesToAppend.Add(($saveObj.events | ConvertTo-Json -Compress -Depth 10))
+                    }
+                    if ($linesToAppend.Count -gt 0) {
+                        [System.IO.File]::AppendAllLines($eventsFile, $linesToAppend, [System.Text.Encoding]::UTF8)
+                        Sync-EventsToSupabase
+                    }
+                }
+
+                Write-BridgeLog "Sessao $safeSessId salva com sucesso na base local ($sessFile)." "INFO"
+
+                $respObj = @{
+                    status = "saved"
+                    session_id = $sessId
+                    file = "sessao_$safeSessId.json"
+                    data_dir = $DataDir
+                    total_sessions = $catalogList.Count
+                }
+                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
+                $response.ContentType = "application/json; charset=utf-8"
+                $response.ContentLength64 = $buf.Length
+                $response.OutputStream.Write($buf, 0, $buf.Length)
+                $response.Close()
+                continue
+            }
+
+            if (($path -eq "/v1/database/summary" -or $path -eq "/v1/database/export") -and $request.HttpMethod -eq "GET") {
+                $sessoesDir = Join-Path $DataDir "sessoes"
+                $totalSessions = 0
+                if (Test-Path $sessoesDir) {
+                    $totalSessions = (Get-ChildItem -Path $sessoesDir -Filter "*.json" -ErrorAction SilentlyContinue | Measure-Object).Count
+                }
+                $eventsFile = Join-Path $DataDir "events.jsonl"
+                $totalEvents = 0
+                if (Test-Path $eventsFile) {
+                    $totalEvents = (Get-Content -Path $eventsFile -ErrorAction SilentlyContinue | Measure-Object).Count
+                }
+                $dbSummary = @{
+                    status = "ok"
+                    data_dir = $DataDir
+                    total_sessions = $totalSessions
+                    total_events = $totalEvents
+                    synced_events = $script:SyncedEventIds.Count
+                    pending_sync = [Math]::Max(0, ($totalEvents - $script:SyncedEventIds.Count))
+                    version = $script:BridgeVersion
+                }
+                $buf = [System.Text.Encoding]::UTF8.GetBytes(($dbSummary | ConvertTo-Json))
                 $response.ContentType = "application/json; charset=utf-8"
                 $response.ContentLength64 = $buf.Length
                 $response.OutputStream.Write($buf, 0, $buf.Length)

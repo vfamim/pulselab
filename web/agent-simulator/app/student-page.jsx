@@ -141,6 +141,18 @@ async function notifyBridgeEvent(event) {
   }
 }
 
+async function notifyBridgeSessionSave(sessionPayload) {
+  try {
+    await fetch(`${BRIDGE_URL}/v1/sessions/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sessionPayload)
+    });
+  } catch {
+    // Operação normal mesmo sem o Bridge
+  }
+}
+
 function playChimeSound() {
   try {
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -538,8 +550,6 @@ function ActivityScreen({
   elapsedMs,
   labMode,
   spikeTelemetry,
-  helpActive,
-  onToggleHelp,
   onAdvanceToFinalChallenge,
   assentAgreed,
   onRefreshTelemetry
@@ -623,38 +633,21 @@ function ActivityScreen({
         </button>
       </div>
 
-      <button
-        type="button"
-        className={`help-toggle-btn ${helpActive ? "is-active" : ""}`}
-        onClick={onToggleHelp}
-        aria-pressed={helpActive}
-        style={{ margin: "16px 0" }}
-      >
-        <span className="help-toggle-btn__icon">{helpActive ? "🚨" : "🙋‍♂️"}</span>
-        <div className="help-toggle-btn__content">
-          <strong>{helpActive ? "Ajuda solicitada ao professor!" : "Precisa de ajuda do professor na bancada?"}</strong>
-          <small>{helpActive ? "Chamado registrado no sistema. Por favor, levantem a mão na sala para o professor localizar a bancada." : "Clique aqui para registrar o chamado e levantem a mão na sala para chamar o professor."}</small>
-        </div>
-        <span className="help-toggle-btn__badge">
-          {helpActive ? "✓ PROFESSOR ATENDENDO" : "CHAMAR PROFESSOR"}
-        </span>
-      </button>
-
       <div className="activity-instructions">
         <article>
           <span>1</span>
-          <strong>Mantenha esta página aberta</strong>
-          <p>Ela pode ficar em uma aba ao lado enquanto vocês usam o app do SPIKE.</p>
+          <strong>Foco no Robô LEGO</strong>
+          <p>Usem o app oficial LEGO SPIKE em tela cheia para programar e testar o carrinho na pista.</p>
         </article>
         <article>
           <span>2</span>
-          <strong>Construam e testem à vontade</strong>
-          <p>O PulseLab acompanha a estrutura do código do SPIKE de forma anônima e segura sem interromper vocês.</p>
+          <strong>Telemetria Silenciosa</strong>
+          <p>O PulseLab acompanha o tempo e o progresso em segundo plano, sem travar nem interromper a oficina.</p>
         </article>
         <article>
           <span>3</span>
-          <strong>Preparação para a corrida</strong>
-          <p>Ao terminar a montagem e os testes, cliquem em avançar para registrar a corrida e a experiência da oficina.</p>
+          <strong>Desafio Final</strong>
+          <p>Ao terminar os testes na pista, voltem a esta tela para registrar o resultado da corrida e a avaliação.</p>
         </article>
       </div>
     </Card>
@@ -1009,13 +1002,11 @@ export default function StudentPage() {
   const [teamRole, setTeamRole] = useState(() => savedSession?.teamRole || "dyad");
   const [currentRole, setCurrentRole] = useState(() => savedSession?.currentRole || "computer");
   const [assentAgreed, setAssentAgreed] = useState(() => savedSession?.assentAgreed ?? true);
-  const [helpActive, setHelpActive] = useState(() => savedSession?.helpActive || false);
   const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || false);
   const [showContextModal, setShowContextModal] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState("");
   const [showInstructorTools, setShowInstructorTools] = useState(labMode);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const sequenceRef = useRef(savedSession?.sequence || 0);
   const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || false);
 
@@ -1206,7 +1197,6 @@ export default function StudentPage() {
     setTeamRole(resumable.teamRole || "dyad");
     setCurrentRole(resumable.currentRole || "computer");
     setAssentAgreed(resumable.assentAgreed ?? true);
-    setHelpActive(resumable.helpActive || false);
     setIsSyntheticSession(resumable.isSyntheticSession || false);
     sequenceRef.current = resumable.sequence || 0;
     setScreen(resumable.screen);
@@ -1364,24 +1354,6 @@ export default function StudentPage() {
     flash("Avançado para o Desafio Final (Corrida & Encerramento).");
   }
 
-  function handleToggleHelp() {
-    const nextState = !helpActive;
-    setHelpActive(nextState);
-    if (nextState) {
-      emitTimeline("help_requested", {
-        activity_stage: activityStage === 2 ? "2. Montagem" : "3. Experimentação",
-        details: { runtime: "browser_pwa", requested_by: "student_button" }
-      });
-      flash("🚨 Ajuda solicitada! Levantem a mão na sala para o professor localizar a bancada.");
-    } else {
-      emitTimeline("help_resolved", {
-        activity_stage: activityStage === 2 ? "2. Montagem" : "3. Experimentação",
-        details: { runtime: "browser_pwa", resolved_by: "student_button" }
-      });
-      flash("✓ Ajuda marcada como atendida pelo professor.");
-    }
-  }
-
   function submitPost(answersOverride = null) {
     const answers = answersOverride || postAnswers;
     emitResponse("post", {
@@ -1440,6 +1412,29 @@ export default function StudentPage() {
     });
 
     void captureSpikeTelemetry("session_completed");
+
+    const fullSession = {
+      session_id: sessionId,
+      group_id: groupId,
+      installation_id: installationId,
+      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+      regional_hub: context.regional || "Nordeste",
+      school_code: context.school || "geral",
+      workshop_code: context.workshop || "oficina-spike",
+      class_code: context.class || "turma-geral",
+      activity_id: context.activity || "atividade-01-spike",
+      started_at: new Date(startedAt).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_seconds: Math.round(elapsedMs / 1000),
+      team_role: teamRole,
+      status: "completed",
+      pre_answers: preAnswers,
+      post_answers: answers,
+      events: [...timeline, ...responses],
+      spike_telemetry: spikeTelemetry
+    };
+    void notifyBridgeSessionSave(fullSession);
+
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     void runSync(true);
     setScreen("finished");
@@ -1455,6 +1450,26 @@ export default function StudentPage() {
       activity_stage: "completed",
       details: { runtime: "browser_pwa", response_status: "declined" }
     });
+
+    const fullSession = {
+      session_id: sessionId,
+      group_id: groupId,
+      installation_id: installationId,
+      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+      regional_hub: context.regional || "Nordeste",
+      school_code: context.school || "geral",
+      workshop_code: context.workshop || "oficina-spike",
+      class_code: context.class || "turma-geral",
+      activity_id: context.activity || "atividade-01-spike",
+      started_at: new Date(startedAt).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_seconds: Math.round(elapsedMs / 1000),
+      team_role: teamRole,
+      status: "declined",
+      events: [...timeline, ...responses]
+    };
+    void notifyBridgeSessionSave(fullSession);
+
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     void runSync(true);
     setScreen("finished");
@@ -1551,13 +1566,37 @@ export default function StudentPage() {
   }
 
   function downloadSession() {
-    const payload = JSON.stringify({ session_id: sessionId, context, events: allEvents, spike_telemetry: spikeTelemetry }, null, 2);
+    const payload = JSON.stringify(
+      {
+        session_id: sessionId,
+        group_id: groupId,
+        installation_id: installationId,
+        site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+        regional_hub: context.regional || "Nordeste",
+        school_code: context.school || "geral",
+        workshop_code: context.workshop || "oficina-spike",
+        class_code: context.class || "turma-geral",
+        activity_id: context.activity || "atividade-01-spike",
+        started_at: new Date(startedAt).toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_seconds: Math.round(elapsedMs / 1000),
+        team_role: teamRole,
+        status: screen === "finished" ? "completed" : "in_progress",
+        pre_answers: preAnswers,
+        post_answers: postAnswers,
+        spike_telemetry: spikeTelemetry,
+        events: allEvents
+      },
+      null,
+      2
+    );
     const blob = new Blob([payload], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `pulselab-${sessionId.slice(0, 8)}.json`;
+    link.download = `sessao-${sessionId.slice(0, 8)}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
+    flash("💾 Sessão exportada com sucesso em arquivo .json!");
   }
 
   async function runSync(showFeedback = false) {
@@ -1683,8 +1722,6 @@ export default function StudentPage() {
         elapsedMs={elapsedMs}
         labMode={labMode}
         spikeTelemetry={spikeTelemetry}
-        helpActive={helpActive}
-        onToggleHelp={handleToggleHelp}
         onAdvanceToFinalChallenge={handleAdvanceToFinalChallenge}
         assentAgreed={assentAgreed}
         onRefreshTelemetry={() => captureSpikeTelemetry("manual_refresh")}
@@ -1728,14 +1765,9 @@ export default function StudentPage() {
           >
             📍 Região: {context.regional || "Nordeste"}
           </button>
-          <button
-            className={`topbar-btn ${sidebarOpen ? "is-active" : ""}`}
-            onClick={() => setSidebarOpen((v) => !v)}
-            title="Ver etapas da oficina (barra lateral retrátil)"
-            type="button"
-          >
-            🧭 Etapas ({activeStep}/4)
-          </button>
+          <div className="topbar__step-badge" title="Etapa atual da oficina">
+            🧭 Etapa {activeStep}/4 · {FLOW_STEPS.find((s) => s.id === activeStep)?.label}
+          </div>
           <div className="topbar__session">
             <span>Sessão</span>
             <code>{sessionId.slice(0, 8).toUpperCase()}</code>
@@ -1784,6 +1816,9 @@ export default function StudentPage() {
             <button className="inst-btn" onClick={autoFillCurrentStep} type="button">
               ✨ Preencher teste
             </button>
+            <button className="inst-btn" onClick={downloadSession} type="button" title="Baixar arquivo JSON desta oficina">
+              💾 Exportar (.json)
+            </button>
             <button className="inst-btn inst-btn--accent" onClick={syncNow} type="button">
               ☁️ Sincronizar Nuvem
             </button>
@@ -1794,7 +1829,6 @@ export default function StudentPage() {
         </div>
       ) : null}
 
-
       <RegionMetadataModal
         isOpen={showContextModal}
         onClose={() => setShowContextModal(false)}
@@ -1804,45 +1838,6 @@ export default function StudentPage() {
         computerId={getComputerId(installationId)}
         systemMetadata={getSystemMetadata()}
       />
-
-      {sidebarOpen ? (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      ) : null}
-
-      <aside className={`flow-sidebar ${sidebarOpen ? "is-open" : ""}`}>
-        <div className="flow-sidebar__header">
-          <div>
-            <span>Progresso da oficina</span>
-            <strong>{activeStep}/4</strong>
-          </div>
-          <button
-            className="sidebar-close-btn"
-            onClick={() => setSidebarOpen(false)}
-            title="Fechar etapas"
-            type="button"
-            aria-label="Fechar etapas"
-          >
-            ✕
-          </button>
-        </div>
-        <nav aria-label="Etapas da atividade">
-          {FLOW_STEPS.map((step) => (
-            <div className={`flow-step ${step.id === activeStep ? "is-active" : ""} ${step.id < activeStep ? "is-complete" : ""}`} key={step.id}>
-              <span>{step.id < activeStep ? "✓" : step.id}</span>
-              <strong>{step.label}</strong>
-            </div>
-          ))}
-        </nav>
-        <div className="sidebar-context">
-          <span>Oficina LEGO SPIKE</span>
-          <strong>Desafio Ativo</strong>
-          <small>Coleta anônima por grupo</small>
-        </div>
-      </aside>
 
       <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
         <section className="simulator-stage">
