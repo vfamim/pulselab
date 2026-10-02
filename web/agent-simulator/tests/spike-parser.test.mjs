@@ -1,81 +1,73 @@
-import assert from "node:assert/strict";
 import test from "node:test";
-import { inferStage, parseProjectJson } from "../lib/spike-parser.js";
-
-test("identifica projeto vazio", () => {
-  const empty = parseProjectJson(null);
-  assert.equal(empty.executable_blocks, 0);
-  assert.equal(empty.inferred_stage, "empty");
-  assert.equal(empty.project_saved, false);
+import assert from "node:assert/strict";
+import { zipSync, strToU8 } from "fflate";
+import {
+  parseProjectJson,
+  readProjectFile,
+  artifactSnapshot,
+} from "../lib/spike-parser.js";
+const disconnected = {
+  targets: [
+    {
+      name: "private student name",
+      blocks: {
+        a: {
+          opcode: "spike_motor_run",
+          shadow: false,
+          topLevel: true,
+          next: null,
+        },
+        b: {
+          opcode: "spike_sensor_distance",
+          shadow: false,
+          topLevel: true,
+          next: null,
+        },
+        c: {
+          opcode: "control_forever",
+          shadow: false,
+          topLevel: true,
+          next: null,
+        },
+      },
+    },
+  ],
+};
+test("disconnected blocks do not imply a mission, execution or calibrated confidence", () => {
+  const m = parseProjectJson(disconnected);
+  assert.equal(m.non_shadow_blocks, 3);
+  assert.equal(m.features.motor, true);
+  assert.equal(m.features.sensor, true);
+  assert.equal(m.inferred_stage, undefined);
+  assert.equal(m.inference_confidence, undefined);
+  assert.equal(m.interpretation, "structure_only_not_execution_or_learning");
+  assert.ok(!JSON.stringify(m).includes("private student name"));
 });
-
-test("analisa blocos Scratch e ignora blocos sombra (shadow)", () => {
-  const mockProject = {
-    targets: [
-      {
-        blocks: {
-          b1: { opcode: "event_whenflagclicked", topLevel: true, shadow: false },
-          b2: { opcode: "spike_motor_run_for_degrees", topLevel: false, shadow: false },
-          s1: { opcode: "math_number", topLevel: false, shadow: true }
-        }
-      }
-    ]
-  };
-
-  const metrics = parseProjectJson(mockProject);
-  assert.equal(metrics.total_blocks, 3);
-  assert.equal(metrics.executable_blocks, 2);
-  assert.equal(metrics.top_level_stacks, 1);
-  assert.equal(metrics.uses_motor, true);
-  assert.equal(metrics.uses_sensor, false);
-  assert.equal(metrics.inferred_stage, "basic_movement");
+test("equal counts mean zero NET variation, not zero editing activity", () => {
+  const m = parseProjectJson(disconnected);
+  assert.equal(artifactSnapshot(m, m).net_block_count_change, 0);
+  assert.equal(artifactSnapshot(m, m).blocks_added_since_previous, undefined);
 });
-
-test("detecta sensores e estruturas de repetição para inferir missão integrada", () => {
-  const integratedProject = {
-    targets: [
-      {
-        blocks: {
-          b1: { opcode: "event_whenflagclicked", topLevel: true, shadow: false },
-          b2: { opcode: "control_forever", topLevel: false, shadow: false },
-          b3: { opcode: "control_if", topLevel: false, shadow: false },
-          b4: { opcode: "sensing_touchingobject", topLevel: false, shadow: false },
-          b5: { opcode: "motion_movesteps", topLevel: false, shadow: false }
-        }
-      }
-    ]
-  };
-
-  const metrics = parseProjectJson(integratedProject);
-  assert.equal(metrics.uses_motor, true);
-  assert.equal(metrics.uses_sensor, true);
-  assert.equal(metrics.uses_loop, true);
-  assert.equal(metrics.uses_condition, true);
-  assert.equal(metrics.inferred_stage, "integrated_mission");
-  assert.ok(metrics.inference_confidence >= 0.9);
+test("unsupported/missing projects are missing data, not initial setup", () => {
+  assert.throws(() => parseProjectJson(null));
+  assert.throws(() => parseProjectJson({ code: "print(1)" }));
 });
-
-test("calcula delta de blocos entre marcos de checkpoint", () => {
-  const previous = { executable_blocks: 5 };
-  const currentProject = {
-    targets: [
-      {
-        blocks: {
-          b1: { opcode: "event_whenflagclicked", topLevel: true, shadow: false },
-          b2: { opcode: "motion_movesteps", topLevel: false, shadow: false },
-          b3: { opcode: "motion_turnright", topLevel: false, shadow: false },
-          b4: { opcode: "motion_turnleft", topLevel: false, shadow: false },
-          b5: { opcode: "control_repeat", topLevel: false, shadow: false },
-          b6: { opcode: "spike_sensor_distance", topLevel: false, shadow: false },
-          b7: { opcode: "control_if", topLevel: false, shadow: false },
-          b8: { opcode: "wedo_motor_stop", topLevel: false, shadow: false }
-        }
-      }
-    ]
-  };
-
-  const metrics = parseProjectJson(currentProject, previous);
-  assert.equal(metrics.executable_blocks, 8);
-  assert.equal(metrics.blocks_added_since_previous, 3);
-  assert.equal(metrics.blocks_removed_since_previous, 0);
+test("reads an explicitly chosen nested SPIKE archive without exporting raw content", async () => {
+  const nested = zipSync({
+    "project.json": strToU8(JSON.stringify(disconnected)),
+  });
+  const archive = zipSync({
+    "scratch.sb3": nested,
+    "private.txt": strToU8("sensitive"),
+  });
+  const result = await readProjectFile(new File([archive], "child-name.llsp3"));
+  assert.equal(result.non_shadow_blocks, 3);
+  assert.ok(!JSON.stringify(result).includes("child-name"));
+});
+test("rejects zip decompression over the size limit", async () => {
+  const archive = zipSync({ "project.json": new Uint8Array(3 * 1024 * 1024) });
+  await assert.rejects(
+    readProjectFile(new File([archive], "oversized.llsp3")),
+    /excede/,
+  );
 });

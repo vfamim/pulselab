@@ -1,12 +1,13 @@
 {
-  "name": "PulseLab — Atividade dos alunos",
-  "short_name": "PulseLab",
-  "description": "Jornada de coleta consentida dos alunos durante a atividade de robótica.",
+  "name": "PulseLab — TESTE v2",
+  "short_name": "PulseLab Teste",
+  "id": "/alunos/test-v2",
+  "description": "Teste local com dados fictícios. Sem sincronização.",
   "start_url": "/alunos/",
   "scope": "/alunos/",
   "display": "standalone",
-  "background_color": "#f2f0f7",
-  "theme_color": "#171027",
+  "background_color": "#f2f6f3",
+  "theme_color": "#0b6d65",
   "lang": "pt-BR",
   "icons": [
     {

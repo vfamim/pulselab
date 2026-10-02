@@ -1,0 +1,46 @@
+# Proposed workflow: copy to .github/workflows only with workflow-scoped credentials.
+name: Teste isolado do protocolo v2
+on:
+  pull_request:
+  push:
+    branches: [test/research-protocol-v2]
+permissions:
+  contents: read
+jobs:
+  windows-server:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify portable server on Windows PowerShell 5.1
+        shell: powershell
+        run: ./scripts/test-portable-server.ps1
+  verify-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/agent-simulator/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pinned dependencies
+        working-directory: web/agent-simulator
+        run: npm ci
+      - name: Install test browser
+        working-directory: web/agent-simulator
+        run: npx playwright install --with-deps chrome
+      - name: Unit and browser checks
+        working-directory: web/agent-simulator
+        run: npm run check
+      - name: Verify RLS in disposable database
+        run: python3 scripts/check-database.py
+      - name: Build portable test package
+        run: python3 installer/build-installer.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PulseLab-TESTE-v2-Windows
+          path: dist-test/*
+          retention-days: 14

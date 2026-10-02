@@ -1,5 +1,10 @@
 # Estrutura de Tese Científica (TCC) - Pulselab MMLA
 
+> Documento histórico, superado para a branch v2 pelo [protocolo de teste](protocolo-pesquisa-v2-teste.md)
+> e [plano de validação](plano-validacao-v2.md). As alegações abaixo de novidade,
+> eliminação de interferência, honestidade, validação por screenshots e zero perda
+> não são conclusões sustentadas nem orientações vigentes para o TCC.
+
 Este guia descreve como estruturar o seu **Trabalho de Conclusão de Curso (TCC)** ou artigo de pesquisa científica com base nos resultados do Pulselab, preparando sua defesa para ser avaliada com nota máxima por uma banca acadêmica.
 
 A grande inovação científica a ser defendida aqui é o **Protocolo de Coleta Multicêntrica Assegurada Sem Observador Presencial**, que mitiga vieses comportamentais e viabiliza a pesquisa em larga escala com custo logístico quase zero.
