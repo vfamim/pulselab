@@ -82,6 +82,7 @@ function Check-PulseLabUpdate {
 
         $zipCandidates = @(
             "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-$remoteVer-Windows.zip",
+            "https://raw.githubusercontent.com/vfamim/pulselab/test/research-protocol-v2/instalador/downloads/PulseLab-$remoteVer-Windows.zip",
             "https://github.com/vfamim/pulselab/releases/download/v$remoteVer/PulseLab-$remoteVer-Windows.zip",
             "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip",
             "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip"
