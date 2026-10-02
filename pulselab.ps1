@@ -38,7 +38,7 @@ function Compare-SemVer {
 # --- ROTINA DE ATUALIZACAO AUTOMATICA VIA GITHUB ---
 function Check-PulseLabUpdate {
     param(
-        [string]$CurrentVersion = "2.0.1",
+        [string]$CurrentVersion = "2.1.0",
         [string]$InstallDir = $scriptRoot
     )
 
@@ -146,7 +146,7 @@ function Check-PulseLabUpdate {
 }
 
 # --- VERIFICA VERSAO LOCAL E EXECUTA CHECAGEM DE UPDATE ---
-$localVersion = "2.0.1"
+$localVersion = "2.1.0"
 $verFile = Join-Path $scriptRoot "VERSION"
 if (Test-Path -LiteralPath $verFile) {
     try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
@@ -168,14 +168,14 @@ Write-Host "====================================================================
 
 # --- INICIALIZACAO DO SERVIDOR LOCAL (BRIDGE) ---
 $running = $null
-try { $running = Invoke-RestMethod -Uri "http://127.0.0.1:43128/health" -TimeoutSec 1 } catch {}
+try { $running = Invoke-RestMethod -Uri "http://127.0.0.1:43127/health" -TimeoutSec 1 } catch {}
 
 if (-not $running) {
     Start-Process powershell.exe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + $bridge + '"'), "-AppRoot", ('"' + $app + '"'))
     $ready = $false
     for ($i = 0; $i -lt 20; $i++) {
         try {
-            $health = Invoke-RestMethod -Uri "http://127.0.0.1:43128/health" -TimeoutSec 1
+            $health = Invoke-RestMethod -Uri "http://127.0.0.1:43127/health" -TimeoutSec 1
             if ($health) { $ready = $true; break }
         } catch {}
         Start-Sleep -Milliseconds 250
@@ -183,5 +183,5 @@ if (-not $running) {
     if (-not $ready) { throw "Servidor local nao iniciou. Confira a janela do PowerShell." }
 }
 
-Write-Host "[OK] Servidor ativo em http://127.0.0.1:43128/alunos/"
-Start-Process "http://127.0.0.1:43128/alunos/"
+Write-Host "[OK] Servidor ativo em http://127.0.0.1:43127/alunos/"
+Start-Process "http://127.0.0.1:43127/alunos/"

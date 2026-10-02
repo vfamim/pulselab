@@ -1,6 +1,7 @@
 {
-  "version": "2.0.1",
+  "version": "2.1.0",
   "environment": "production",
   "auto_update_enabled": true,
-  "notes": "PulseLab v2.0.1 - Sincronizacao em nuvem com Supabase e auto-update ativado via GitHub."
+  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.1.0-Windows.zip",
+  "notes": "PulseLab v2.1.0 - Versao original completa com visual gamificado, questionarios pedagogicos integrais, sincronizacao na nuvem com Supabase e auto-update via GitHub."
 }
