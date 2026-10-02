@@ -1,12 +1,21 @@
 // Manifesto formal do instrumento versionado (auditoria e integridade científica)
-export const PROTOCOL_VERSION = "protocolo-pesquisa-v2";
-export const INSTRUMENT_VERSION = "bancada-2.0.0-impasse";
+export const PROTOCOL_VERSION = "protocolo-oficinas-rotativas-v1";
+export const INSTRUMENT_VERSION = "oficinas-rotativas-1.0.0";
 
 export const INSTRUMENT_MANIFEST = {
   version: INSTRUMENT_VERSION,
   protocol_version: PROTOCOL_VERSION,
-  target_construct: "impasse_percebido",
-  recall_window_minutes: 2,
+  target_constructs: [
+    "experiencia_participacao",
+    "resultados_praticos_bancada",
+    "apoio_instrutor"
+  ],
+  stages: [
+    "1. Introdução",
+    "2. Montagem",
+    "3. Experimentação",
+    "4. Desafio Final (Corrida e Encerramento)"
+  ],
   items: {
     pre: {
       prior_robotics: {
@@ -19,32 +28,60 @@ export const INSTRUMENT_MANIFEST = {
         ]
       }
     },
-    checkpoint: {
-      impasse_state: {
-        legend: "Nos dois minutos antes deste aviso, a bancada ficou sem saber o que tentar para avançar?",
+    post: {
+      experience: {
+        legend: "Como foi participar da oficina de robótica de hoje?",
         options: [
-          ["no", "🟢 Não", "Estávamos conseguindo tentar ideias e testar caminhos"],
-          ["yes", "🛑 Sim", "Travamos sem saber o que tentar para avançar"],
-          ["off_task", "💬 Fora da tarefa", "Pausa, conversa paralela ou aguardando peça/professor"],
-          ["no_consensus", "🤝 Sem acordo", "O grupo não chegou a uma resposta conjunta"]
+          [1, "😞 Muito ruim", "Não gostei da experiência"],
+          [2, "🙁 Ruim", "Poderia ter sido melhor"],
+          [3, "😐 Nem boa nem ruim", "Achei normal"],
+          [4, "🙂 Boa", "Gostei da oficina"],
+          [5, "😄 Muito boa", "Adorei a atividade"]
         ],
-        action_skip: "Pular este check-in"
+        action_skip: "Prefiro não responder"
+      },
+      race: {
+        legend: "Desfecho do Desafio da Pista / Corrida",
+        options: [
+          ["success", "🏆 Concluiu com sucesso", "Carrinho completou o percurso no circuito"],
+          ["partial", "⏱️ Não concluiu o percurso", "Travou, saiu da pista ou precisou de ajuste"],
+          ["tech_failure", "⚠️ Falha técnica / Bluetooth", "Problema de bateria, desconexão ou peça solta"]
+        ]
+      },
+      assembly: {
+        legend: "Critérios de montagem do carrinho com peças LEGO",
+        options: [
+          ["complete", "🧩 Montagem concluída pelo roteiro"],
+          ["partial", "🔧 Montagem parcial / adaptada"],
+          ["incomplete", "❌ Não concluiu a montagem"]
+        ]
+      },
+      quiz_entertainment: {
+        legend: "Dinâmica lúdica do Quiz A/B pelos botões do robô",
+        note: "Dinâmica de entretenimento e recreação (não utilizada como avaliação de aprendizagem)",
+        options: [
+          ["participated", "🎮 Participaram da brincadeira do Quiz A/B no robô"],
+          ["skipped", "⏭️ Dinâmica não realizada"]
+        ]
+      },
+      support_level: {
+        legend: "Nível de apoio do instrutor recebido pela bancada",
+        options: [
+          ["independent", "🟢 Autônomo (trabalharam praticamente sozinhos)"],
+          ["occasional", "🟡 Apoio pontual (dúvidas breves tiradas)"],
+          ["constant", "🔴 Apoio constante (mediação intensiva necessária)"]
+        ]
       }
-    },
-    rubric: {
-      execution: "Tentativas bem-sucedidas no teste do sensor (0-3)",
-      explanation: "Explicação conceitual demonstrada (0-3)",
-      assistance: "Intervenções de apoio do professor",
-      next_action: "Próxima ação pedagógica"
     }
   }
 };
 
 // SHA-256 canônico do manifesto do instrumento (auditoria e integridade científica)
-export const CONFIG_HASH = "603e3f01c6e3383d1facfe95e8491ba8569a42a9f2e5e8156319f7766767082e";
+export const CONFIG_HASH = "3c3662c7306d64236b0f7f26da183cc59a36c00061a2077d93fb0272876b2468";
 
 export const TIMELINE_EVENT_TYPES = [
   "session_started",
+  "phase_transition",
   "phase_completed",
   "activity_started",
   "heartbeat",
@@ -54,6 +91,9 @@ export const TIMELINE_EVENT_TYPES = [
   "help_requested",
   "help_resolved",
   "spike_telemetry",
+  "race_recorded",
+  "quiz_recorded",
+  "experience_recorded",
   "role_swapped",
   "ending_requested",
   "rubric_completed",
@@ -84,7 +124,7 @@ export function createUuid() {
 export function getQualityStatus({
   timeline,
   responses,
-  expectedCheckpointCount = 2
+  expectedCheckpointCount = 0
 }) {
   if (timeline.some((event) => event.event_type === "session_aborted")) {
     return "aborted";
@@ -135,6 +175,7 @@ export function roleLabel(role) {
 export function formatEventName(eventType) {
   const labels = {
     session_started: "Sessão iniciada",
+    phase_transition: "Transição de etapa",
     phase_completed: "Fase concluída",
     activity_started: "Atividade iniciada",
     heartbeat: "Sinal de vida",
@@ -144,6 +185,9 @@ export function formatEventName(eventType) {
     help_requested: "Ajuda solicitada",
     help_resolved: "Ajuda atendida",
     spike_telemetry: "Telemetria SPIKE",
+    race_recorded: "Desafio da pista registrado",
+    quiz_recorded: "Quiz lúdico registrado",
+    experience_recorded: "Avaliação de experiência registrada",
     role_swapped: "Papéis trocados",
     ending_requested: "Encerramento solicitado",
     rubric_completed: "Rubrica do instrutor concluída",

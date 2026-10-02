@@ -45,3 +45,19 @@ test("TIMELINE_EVENT_TYPES inclui checkpoint_expired e help_resolved", async () 
   assert.ok(TIMELINE_EVENT_TYPES.includes("help_resolved"));
 });
 
+test("considera completa uma sessão de oficina rotativa sem checkpoints (apenas pré e pós)", () => {
+  const timeline = [
+    { event_type: "session_started", details: { runtime: "browser_pwa" } },
+    { event_type: "phase_transition", details: { to_stage: 2 } },
+    { event_type: "phase_transition", details: { to_stage: 3 } },
+    { event_type: "phase_transition", details: { to_stage: 4 } },
+    { event_type: "session_completed" }
+  ];
+  const responses = [
+    { event_type: "pre", response_status: "completed" },
+    { event_type: "post", response_status: "completed" }
+  ];
+
+  assert.equal(getQualityStatus({ timeline, responses }), "complete");
+});
+

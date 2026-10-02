@@ -396,8 +396,8 @@ function Check-SessionSchedule {
     $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
     $elapsedMinutes = ($nowMs - $startedAt) / 60000.0
 
-    $marks = @(20, 40)
-    if ($script:ActiveSession.marks) {
+    $marks = @()
+    if ($null -ne $script:ActiveSession.marks) {
         $marks = $script:ActiveSession.marks
     }
 
