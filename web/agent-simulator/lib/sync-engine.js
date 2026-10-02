@@ -1,4 +1,7 @@
-import { listSessions, saveSession } from "./student-store.js";
+import {
+  listPendingEvents,
+  markEventDelivered
+} from "./student-store.js";
 
 export const DEFAULT_SUPABASE_URL = "https://cylsqbmtglvdfubbarqe.supabase.co";
 export const DEFAULT_SUPABASE_ANON_KEY =
@@ -6,97 +9,43 @@ export const DEFAULT_SUPABASE_ANON_KEY =
 
 const RESPONSE_EVENT_TYPES = new Set(["pre", "checkpoint", "post"]);
 
-export function resolveTargetTable(event) {
-  if (event._target_table) return event._target_table;
-  if (RESPONSE_EVENT_TYPES.has(event.event_type)) {
-    return "research_events";
-  }
-  return "research_session_events";
-}
-
-export function sanitizeEventForSupabase(event, sessionContext = {}) {
+/**
+ * Remove chaves internas de controle (com prefixo _) para envio ao Supabase.
+ */
+export function sanitizeEventForSupabase(event) {
   const payload = {};
   for (const [key, value] of Object.entries(event)) {
     if (!key.startsWith("_") && value !== undefined) {
       payload[key] = value;
     }
   }
-  if (payload.occurred_at && typeof payload.occurred_at === "number") {
-    payload.occurred_at = new Date(payload.occurred_at).toISOString();
-  }
-  payload.site_id = payload.site_id || sessionContext.site || "default-site";
-  payload.school_code = payload.school_code || sessionContext.school || "default-school";
-  payload.workshop_code = payload.workshop_code || sessionContext.workshop || "default-workshop";
-  payload.class_code = payload.class_code || sessionContext.class || "default-class";
-  payload.activity_id = payload.activity_id || "distance-stop";
-  payload.client_version = payload.client_version || "2.0.1";
-  payload.group_id = payload.group_id || sessionContext.group_id;
   return payload;
 }
 
-export async function sendSessionToSupabase(
-  session,
-  url = DEFAULT_SUPABASE_URL,
-  key = DEFAULT_SUPABASE_ANON_KEY
-) {
-  if (!session || !session.id) return false;
-
-  const payload = {
-    session_id: session.id,
-    group_id: session.group_id,
-    site_id: session.context?.site || "default-site",
-    school_code: session.context?.school || "default-school",
-    workshop_code: session.context?.workshop || "default-workshop",
-    class_code: session.context?.class || "default-class",
-    environment: session.environment || "production",
-    protocol_version: session.protocol_version || "pulselab-bancada-v2",
-    instrument_version: session.instrument_version || "bancada-2.0.1",
-    group_size: session.group_size || 2,
-    phase: session.phase || "activity",
-    session_payload: session,
-    created_at: new Date(session.created_at || Date.now()).toISOString(),
-    updated_at: new Date(session.updated_at || Date.now()).toISOString()
-  };
-
-  const endpoint = `${url}/rest/v1/research_bancada_sessions?on_conflict=session_id`;
-  const response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      apikey: key,
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-      Prefer: "resolution=merge-duplicates,return=minimal"
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok && response.status !== 409) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`HTTP ${response.status}: ${errorText}`);
+/**
+ * Determina a tabela correta no Supabase para o evento.
+ */
+export function resolveTargetTable(event) {
+  if (event._target_table) {
+    return event._target_table;
   }
-
-  // Also sync all atomic events from session if available
-  if (Array.isArray(session.events)) {
-    for (const evt of session.events) {
-      try {
-        await sendEventToSupabase(evt, url, key, session.context || {});
-      } catch (e) {
-        // Individual event failures don't abort session sync
-      }
-    }
+  if (RESPONSE_EVENT_TYPES.has(event.event_type)) {
+    return "research_events";
   }
-
-  return true;
+  return "research_session_events";
 }
 
+/**
+ * Envia um evento individual diretamente para a REST API do Supabase.
+ * É idempotente via cabeçalho Prefer: resolution=ignore-duplicates.
+ */
 export async function sendEventToSupabase(
   event,
   url = DEFAULT_SUPABASE_URL,
-  key = DEFAULT_SUPABASE_ANON_KEY,
-  sessionContext = {}
+  key = DEFAULT_SUPABASE_ANON_KEY
 ) {
   const targetTable = resolveTargetTable(event);
-  const payload = sanitizeEventForSupabase(event, sessionContext);
+  const payload = sanitizeEventForSupabase(event);
   const endpoint = `${url}/rest/v1/${targetTable}?on_conflict=event_id`;
 
   const response = await fetch(endpoint, {
@@ -118,31 +67,27 @@ export async function sendEventToSupabase(
   return true;
 }
 
-export async function syncSingleEvent(event, sessionContext = {}) {
+/**
+ * Tenta enviar um evento e, se bem-sucedido, marca como 'delivered' no IndexedDB.
+ */
+export async function syncSingleEvent(event) {
   try {
-    return await sendEventToSupabase(event, DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY, sessionContext);
-  } catch (err) {
-    return false;
-  }
-}
-
-export async function syncSession(session) {
-  try {
-    await sendSessionToSupabase(session);
-    if (session && session.id) {
-      session._synced = true;
-      session._synced_at = Date.now();
-      await saveSession(session);
-    }
+    await sendEventToSupabase(event);
+    await markEventDelivered(event.event_id);
     return true;
   } catch (err) {
+    // Falha esperada quando offline
     return false;
   }
 }
 
+/**
+ * Varre o IndexedDB em busca de todos os eventos pendentes ('queued')
+ * e envia um a um para o Supabase.
+ */
 let isFlushing = false;
 
-export async function flushPendingEvents() {
+export async function flushPendingEvents(onEventSynced = null) {
   if (isFlushing) return { total: 0, synced: 0, busy: true };
   if (typeof navigator !== "undefined" && !navigator.onLine) {
     return { total: 0, synced: 0, offline: true };
@@ -150,31 +95,30 @@ export async function flushPendingEvents() {
 
   isFlushing = true;
   try {
-    const sessions = await listSessions();
-    if (!sessions || sessions.length === 0) {
+    const pending = await listPendingEvents();
+    if (!pending || pending.length === 0) {
       return { total: 0, synced: 0 };
     }
 
     let syncedCount = 0;
-    for (const session of sessions) {
-      if (!session._synced || (session.updated_at && session.updated_at > (session._synced_at || 0))) {
-        try {
-          await sendSessionToSupabase(session);
-          session._synced = true;
-          session._synced_at = Date.now();
-          await saveSession(session);
-          syncedCount++;
-        } catch (e) {
-          // Break on network failure
-          break;
+    for (const event of pending) {
+      try {
+        await sendEventToSupabase(event);
+        await markEventDelivered(event.event_id);
+        syncedCount += 1;
+        if (typeof onEventSynced === "function") {
+          onEventSynced(event.event_id);
         }
+      } catch (error) {
+        // Se falhou por queda de rede no meio, para a fila para tentar mais tarde
+        break;
       }
     }
 
     return {
-      total: sessions.length,
+      total: pending.length,
       synced: syncedCount,
-      remaining: sessions.length - syncedCount
+      remaining: pending.length - syncedCount
     };
   } finally {
     isFlushing = false;
