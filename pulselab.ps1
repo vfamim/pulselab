@@ -52,7 +52,7 @@ function Check-PulseLabUpdate {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     } catch {}
 
-    $remoteVer = $null
+    $highestVer = $CurrentVersion
     foreach ($endpoint in $versionEndpoints) {
         try {
             $req = [System.Net.WebRequest]::Create($endpoint)
@@ -64,14 +64,16 @@ function Check-PulseLabUpdate {
             $content = ($reader.ReadToEnd()).Trim()
             $reader.Close()
             $resp.Close()
-            if ($content -and $content.Length -lt 20) {
-                $remoteVer = $content
-                break
+            if ($content -and $content.Length -lt 25) {
+                if ((Compare-SemVer -V1 $content -V2 $highestVer) -gt 0) {
+                    $highestVer = $content
+                }
             }
         } catch {}
     }
 
-    if (-not $remoteVer) { return }
+    if ((Compare-SemVer -V1 $highestVer -V2 $CurrentVersion) -le 0) { return }
+    $remoteVer = $highestVer
 
     $cmp = Compare-SemVer -V1 $remoteVer -V2 $CurrentVersion
     if ($cmp -gt 0) {
