@@ -1,6 +1,7 @@
 import {
   listPendingEvents,
-  markEventDelivered
+  markEventDelivered,
+  markEventQuarantined
 } from "./student-store.js";
 
 export const DEFAULT_SUPABASE_URL = "https://cylsqbmtglvdfubbarqe.supabase.co";
@@ -87,6 +88,48 @@ export function resolveTargetTable(event) {
 }
 
 /**
+ * Determina se uma resposta HTTP 409 é uma duplicata idempotente esperada (PostgreSQL 23505 unique_violation
+ * na chave primária / constraint esperada do registro) ou se é uma violação de integridade que deve
+ * ser rejeitada/quarentenada (outra restrição de unicidade, chave estrangeira ou check).
+ */
+export function isUniqueViolationConflict(status, bodyText, expectedField = "event_id") {
+  if (status !== 409 || !bodyText) return false;
+  try {
+    const parsed = typeof bodyText === "string" ? JSON.parse(bodyText) : bodyText;
+    const isCode23505 = parsed.code === "23505" || String(bodyText).includes("23505");
+    const msg = String(parsed.message || "");
+    const details = String(parsed.details || "");
+    const fullText = `${msg} ${details} ${typeof bodyText === "string" ? bodyText : JSON.stringify(bodyText)}`.toLowerCase();
+
+    const hasUniqueMarker =
+      isCode23505 ||
+      fullText.includes("duplicate key") ||
+      fullText.includes("unique constraint") ||
+      fullText.includes("already exists");
+
+    if (!hasUniqueMarker) return false;
+
+    // Comprovação estrita da constraint primária esperada:
+    const normField = String(expectedField).toLowerCase();
+    const matchesExpected =
+      fullText.includes(`(${normField})=`) ||
+      fullText.includes(`key (${normField})`) ||
+      fullText.includes(`${normField}_pkey`) ||
+      (normField === "event_id" && (
+        fullText.includes("research_events_pkey") ||
+        fullText.includes("research_session_events_pkey")
+      )) ||
+      (normField === "session_id" && (
+        fullText.includes("research_bancada_sessions_pkey")
+      ));
+
+    return Boolean(matchesExpected);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Envia um evento individual diretamente para a REST API do Supabase.
  * É idempotente via cabeçalho Prefer: resolution=ignore-duplicates.
  */
@@ -110,27 +153,45 @@ export async function sendEventToSupabase(
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok && response.status !== 409) {
+  if (!response.ok) {
     const errorText = await response.text().catch(() => "");
+    if (response.status === 409 && isUniqueViolationConflict(409, errorText, "event_id")) {
+      return { success: true, duplicate: true };
+    }
     const error = new Error(`HTTP ${response.status}: ${errorText}`);
     error.status = response.status;
+    error.body = errorText;
     throw error;
   }
 
-  return true;
+  return { success: true, duplicate: false };
 }
 
 /**
  * Tenta enviar um evento e, se bem-sucedido, marca como 'delivered' no IndexedDB.
+ * Se ocorrer erro 4xx definitivo, coloca em quarentena sem mascarar como entregue.
  */
-export async function syncSingleEvent(event) {
+export async function syncSingleEvent(event, options = {}) {
+  const key = options.key || (typeof process !== "undefined" ? process.env?.PULSELAB_OPERATIONAL_JWT : null);
+  // PWA em modo offline-first: não realiza envio anônimo que falharia por falta de permissão (anon revogado)
+  if (!key && !options.force) {
+    return { success: false, syncDisabled: true, offline: true };
+  }
+
   try {
-    await sendEventToSupabase(event);
-    await markEventDelivered(event.event_id);
-    return true;
+    const result = await sendEventToSupabase(event, options.url || DEFAULT_SUPABASE_URL, key || DEFAULT_SUPABASE_ANON_KEY);
+    try {
+      await markEventDelivered(event.event_id);
+    } catch {}
+    return { success: true, duplicate: Boolean(result?.duplicate) };
   } catch (err) {
-    // Falha esperada quando offline
-    return false;
+    if (err.status && err.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429) {
+      try {
+        await markEventQuarantined(event.event_id, err.message || `HTTP ${err.status}`);
+      } catch {}
+      return { success: false, quarantined: true, error: err };
+    }
+    return { success: false, offline: true, error: err };
   }
 }
 
@@ -140,37 +201,69 @@ export async function syncSingleEvent(event) {
  */
 let isFlushing = false;
 
-export async function flushPendingEvents(onEventSynced = null) {
+export async function flushPendingEvents(onEventSyncedOrOptions = null, maybeOptions = {}) {
+  let onEventSynced = null;
+  let options = {};
+
+  if (typeof onEventSyncedOrOptions === "function") {
+    onEventSynced = onEventSyncedOrOptions;
+    options = maybeOptions || {};
+  } else if (typeof onEventSyncedOrOptions === "object" && onEventSyncedOrOptions !== null) {
+    options = onEventSyncedOrOptions;
+    onEventSynced = typeof maybeOptions === "function" ? maybeOptions : null;
+  } else {
+    options = maybeOptions || {};
+  }
+
   if (isFlushing) return { total: 0, synced: 0, busy: true };
-  if (typeof navigator !== "undefined" && !navigator.onLine) {
+  if (typeof navigator !== "undefined" && !navigator.onLine && !options.force) {
     return { total: 0, synced: 0, offline: true };
+  }
+
+  const key = options.key || (typeof process !== "undefined" ? process.env?.PULSELAB_OPERATIONAL_JWT : null);
+  const url = options.url || DEFAULT_SUPABASE_URL;
+
+  // PWA em modo offline-first: não tenta envio anônimo remoto sem chave operacional
+  if (!key && !options.force) {
+    const pendingList = await listPendingEvents().catch(() => []);
+    return { total: pendingList?.length || 0, synced: 0, syncDisabled: true, offline: true };
   }
 
   isFlushing = true;
   try {
-    const pending = await listPendingEvents();
+    const pending = options.pendingEvents || (await listPendingEvents());
     if (!pending || pending.length === 0) {
-      return { total: 0, synced: 0 };
+      return { total: 0, synced: 0, duplicates: 0, quarantined: 0 };
     }
 
     let syncedCount = 0;
+    let duplicateCount = 0;
+    let quarantinedCount = 0;
+
     for (const event of pending) {
       try {
-        await sendEventToSupabase(event);
-        await markEventDelivered(event.event_id);
-        syncedCount += 1;
+        const result = await sendEventToSupabase(event, url, key);
+        try {
+          await markEventDelivered(event.event_id);
+        } catch {}
+        if (result?.duplicate) {
+          duplicateCount += 1;
+        } else {
+          syncedCount += 1;
+        }
         if (typeof onEventSynced === "function") {
           onEventSynced(event.event_id);
         }
       } catch (error) {
-        // Se for erro de cliente definitivo (ex: 400 Bad Request por coluna legada em banco antigo),
-        // marca como delivered com aviso para não travar a fila inteira para sempre
         if (error.status && error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429) {
-          console.warn(`[SyncEngine] Descartando evento com erro de contrato HTTP ${error.status}: ${event.event_id}`, error);
-          await markEventDelivered(event.event_id);
+          console.warn(`[SyncEngine] Quarentenando evento com erro HTTP ${error.status}: ${event.event_id}`, error);
+          try {
+            await markEventQuarantined(event.event_id, error.message);
+          } catch {}
+          quarantinedCount += 1;
           continue;
         }
-        // Se falhou por queda de rede ou instabilidade 5xx, interrompe a fila para nova tentativa posterior
+        // Queda de rede ou erro transitório 5xx: interrompe fila para próxima tentativa
         break;
       }
     }
@@ -178,7 +271,9 @@ export async function flushPendingEvents(onEventSynced = null) {
     return {
       total: pending.length,
       synced: syncedCount,
-      remaining: pending.length - syncedCount
+      duplicates: duplicateCount,
+      quarantined: quarantinedCount,
+      remaining: pending.length - (syncedCount + duplicateCount + quarantinedCount)
     };
   } finally {
     isFlushing = false;

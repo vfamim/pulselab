@@ -1,0 +1,9 @@
+{
+  "name": "pulselab",
+  "private": true,
+  "scripts": {
+    "test:unit": "npm --prefix web/agent-simulator run test:unit",
+    "build": "npm --prefix web/agent-simulator run build",
+    "test:e2e": "npm --prefix web/agent-simulator run test:e2e"
+  }
+}

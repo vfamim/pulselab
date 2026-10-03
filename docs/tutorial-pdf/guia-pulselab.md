@@ -218,7 +218,7 @@ style: |
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">1</span>
-        <div><strong>Abertura Automática:</strong> Ao executar o atalho, o Bridge sobe em segundo plano e abre a aplicação no navegador padrão em <code>http://127.0.0.1:43127/alunos/</code>.</div>
+        <div><strong>Abertura Automática:</strong> Ao executar o atalho, o Bridge sobe em segundo plano e abre a aplicação no navegador padrão em <code>http://127.0.0.1:43128/alunos/</code>.</div>
       </li>
       <li class="step-item">
         <span class="step-num" style="background:#16a34a;">2</span>

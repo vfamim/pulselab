@@ -20,7 +20,7 @@ PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
 
 O PulseLab é o ambiente de acompanhamento de oficinas de robótica escolar com LEGO SPIKE.
 Totalmente desacoplado: interface executada diretamente no navegador padrão (PWA 100% offline),
-servidor Bridge local mínimo em loopback (porta 43127), sincronização automática na nuvem (Store-and-Forward)
+servidor Bridge local mínimo em loopback (porta 43128), sincronização automática na nuvem (Store-and-Forward)
 e leitura contínua de projetos (.llsp3).
 
 REQUISITOS:
@@ -34,8 +34,8 @@ COMO USAR:
 OPÇÃO 1: EXECUÇÃO DIRETA (Recomendado — Sem instalação)
 1. Extraia todo o arquivo ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
 2. Dê dois cliques em "Iniciar-PulseLab.bat".
-3. O navegador padrão abrirá automaticamente em http://127.0.0.1:43127/alunos/.
-4. O Bridge emitirá alertas sonoros e visuais aos 20 e 40 minutos de oficina.
+3. O navegador padrão abrirá automaticamente em http://127.0.0.1:43128/alunos/.
+4. O Bridge opera silenciosamente em segundo plano registrando a telemetria do robô.
 
 OPÇÃO 2: INSTALAÇÃO NO SISTEMA (Com atalho na Área de Trabalho)
 1. Extraia todo o arquivo ZIP.
@@ -58,12 +58,11 @@ RECURSOS DO PULSELAB v{version}:
 - Foco total no robô: os alunos utilizam o app oficial LEGO SPIKE em tela cheia.
 - O professor/instrutor está presente fisicamente na sala para mediar e apoiar em pessoa.
 - Zero atrito e zero interrupções por pop-ups ou botões de ajuda virtuais.
-- Questionário pré e pós rápido (4 perguntas cada, respondidas na própria bancada).
+- Questionário pré e pós rápido (respondido na própria bancada).
 - Banco de dados local permanente em "dados_locais" (100% offline-first).
 - Exportação com 1 clique para pendrive USB ("Exportar-Dados-Pendrive.bat").
 - Consolidador SQLite e importador idempotente para o Supabase ("Importar-Para-Supabase.bat").
 - Leitura automática de blocos do LEGO SPIKE (.llsp3) para telemetria de código.
-- Alertas sonoros suaves aos 20 min e 40 min de oficina com foco inteligente de janela.
 - Privacidade total (LGPD) — sem captura de webcam, prints ou dados pessoais.
 """
 
@@ -73,6 +72,39 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+SENSITIVE_KEY_PATTERNS = (
+    "secret",
+    "token",
+    "password",
+    "service_role",
+    "operational_jwt",
+    "private_key",
+    "supabase_key",
+    "supabase_anon_key",
+    "api_key",
+    "apikey",
+)
+
+
+def scan_sensitive_configs(data: object, path: str = "") -> list[str]:
+    """Recursively scan nested dictionaries and lists for sensitive keys with non-empty values."""
+    violations: list[str] = []
+    if isinstance(data, dict):
+        for raw_k, v in data.items():
+            k_str = str(raw_k)
+            curr_path = f"{path}.{k_str}" if path else k_str
+            k_lower = k_str.lower()
+            if any(pattern in k_lower for pattern in SENSITIVE_KEY_PATTERNS):
+                if v not in (None, "", [], {}):
+                    violations.append(curr_path)
+            violations.extend(scan_sensitive_configs(v, curr_path))
+    elif isinstance(data, list):
+        for idx, item in enumerate(data):
+            curr_path = f"{path}[{idx}]"
+            violations.extend(scan_sensitive_configs(item, curr_path))
+    return violations
 
 
 def build_package(repo_root: Path, output: Path, folder_name: str | None = None) -> Path:
@@ -118,11 +150,17 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         if (repo_root / "tools" / "spike-probe.ps1").is_file():
             shutil.copy2(repo_root / "tools" / "spike-probe.ps1", stage / "tools" / "spike-probe.ps1")
 
-        # 6. Copiar Config
-        if (repo_root / "config" / "defaults.json").is_file():
-            shutil.copy2(repo_root / "config" / "defaults.json", stage / "config" / "defaults.json")
-        if (repo_root / "config" / "config.json").is_file():
-            shutil.copy2(repo_root / "config" / "config.json", stage / "config" / "config.json")
+        # 6. Copiar Config (assegurando que nenhum segredo operacional seja distribuído)
+        for cfg_name in ("defaults.json", "config.json"):
+            cfg_file = repo_root / "config" / cfg_name
+            if cfg_file.is_file():
+                cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+                violations = scan_sensitive_configs(cfg_data)
+                if violations:
+                    raise ValueError(
+                        f"Chave sensível com valor não vazio encontrada em {cfg_name}: {', '.join(violations)}"
+                    )
+                shutil.copy2(cfg_file, stage / "config" / cfg_name)
 
         # 7. Copiar Batch files e Launchers
         shutil.copy2(repo_root / "Instalar-PulseLab.bat", stage / "Instalar-PulseLab.bat")

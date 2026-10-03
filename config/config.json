@@ -8,19 +8,10 @@
     "school_code":  "CONFIGURE_ESCOLA",
     "workshop_code":  "CONFIGURE_OFICINA",
     "class_code":  "CONFIGURE_TURMA",
-    "interval_marks_minutes":  [
-                                   20,
-                                   40
-                               ],
-    "collaboration_marks_minutes":  [
-                                        40
-                                    ],
-    "role_swap_after_marks_minutes":  [
-                                      ],
-    "checkpoint_stages":  {
-                              "20":  "desenvolvimento",
-                              "40":  "integracao-e-teste"
-                          },
+    "interval_marks_minutes":  [],
+    "collaboration_marks_minutes":  [],
+    "role_swap_after_marks_minutes":  [],
+    "checkpoint_stages":  {},
     "questions":  {
                       "prior_robotics":  "Antes de hoje, você já tinha montado ou programado um robô?",
                       "self_efficacy":  "Eu acho que consigo fazer um robô cumprir uma missão.",
@@ -31,11 +22,10 @@
                       "post_affect":  "Como você se sentiu na maior parte da oficina? Escolha uma ou duas opções.",
                       "post_return":  "Você gostaria de participar de outra oficina de robótica?"
                   },
-    "knowledge_questions":  [
-
-                            ],
-    "screenshot_enabled":  true,
-    "screenshot_mode":  "spike_window",
+    "knowledge_questions":  [],
+    "screenshot_enabled":  false,
+    "screenshot_mode":  "disabled",
+    "auto_update": false,
     "timeout_seconds":  90,
     "network_timeout_seconds":  10,
     "heartbeat_interval_seconds":  60,
@@ -43,11 +33,6 @@
     "log_max_size_mb":  5,
     "debug_mode":  false,
     "debug_no_wait":  false,
-    "supabase_url_env_var":  "PULSELAB_URL",
-    "supabase_key_env_var":  "PULSELAB_KEY",
-    "supabase_anon_key_env_var":  "PULSELAB_ANON_KEY",
     "supabase_url":  "https://cylsqbmtglvdfubbarqe.supabase.co",
-    "supabase_key":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU",
-    "supabase_anon_key":  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU",
     "config_remote_url":  "https://raw.githubusercontent.com/vfamim/pulselab/main/config/config.json"
 }

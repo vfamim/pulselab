@@ -64,6 +64,57 @@ export function removeSession(sessionId) {
   return runTransaction(SESSIONS_STORE, "readwrite", (store) => store.delete(sessionId));
 }
 
+export const deleteSession = removeSession;
+
+export async function deleteSessionEvents(sessionId) {
+  if (!sessionId) return 0;
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readwrite");
+      const index = transaction.objectStore(EVENTS_STORE).index("session_id");
+      const request = index.openCursor(IDBKeyRange.only(sessionId));
+      let deletedCount = 0;
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        cursor.delete();
+        deletedCount++;
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(deletedCount);
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function purgeSession(sessionId) {
+  if (!sessionId) return { sessionDeleted: false, eventsDeleted: 0 };
+  const eventsDeleted = await deleteSessionEvents(sessionId);
+  await removeSession(sessionId);
+  return { sessionDeleted: true, eventsDeleted };
+}
+
+export async function listQuarantinedEvents() {
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readonly");
+      const index = transaction.objectStore(EVENTS_STORE).index("delivery_state");
+      const request = index.getAll(IDBKeyRange.only("quarantined"));
+
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
 export async function listSessionEvents(sessionId) {
   const database = await openDatabase();
 
@@ -125,6 +176,34 @@ export async function markEventDelivered(eventId) {
   }
 }
 
+export async function markEventQuarantined(eventId, reason = "rejected") {
+  const database = await openDatabase();
+
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readwrite");
+      const store = transaction.objectStore(EVENTS_STORE);
+      const getReq = store.get(eventId);
+
+      getReq.onsuccess = () => {
+        if (getReq.result) {
+          store.put({
+            ...getReq.result,
+            _delivery_state: "quarantined",
+            _quarantine_reason: String(reason),
+            _quarantined_at: new Date().toISOString()
+          });
+        }
+      };
+      getReq.onerror = () => reject(getReq.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
 export async function markSessionEvents(sessionId, deliveryState) {
   const database = await openDatabase();
 
@@ -150,38 +229,94 @@ export async function markSessionEvents(sessionId, deliveryState) {
 }
 
 /**
- * Remove eventos já entregues com mais de `maxAgeDays` dias para evitar
- * crescimento descontrolado do IndexedDB em máquinas compartilhadas.
+ * Retenção absoluta de 7 dias definida em docs/inventario-dados-v2.md:
+ * "Prazo absoluto: sete dias desde a criação, sem extensão por retomada.
+ * Apagar/retirar elimina esse registro com todos os eventos juntos."
+ *
+ * Remove sessões com created_at/started_at acima de 7 dias com todos os
+ * seus eventos associados, independentemente de delivered, queued ou quarantined.
  */
-export async function pruneDeliveredEvents(maxAgeDays = 7) {
+export async function enforceAbsoluteRetention(maxAgeDays = 7) {
   const database = await openDatabase();
   const thresholdMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const expiredSessionIds = new Set();
+  let purgedSessions = 0;
+  let purgedEvents = 0;
 
+  // 1. Identificar e expurgar sessões expiradas (> 7 dias da criação)
   try {
-    return await new Promise((resolve, reject) => {
-      const transaction = database.transaction(EVENTS_STORE, "readwrite");
-      const index = transaction.objectStore(EVENTS_STORE).index("delivery_state");
-      const request = index.openCursor(IDBKeyRange.only("delivered"));
-      let prunedCount = 0;
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(SESSIONS_STORE, "readwrite");
+      const store = transaction.objectStore(SESSIONS_STORE);
+      const request = store.openCursor();
 
       request.onsuccess = () => {
         const cursor = request.result;
         if (!cursor) return;
 
-        const event = cursor.value;
-        const eventTime = new Date(event._synced_at || event.occurred_at || 0).getTime();
-        if (eventTime > 0 && eventTime < thresholdMs) {
+        const session = cursor.value;
+        const sessionTime = new Date(
+          session.created_at || session.startedAt || session.started_at || 0
+        ).getTime();
+
+        // Prazo absoluto: sete dias desde a criação, sem extensão por retomada
+        if (sessionTime > 0 && sessionTime < thresholdMs) {
+          if (session.session_id) {
+            expiredSessionIds.add(session.session_id);
+          }
           cursor.delete();
-          prunedCount++;
+          purgedSessions++;
         }
         cursor.continue();
       };
 
       request.onerror = () => reject(request.error);
-      transaction.oncomplete = () => resolve(prunedCount);
+      transaction.oncomplete = () => resolve();
       transaction.onerror = () => reject(transaction.error);
     });
-  } finally {
-    database.close();
+  } catch (err) {
+    console.warn("Aviso ao expurgar sessões expiradas:", err);
   }
+
+  // 2. Expurgar TODOS os eventos das sessões expiradas (pendentes, entregues ou quarentenados)
+  // bem como eventos avulsos/órfãos que excederam o prazo de retenção
+  try {
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readwrite");
+      const store = transaction.objectStore(EVENTS_STORE);
+      const request = store.openCursor();
+
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+
+        const ev = cursor.value;
+        const belongsToExpiredSession = ev.session_id && expiredSessionIds.has(ev.session_id);
+        const evTime = new Date(ev._synced_at || ev.occurred_at || ev.timestamp || 0).getTime();
+        const isOrphanExpired = evTime > 0 && evTime < thresholdMs;
+
+        if (belongsToExpiredSession || isOrphanExpired) {
+          cursor.delete();
+          purgedEvents++;
+        }
+        cursor.continue();
+      };
+
+      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error);
+    });
+  } catch (err) {
+    console.warn("Aviso ao expurgar eventos na retenção:", err);
+  }
+
+  return { purgedSessions, purgedEvents };
+}
+
+/**
+ * Remove eventos já entregues ou expurgados respeitando a retenção absoluta de 7 dias.
+ */
+export async function pruneDeliveredEvents(maxAgeDays = 7) {
+  const result = await enforceAbsoluteRetention(maxAgeDays);
+  return result.purgedEvents;
 }

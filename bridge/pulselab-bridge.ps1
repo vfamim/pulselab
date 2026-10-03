@@ -1,7 +1,7 @@
 # ==============================================================================
 # PulseLab — Bridge HTTP Local e Companion de Alertas (Windows Offline)
 # ==============================================================================
-# - Servidor web local em http://127.0.0.1:43127/alunos/
+# - Servidor web local em http://127.0.0.1:43128/alunos/
 # - Agenda de checkpoints e relógio de sessão independente
 # - Alertas sonoros e visuais nativos quando o navegador estiver em segundo plano
 # - Extração de métricas de telemetria do SPIKE via spike-parser.ps1
@@ -9,11 +9,14 @@
 
 [CmdletBinding()]
 param(
-    [int]$Port = 43127,
+    [int]$Port = 43128,
     [string]$AppRoot = "",
     [string]$DataDir = "",
-    [switch]$NoAlert
+    [switch]$NoAlert,
+    [switch]$EnableAutoUpdate
 )
+
+$script:AutoUpdateEnabled = $false
 
 $ErrorActionPreference = "Continue"
 
@@ -94,7 +97,12 @@ if (Test-Path $scheduleFile) {
 
 # 3.1 Supabase Sync Configuration & Tracker (Store-and-forward)
 $script:SupabaseUrl = "https://cylsqbmtglvdfubbarqe.supabase.co"
-$script:SupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU"
+$script:SupabaseAnonKey = ""
+$script:SupabaseOperationalJwt = ""
+
+if ($env:PULSELAB_OPERATIONAL_JWT) {
+    $script:SupabaseOperationalJwt = $env:PULSELAB_OPERATIONAL_JWT
+}
 
 $candidateConfig = Join-Path $PSScriptRoot "..\config\config.json"
 if (-not (Test-Path $candidateConfig)) {
@@ -114,7 +122,7 @@ if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
 }
 $script:LastSyncAttempt = [DateTime]::MinValue
-$script:LastUpdateAttempt = [DateTime]::MinValue
+$script:LastRetentionCleanup = [DateTime]::MinValue
 $script:SyncedEventIds = [System.Collections.Generic.HashSet[string]]::new()
 $script:SyncedTrackerFile = Join-Path $DataDir "events_synced.txt"
 
@@ -127,7 +135,32 @@ if (Test-Path $script:SyncedTrackerFile) {
     } catch {}
 }
 
+# Falha 10: Rastreamento persistente de quarentena para evitar loops infinitos ao reiniciar o Bridge
+$script:QuarantinedEventIds = [System.Collections.Generic.HashSet[string]]::new()
+$script:QuarantinedTrackerFile = Join-Path $DataDir "events_quarantine.txt"
+
+if (Test-Path $script:QuarantinedTrackerFile) {
+    try {
+        Get-Content $script:QuarantinedTrackerFile | ForEach-Object {
+            $tracked = $_.Trim()
+            if ($tracked) { [void]$script:QuarantinedEventIds.Add($tracked) }
+        }
+    } catch {}
+}
+
+$script:HasLoggedJwtWarning = $false
+
 function Sync-EventsToSupabase {
+    # Falha 1: Bridge não deve sincronizar remotamente sem JWT autenticado operacional explícito.
+    # Não trate anon key como autenticação suficiente (RLS revogou anon).
+    if (-not $script:SupabaseOperationalJwt) {
+        if (-not $script:HasLoggedJwtWarning) {
+            Write-BridgeLog "Bridge em modo offline-first seguro: sincronizacao remota desativada (nenhum JWT operacional configurado). Dados salvos localmente em dados_locais." "INFO"
+            $script:HasLoggedJwtWarning = $true
+        }
+        return
+    }
+
     $eventsFile = Join-Path $DataDir "events.jsonl"
     if (-not (Test-Path $eventsFile)) { return }
 
@@ -143,12 +176,12 @@ function Sync-EventsToSupabase {
             try {
                 $ev = $line | ConvertFrom-Json
                 $eventId = [string]$ev.event_id
-                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId)) {
+                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId) -or $script:QuarantinedEventIds.Contains($eventId)) {
                     continue
                 }
 
-                $targetTable = if ($ev._target_table) { 
-                    $ev._target_table 
+                $targetTable = if ($ev._target_table) {
+                    $ev._target_table
                 } elseif ($ev.event_type -in @("pre", "checkpoint", "post")) {
                     "research_events"
                 } else {
@@ -165,7 +198,7 @@ function Sync-EventsToSupabase {
                 $bodyJson = $cleanDict | ConvertTo-Json -Depth 10 -Compress
                 $headers = @{
                     apikey = $script:SupabaseAnonKey
-                    Authorization = "Bearer $($script:SupabaseAnonKey)"
+                    Authorization = "Bearer $($script:SupabaseOperationalJwt)"
                     "Content-Type" = "application/json"
                     Prefer = "resolution=ignore-duplicates,return=minimal"
                 }
@@ -178,16 +211,56 @@ function Sync-EventsToSupabase {
                 $syncedCount++
             } catch {
                 $statusCode = 0
-                try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+                $errBody = ""
+                try {
+                    $statusCode = [int]$_.Exception.Response.StatusCode
+                    $respStream = $_.Exception.Response.GetResponseStream()
+                    if ($respStream) {
+                        $sReader = New-Object System.IO.StreamReader($respStream)
+                        $errBody = $sReader.ReadToEnd()
+                        $sReader.Close()
+                    }
+                } catch {}
+
                 if ($statusCode -eq 409) {
-                    # Conflito: registro já inserido (ex: sincronizado pelo PWA anteriormente).
-                    # Marca como sincronizado para não travar a fila do Bridge.
-                    [void]$script:SyncedEventIds.Add($eventId)
-                    [System.IO.File]::AppendAllText($script:SyncedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
-                    $syncedCount++
+                    # Falha 3: Conflito: aceita como idempotente SOMENTE se for comprovadamente unique_violation (23505) na chave primária esperada (event_id)
+                    $isPkDuplicate = $false
+                    $errLower = "$errBody".ToLower()
+                    $hasUniqueMarker = ($errLower -match "23505" -or $errLower -match "duplicate key" -or $errLower -match "unique constraint" -or $errLower -match "already exists")
+                    if ($hasUniqueMarker -and ($errLower -match "\(event_id\)=" -or $errLower -match "key \(event_id\)" -or $errLower -match "research_events_pkey" -or $errLower -match "research_session_events_pkey" -or $errLower -match "event_id_pkey")) {
+                        $isPkDuplicate = $true
+                    }
+
+                    if ($isPkDuplicate) {
+                        [void]$script:SyncedEventIds.Add($eventId)
+                        [System.IO.File]::AppendAllText($script:SyncedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
+                        $syncedCount++
+                        continue
+                    }
+                }
+
+                # Falha 10: Erros 4xx não idempotentes (incluindo 409 por check constraint/FK, 400, 422, etc):
+                # Quarentena observável persistida em arquivo para não travar a fila com retentativas infinitas ao reiniciar o Bridge
+                if ($statusCode -ge 400 -and $statusCode -lt 500) {
+                    try {
+                        $quarantineFile = Join-Path $DataDir "events_quarantine.jsonl"
+                        $qObj = [PSCustomObject]@{
+                            event_id = $eventId
+                            status_code = $statusCode
+                            error = $errBody
+                            quarantined_at = [DateTime]::UtcNow.ToString("o")
+                            event = $ev
+                        }
+                        $qJson = $qObj | ConvertTo-Json -Compress -Depth 10
+                        [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
+                        [void]$script:QuarantinedEventIds.Add($eventId)
+                        [System.IO.File]::AppendAllText($script:QuarantinedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
+                        Write-BridgeLog "[QUARENTENA] Evento $eventId rejeitado com HTTP $statusCode (salvo em events_quarantine.jsonl): $errBody" "WARN"
+                    } catch {}
                     continue
                 }
-                # Offline ou erro de rede transitório: interrompe para tentar na próxima janela
+
+                # Offline (sem resposta) ou erro 5xx de servidor: interrompe para retentar na próxima janela
                 break
             }
         }
@@ -224,119 +297,22 @@ function Sync-EventsToSupabase {
     } catch {}
 }
 
-function Check-PulseLabAutoUpdate {
-    try {
-        $versionUrls = @(
-            "https://raw.githubusercontent.com/vfamim/pulselab/main/VERSION",
-            "https://pulselab-robotica-edu.web.app/VERSION"
-        )
-        $remoteVer = $null
-        foreach ($vUrl in $versionUrls) {
-            try {
-                $req = [System.Net.WebRequest]::Create($vUrl)
-                $req.Timeout = 2500
-                $req.Method = "GET"
-                $resp = $req.GetResponse()
-                $stream = $resp.GetResponseStream()
-                $reader = New-Object System.IO.StreamReader($stream)
-                $txt = ($reader.ReadToEnd()).Trim()
-                $reader.Close()
-                $resp.Close()
-                if ($txt -and $txt.Length -lt 25) {
-                    $remoteVer = $txt
-                    break
-                }
-            } catch {}
-        }
-
-        if (-not $remoteVer) { return }
-
-        $isNewer = $false
-        try {
-            $vRemote = [System.Version]::Parse($remoteVer)
-            $vLocal = [System.Version]::Parse($script:BridgeVersion)
-            if ($vRemote -gt $vLocal) { $isNewer = $true }
-        } catch {
-            if ($remoteVer -ne $script:BridgeVersion) { $isNewer = $true }
-        }
-
-        if ($isNewer) {
-            Write-BridgeLog "[AUTO-UPDATE] Nova versao v$remoteVer detectada na nuvem! Atualizando PWA e Bridge silenciosamente..." "INFO"
-            $zipCandidates = @(
-                "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-$remoteVer-Windows.zip",
-                "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip",
-                "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip"
-            )
-            $tempZip = Join-Path $env:TEMP "PulseLab-Update-$remoteVer.zip"
-            $tempExtract = Join-Path $env:TEMP "PulseLab-Extract-$remoteVer"
-
-            [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-            $wc = New-Object System.Net.WebClient
-            $downloaded = $false
-            foreach ($candUrl in $zipCandidates) {
-                try {
-                    if (Test-Path $tempZip) { Remove-Item -Force $tempZip -ErrorAction SilentlyContinue }
-                    $wc.DownloadFile($candUrl, $tempZip)
-                    if ((Test-Path $tempZip) -and ((Get-Item $tempZip).Length -gt 50000)) {
-                        $downloaded = $true
-                        break
-                    }
-                } catch {}
-            }
-            if (-not $downloaded) { return }
-
-            $checksumValid = $true
-            try {
-                $expectedHash = ($wc.DownloadString($shaUrl)).Trim()
-                if ($expectedHash -match "^[A-Fa-f0-9]{64}") {
-                    $actualHash = (Get-FileHash -Path $tempZip -Algorithm SHA256).Hash.Trim()
-                    if ($actualHash.ToLower() -ne $expectedHash.ToLower()) {
-                        Write-BridgeLog "[AUTO-UPDATE] Checksum SHA-256 invalido! Atualizacao abortada por seguranca." "WARN"
-                        $checksumValid = $false
-                    }
-                }
-            } catch {}
-
-            if (-not $checksumValid) {
-                Remove-Item -Force $tempZip -ErrorAction SilentlyContinue
-                return
-            }
-
-            if (Test-Path $tempZip) {
-                if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue }
-                Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempExtract)
-
-                $sourceRoot = $tempExtract
-                $inner = Join-Path $tempExtract "PulseLab-$remoteVer-Windows"
-                if (Test-Path $inner) { $sourceRoot = $inner }
-
-                # Atualizar a pasta da WebApp (PWA estática)
-                $srcApp = Join-Path $sourceRoot "app\alunos"
-                if (Test-Path $srcApp -and Test-Path $AppRoot) {
-                    Copy-Item -Path "$srcApp\*" -Destination $AppRoot -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-BridgeLog "[AUTO-UPDATE] WebApp dos alunos atualizada em tempo real para v$remoteVer!" "OK"
-                }
-
-                # Atualizar arquivos de versão
-                $script:BridgeVersion = $remoteVer
-                try {
-                    $localVerPath = Join-Path $AppRoot "..\..\VERSION"
-                    if (Test-Path (Split-Path -Parent $localVerPath)) {
-                        [System.IO.File]::WriteAllText($localVerPath, $remoteVer, [System.Text.Encoding]::UTF8)
-                    }
-                } catch {}
-
-                # Limpar temporários
-                Remove-Item -Force $tempZip -ErrorAction SilentlyContinue
-                Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue
-
-                Write-BridgeLog "[AUTO-UPDATE] Atualizacao concluida com sucesso para v$remoteVer." "OK"
-            }
-        }
-    } catch {
-        # Offline ou timeout: operacao silenciosa
+function Test-PulseLabAllowedOrigin {
+    param(
+        [string]$Origin,
+        [int]$ExpectedPort
+    )
+    if ([string]::IsNullOrWhiteSpace($Origin) -or $Origin -eq "null") {
+        return $false
     }
+    if ($Origin -eq "http://127.0.0.1:$ExpectedPort" -or $Origin -eq "http://localhost:$ExpectedPort") {
+        return $true
+    }
+    return $false
+}
+
+function Check-PulseLabAutoUpdate {
+    Write-BridgeLog "[AUTO-UPDATE] Atualizacao remota desabilitada permanentemente: sem infraestrutura institucional de assinatura digital." "WARN"
 }
 
 $script:LogFilePath = Join-Path $DataDir "bridge.log"
@@ -354,6 +330,231 @@ function Write-BridgeLog([string]$msg, [string]$level = "INFO") {
             Write-Host $line
         }
     } catch {}
+}
+
+function Invoke-BridgeRetentionCleanup {
+    [CmdletBinding()]
+    param([int]$MaxAgeDays = 7)
+
+    $cutoffUtc = [DateTime]::UtcNow.AddDays(-$MaxAgeDays)
+    $expiredSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+
+    # 1. Identificar sessoes expiradas pelo diretorio sessoes/
+    $sessoesDir = Join-Path $DataDir "sessoes"
+    if (Test-Path -LiteralPath $sessoesDir) {
+        $sessFiles = Get-ChildItem -LiteralPath $sessoesDir -Filter "*.json" -File -ErrorAction SilentlyContinue
+        foreach ($sf in $sessFiles) {
+            try {
+                $sessJson = Get-Content -LiteralPath $sf.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
+                $createdStr = if ($sessJson.created_at) { $sessJson.created_at } elseif ($sessJson.startedAt) { $sessJson.startedAt } elseif ($sessJson.started_at) { $sessJson.started_at } else { $null }
+                $createdUtc = $null
+                if ($createdStr) {
+                    try {
+                        if ($createdStr -match '^\d+$') {
+                            $createdUtc = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$createdStr).UtcDateTime
+                        } else {
+                            $createdUtc = [DateTime]::Parse($createdStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+                        }
+                    } catch {}
+                }
+                if (-not $createdUtc) {
+                    $createdUtc = $sf.CreationTimeUtc
+                }
+
+                # Prazo absoluto: sete dias desde a criacao, sem extensao por retomada
+                if ($createdUtc -lt $cutoffUtc) {
+                    $sid = if ($sessJson.session_id) { $sessJson.session_id } else { $sf.BaseName -replace '^sessao_', '' }
+                    if ($sid) { [void]$expiredSessionIds.Add([string]$sid) }
+                }
+            } catch {}
+        }
+    }
+
+    # 2. Identificar sessoes expiradas no catalogo
+    $catFile = Join-Path $DataDir "catalogo_sessoes.json"
+    if (Test-Path -LiteralPath $catFile) {
+        try {
+            $catExisting = Get-Content -LiteralPath $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $items = if ($catExisting -is [System.Collections.IEnumerable]) { $catExisting } elseif ($catExisting) { @($catExisting) } else { @() }
+            foreach ($it in $items) {
+                if ($it.session_id) {
+                    $cStr = if ($it.created_at) { $it.created_at } elseif ($it.started_at) { $it.started_at } elseif ($it.startedAt) { $it.startedAt } else { $null }
+                    if ($cStr) {
+                        try {
+                            $cUtc = if ($cStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$cStr).UtcDateTime } else { [DateTime]::Parse($cStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
+                            if ($cUtc -lt $cutoffUtc) {
+                                [void]$expiredSessionIds.Add([string]$it.session_id)
+                            }
+                        } catch {}
+                    }
+                }
+            }
+        } catch {}
+    }
+
+    # 2.1 Sessoes interrompidas podem existir apenas em active_schedule.json.
+    # A retomada nunca estende o prazo absoluto contado desde started_at/created_at.
+    if (Test-Path -LiteralPath $scheduleFile) {
+        try {
+            $activeSchedule = Get-Content -LiteralPath $scheduleFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $activeSid = [string]$activeSchedule.session_id
+            $activeCreatedStr = if ($activeSchedule.created_at) { $activeSchedule.created_at } elseif ($activeSchedule.started_at) { $activeSchedule.started_at } elseif ($activeSchedule.startedAt) { $activeSchedule.startedAt } else { $null }
+            if ($activeSid -and $activeCreatedStr) {
+                $activeCreatedUtc = if ($activeCreatedStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$activeCreatedStr).UtcDateTime } else { [DateTime]::Parse($activeCreatedStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
+                if ($activeCreatedUtc -lt $cutoffUtc) {
+                    [void]$expiredSessionIds.Add($activeSid)
+                    Remove-Item -LiteralPath $scheduleFile -Force -ErrorAction SilentlyContinue
+                    if ($script:ActiveSession -and [string]$script:ActiveSession.session_id -eq $activeSid) {
+                        $script:ActiveSession = $null
+                    }
+                }
+            }
+        } catch {
+            Write-BridgeLog "Aviso ao avaliar agenda ativa na retencao: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    if ($expiredSessionIds.Count -eq 0) {
+        return
+    }
+
+    # 3. Expurgo atomico de sessoes expiradas e TODOS os seus eventos associados
+    $purgedEventsCount = 0
+    $purgedEventIds = [System.Collections.Generic.HashSet[string]]::new()
+
+    # a) Arquivos de sessao
+    foreach ($sid in $expiredSessionIds) {
+        $safeSid = ($sid -replace '[^a-zA-Z0-9_-]', '_')
+        $sessPath = Join-Path $sessoesDir "sessao_$safeSid.json"
+        if (Test-Path -LiteralPath $sessPath) {
+            Remove-Item -LiteralPath $sessPath -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    # b) Catalogo de sessoes
+    if (Test-Path -LiteralPath $catFile) {
+        try {
+            $catExisting = Get-Content -LiteralPath $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $survivingCatalog = [System.Collections.Generic.List[object]]::new()
+            $items = if ($catExisting -is [System.Collections.IEnumerable]) { $catExisting } elseif ($catExisting) { @($catExisting) } else { @() }
+            foreach ($it in $items) {
+                if ($it.session_id -and -not $expiredSessionIds.Contains([string]$it.session_id)) {
+                    $survivingCatalog.Add($it)
+                }
+            }
+            $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
+            $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
+            [System.IO.File]::Replace($catTmp, $catFile, $null)
+        } catch {
+            Write-BridgeLog "Aviso ao expurgar catalogo na retencao: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    # c) events.jsonl
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (Test-Path -LiteralPath $eventsFile) {
+        try {
+            $allLines = [System.IO.File]::ReadAllLines($eventsFile, [System.Text.Encoding]::UTF8)
+            $survivingLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($line in $allLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $evObj = $line | ConvertFrom-Json
+                    if ($evObj.session_id -and $expiredSessionIds.Contains([string]$evObj.session_id)) {
+                        $purgedEventsCount++
+                        if ($evObj.event_id) { [void]$purgedEventIds.Add([string]$evObj.event_id) }
+                        continue
+                    }
+                    $survivingLines.Add($line)
+                } catch {
+                    $survivingLines.Add($line)
+                }
+            }
+            $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+            [System.IO.File]::Replace($eventsTmp, $eventsFile, $null)
+        } catch {
+            Write-BridgeLog "Aviso ao expurgar events.jsonl na retencao: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    # d) events_archive.jsonl
+    $archiveFile = Join-Path $DataDir "events_archive.jsonl"
+    if (Test-Path -LiteralPath $archiveFile) {
+        try {
+            $allLines = [System.IO.File]::ReadAllLines($archiveFile, [System.Text.Encoding]::UTF8)
+            $survivingLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($line in $allLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $evObj = $line | ConvertFrom-Json
+                    if ($evObj.session_id -and $expiredSessionIds.Contains([string]$evObj.session_id)) {
+                        if ($evObj.event_id) { [void]$purgedEventIds.Add([string]$evObj.event_id) }
+                        continue
+                    }
+                    $survivingLines.Add($line)
+                } catch {
+                    $survivingLines.Add($line)
+                }
+            }
+            $archTmp = Join-Path $DataDir "events_archive.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($archTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+            [System.IO.File]::Replace($archTmp, $archiveFile, $null)
+        } catch {}
+    }
+
+    # e) Payloads completos de quarentena seguem a mesma retencao conjunta.
+    $quarantineJsonlFile = Join-Path $DataDir "events_quarantine.jsonl"
+    if (Test-Path -LiteralPath $quarantineJsonlFile) {
+        try {
+            $allLines = [System.IO.File]::ReadAllLines($quarantineJsonlFile, [System.Text.Encoding]::UTF8)
+            $survivingLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($line in $allLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $qObj = $line | ConvertFrom-Json
+                    $qSessionId = if ($qObj.session_id) { [string]$qObj.session_id } elseif ($qObj.event -and $qObj.event.session_id) { [string]$qObj.event.session_id } else { "" }
+                    if ($qSessionId -and $expiredSessionIds.Contains($qSessionId)) {
+                        if ($qObj.event_id) { [void]$purgedEventIds.Add([string]$qObj.event_id) }
+                        continue
+                    }
+                    $survivingLines.Add($line)
+                } catch {
+                    $survivingLines.Add($line)
+                }
+            }
+            $quarantineTmp = Join-Path $DataDir "events_quarantine_payloads.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($quarantineTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+            [System.IO.File]::Replace($quarantineTmp, $quarantineJsonlFile, $null)
+        } catch {
+            Write-BridgeLog "Aviso ao expurgar events_quarantine.jsonl na retencao: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    # f) Trackers de eventos
+    if ($purgedEventIds.Count -gt 0) {
+        foreach ($pid in $purgedEventIds) {
+            [void]$script:SyncedEventIds.Remove($pid)
+            [void]$script:QuarantinedEventIds.Remove($pid)
+        }
+        if (Test-Path -LiteralPath $script:SyncedTrackerFile) {
+            try {
+                $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
+                [System.IO.File]::Replace($syncTmp, $script:SyncedTrackerFile, $null)
+            } catch {}
+        }
+        if (Test-Path -LiteralPath $script:QuarantinedTrackerFile) {
+            try {
+                $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
+                [System.IO.File]::Replace($quarTmp, $script:QuarantinedTrackerFile, $null)
+            } catch {}
+        }
+    }
+
+    Write-BridgeLog "Limpeza de retencao concluida: $($expiredSessionIds.Count) sessao(oes) expirada(s) e $purgedEventsCount evento(s) expurgados (limite 7 dias)." "INFO"
 }
 
 # 4. Funções de Suporte
@@ -446,6 +647,67 @@ function Check-SessionSchedule {
     }
 }
 
+function Read-BoundedRequestBody {
+    param(
+        [System.Net.HttpListenerRequest]$Request,
+        [int]$MaxBytes = 5242880
+    )
+    if ($Request.ContentLength64 -lt 0) {
+        return @{ Success = $false; StatusCode = 411; Error = "Length required" }
+    }
+    if ($Request.ContentLength64 -gt $MaxBytes) {
+        return @{ Success = $false; StatusCode = 413; Error = "Payload too large" }
+    }
+    $encoding = if ($Request.ContentEncoding) { $Request.ContentEncoding } else { [System.Text.Encoding]::UTF8 }
+    $ms = [System.IO.MemoryStream]::new()
+    $buffer = [byte[]]::new(8192)
+    $totalRead = 0
+    $stream = $Request.InputStream
+    try {
+        while ($true) {
+            $read = $stream.Read($buffer, 0, $buffer.Length)
+            if ($read -le 0) { break }
+            $totalRead += $read
+            if ($totalRead -gt $MaxBytes) {
+                return @{ Success = $false; StatusCode = 413; Error = "Payload too large" }
+            }
+            $ms.Write($buffer, 0, $read)
+        }
+        $raw = $encoding.GetString($ms.ToArray())
+        return @{ Success = $true; Body = $raw; BytesRead = $totalRead }
+    } catch {
+        return @{ Success = $false; StatusCode = 400; Error = $_.Exception.Message }
+    } finally {
+        $ms.Dispose()
+    }
+}
+
+function Send-BridgeResponse {
+    param(
+        [System.Net.HttpListenerResponse]$Response,
+        [int]$StatusCode = 200,
+        [object]$Payload = $null
+    )
+    $Response.StatusCode = $StatusCode
+    $Response.ContentType = "application/json; charset=utf-8"
+    if ($null -ne $Payload) {
+        $json = if ($Payload -is [string]) { $Payload } else { $Payload | ConvertTo-Json -Depth 10 }
+        $buf = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $Response.ContentLength64 = $buf.Length
+        $Response.OutputStream.Write($buf, 0, $buf.Length)
+    } else {
+        $Response.ContentLength64 = 0
+    }
+    $Response.Close()
+}
+
+# Executar limpeza de retencao absoluta de 7 dias na inicializacao
+try {
+    Invoke-BridgeRetentionCleanup -MaxAgeDays 7
+} catch {
+    Write-BridgeLog "Aviso na limpeza inicial de retencao: $($_.Exception.Message)" "WARN"
+}
+
 # 5. Iniciar Servidor HTTP Listener
 $listener = New-Object System.Net.HttpListener
 $prefix = "http://127.0.0.1:$Port/"
@@ -479,13 +741,13 @@ try {
         while (-not $asyncResult.IsCompleted) {
             $asyncResult.AsyncWaitHandle.WaitOne(1000) | Out-Null
             Check-SessionSchedule
+            if (([DateTime]::UtcNow - $script:LastRetentionCleanup).TotalHours -ge 1) {
+                $script:LastRetentionCleanup = [DateTime]::UtcNow
+                try { Invoke-BridgeRetentionCleanup -MaxAgeDays 7 } catch {}
+            }
             if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
                 $script:LastSyncAttempt = [DateTime]::UtcNow
                 Sync-EventsToSupabase
-            }
-            if (([DateTime]::UtcNow - $script:LastUpdateAttempt).TotalSeconds -ge 120) {
-                $script:LastUpdateAttempt = [DateTime]::UtcNow
-                Check-PulseLabAutoUpdate
             }
         }
 
@@ -504,33 +766,35 @@ try {
             $request = $context.Request
             $response = $context.Response
 
-            # CORS Restrito e Seguro (bloqueia sites externos abertos no navegador)
+            # CORS e Protecao de Origem Estrita
             $origin = $request.Headers["Origin"]
-            $isAllowedOrigin = $false
-            if ([string]::IsNullOrEmpty($origin) -or $origin -eq "null") {
-                # Requisições locais, scripts diretos ou apps embarcados sem cabeçalho Origin
-                $isAllowedOrigin = $true
-            } elseif ($origin -match "^https?://(localhost|127\.0\.0\.1)(:\d+)?$" -or $origin -eq "https://pulselab-robotica-edu.web.app") {
-                # Origens oficiais do PulseLab e localhost
-                $isAllowedOrigin = $true
+            $isAllowedOrigin = Test-PulseLabAllowedOrigin -Origin $origin -ExpectedPort $Port
+
+            # Endurecimento: metodos mutantes (POST/PUT/DELETE/PATCH) exigem Origin exato da aplicacao local
+            # Rejeita Origin null, ausente ou diferente para impedir paginas HTML locais arbitrarias
+            # de inserir eventos, sobrescrever snapshot, resetar sessao ou disparar update.
+            $isMutating = $request.HttpMethod -in @("POST", "PUT", "DELETE", "PATCH")
+            if ($isMutating) {
+                if (-not $isAllowedOrigin) {
+                    Write-BridgeLog "Acesso negado para metodo mutante $($request.HttpMethod) com origem invalida ou ausente: '$origin'" "WARN"
+                    $response.StatusCode = 403
+                    $response.Close()
+                    continue
+                }
             }
 
-            if (-not $isAllowedOrigin) {
-                Write-BridgeLog "Tentativa de acesso bloqueada de origem não autorizada: $origin" "WARN"
-                $response.StatusCode = 403
-                $response.Close()
-                continue
-            }
-
-            if (-not [string]::IsNullOrEmpty($origin) -and $origin -ne "null") {
+            if ($isAllowedOrigin) {
                 $response.AddHeader("Access-Control-Allow-Origin", $origin)
-            } else {
-                $response.AddHeader("Access-Control-Allow-Origin", "*")
             }
             $response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             $response.AddHeader("Access-Control-Allow-Headers", "Content-Type, Prefer, apikey, Authorization")
 
             if ($request.HttpMethod -eq "OPTIONS") {
+                if (-not $isAllowedOrigin) {
+                    $response.StatusCode = 403
+                    $response.Close()
+                    continue
+                }
                 $response.StatusCode = 200
                 $response.Close()
                 continue
@@ -545,6 +809,60 @@ try {
                 $response.RedirectLocation = "/alunos/"
                 $response.Close()
                 continue
+            }
+
+            # --- RESTRICAO DE METODOS E HEADERS POR ROTA ---
+            # 1. Rotas estritamente GET
+            if ($path -in @("/health", "/v1/health", "/config", "/v1/config", "/v1/spike/metrics")) {
+                if ($request.HttpMethod -ne "GET") {
+                    $response.StatusCode = 405
+                    $response.AddHeader("Allow", "GET")
+                    $response.Close()
+                    continue
+                }
+            }
+
+            # 2. Rotas estritamente POST
+            $postRoutes = @(
+                "/v1/sessions",
+                "/v1/sessions/save",
+                "/v1/events",
+                "/v1/alert",
+                "/v1/sessions/reset",
+                "/update",
+                "/v1/update"
+            )
+            if ($path -in $postRoutes -or $path -match "^/v1/sessions/([^/]+)/checkpoints/(\d+)/ack$") {
+                if ($request.HttpMethod -ne "POST") {
+                    $response.StatusCode = 405
+                    $response.AddHeader("Allow", "POST")
+                    $response.Close()
+                    continue
+                }
+            }
+
+            # 3. Endpoints que consomem corpo JSON: exigir Content-Type e limitar Content-Length
+            $jsonBodyRoutes = @("/v1/sessions", "/v1/sessions/save", "/v1/events", "/v1/alert", "/v1/sessions/reset")
+            if ($path -in $jsonBodyRoutes) {
+                if ($request.ContentLength64 -lt 0) {
+                    Write-BridgeLog "Rejeitada requisicao sem Content-Length definido em $path" "WARN"
+                    $response.StatusCode = 411
+                    $response.Close()
+                    continue
+                }
+                if ($request.ContentLength64 -gt 5242880) {
+                    Write-BridgeLog "Corpo da requisicao excede limite de 5MB ($($request.ContentLength64) bytes): $path" "WARN"
+                    $response.StatusCode = 413
+                    $response.Close()
+                    continue
+                }
+                $ct = $request.ContentType
+                if (-not $ct -or -not ($ct.ToLower().StartsWith("application/json"))) {
+                    Write-BridgeLog "Content-Type rejeitado para endpoint JSON: '$ct' em $path" "WARN"
+                    $response.StatusCode = 415
+                    $response.Close()
+                    continue
+                }
             }
 
             # --- ROTAS DA API REST ---
@@ -573,8 +891,10 @@ try {
 
             if ($path -eq "/update" -or $path -eq "/v1/update") {
                 Check-PulseLabAutoUpdate
+                $response.StatusCode = 403
                 $updateObj = @{
-                    status = "checked"
+                    status = "disabled"
+                    message = "Atualizacao automatica remota desabilitada por politica institucional de seguranca. Realize atualizacao manual por pacote previamente verificado."
                     version = $script:BridgeVersion
                 }
                 $buf = [System.Text.Encoding]::UTF8.GetBytes(($updateObj | ConvertTo-Json))
@@ -586,13 +906,34 @@ try {
             }
 
             if ($path -eq "/config" -or $path -eq "/v1/config") {
-                $cfgJson = "{}"
+                $publicConfig = [ordered]@{
+                    version = $script:BridgeVersion
+                    protocol_version = "2.1.0"
+                    group_size = 2
+                    site_id = "CONFIGURE_SEDE"
+                    activity_id = "atividade-01-spike"
+                    regional_hub = "Nordeste"
+                    school_code = "CONFIGURE_ESCOLA"
+                    workshop_code = "CONFIGURE_OFICINA"
+                    class_code = "CONFIGURE_TURMA"
+                    questions = @{}
+                }
                 if (Test-Path $candidateConfig) {
                     try {
-                        $cfgJson = Get-Content -Path $candidateConfig -Raw -Encoding UTF8
+                        $cfg = Get-Content -Path $candidateConfig -Raw -Encoding UTF8 | ConvertFrom-Json
+                        if ($cfg.version) { $publicConfig.version = $cfg.version }
+                        if ($cfg.protocol_version) { $publicConfig.protocol_version = $cfg.protocol_version }
+                        if ($cfg.group_size) { $publicConfig.group_size = $cfg.group_size }
+                        if ($cfg.site_id) { $publicConfig.site_id = $cfg.site_id }
+                        if ($cfg.activity_id) { $publicConfig.activity_id = $cfg.activity_id }
+                        if ($cfg.regional_hub) { $publicConfig.regional_hub = $cfg.regional_hub }
+                        if ($cfg.school_code) { $publicConfig.school_code = $cfg.school_code }
+                        if ($cfg.workshop_code) { $publicConfig.workshop_code = $cfg.workshop_code }
+                        if ($cfg.class_code) { $publicConfig.class_code = $cfg.class_code }
+                        if ($cfg.questions) { $publicConfig.questions = $cfg.questions }
                     } catch {}
                 }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes($cfgJson)
+                $buf = [System.Text.Encoding]::UTF8.GetBytes(($publicConfig | ConvertTo-Json -Depth 5))
                 $response.ContentType = "application/json; charset=utf-8"
                 $response.ContentLength64 = $buf.Length
                 $response.OutputStream.Write($buf, 0, $buf.Length)
@@ -601,9 +942,27 @@ try {
             }
 
             if ($path -eq "/v1/sessions" -and $request.HttpMethod -eq "POST") {
-                $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
-                $body = $reader.ReadToEnd() | ConvertFrom-Json
-                $reader.Close()
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
+                }
+
+                $body = $null
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) {
+                        $body = $readRes.Body | ConvertFrom-Json
+                    }
+                } catch {
+                    $body = $null
+                }
+
+                $sessId = if ($body -and $body.session_id) { [string]$body.session_id } else { $null }
+                if (-not $body -or [string]::IsNullOrWhiteSpace($sessId)) {
+                    Write-BridgeLog "Requisicao /v1/sessions rejeitada: JSON invalido ou session_id ausente" "WARN"
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON must be valid object containing session_id" }
+                    continue
+                }
 
                 $parsedStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
                 if ($body.started_at) {
@@ -619,39 +978,57 @@ try {
                     }
                 }
 
+                $marks = @()
+                if ($null -ne $body.marks) {
+                    $marks = @($body.marks)
+                }
+
                 $script:ActiveSession = [PSCustomObject]@{
-                    session_id = [string]$body.session_id
+                    session_id = $sessId
                     started_at = $parsedStartedAt
-                    marks = if ($body.marks) { @($body.marks) } else { @(20, 40) }
+                    marks = $marks
                     acks = @()
                     created_at = [DateTime]::UtcNow.ToString("o")
                 }
-                $script:ActiveSession | ConvertTo-Json | Set-Content -Path $scheduleFile -Force
+                $schedTmp = Join-Path $DataDir "active_schedule.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                $schedJson = $script:ActiveSession | ConvertTo-Json
+                [System.IO.File]::WriteAllText($schedTmp, $schedJson, [System.Text.Encoding]::UTF8)
+                if (Test-Path $scheduleFile) {
+                    [System.IO.File]::Replace($schedTmp, $scheduleFile, $null)
+                } else {
+                    [System.IO.File]::Move($schedTmp, $scheduleFile)
+                }
                 $script:LastAlertMark = 0
                 $script:AlertCount = 0
 
-                $respObj = @{ status = "scheduled"; session_id = $script:ActiveSession.session_id }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "scheduled"; session_id = $script:ActiveSession.session_id }
                 continue
             }
 
             if ($path -eq "/v1/sessions/save" -and $request.HttpMethod -eq "POST") {
-                $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
-                $rawBody = $reader.ReadToEnd()
-                $reader.Close()
-
-                $saveObj = $null
-                try {
-                    $saveObj = $rawBody | ConvertFrom-Json
-                } catch {
-                    Write-BridgeLog "Payload de sessao invalido recebido em /v1/sessions/save" "WARN"
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
                 }
 
-                $sessId = if ($saveObj -and $saveObj.session_id) { [string]$saveObj.session_id } else { "sessao_" + [DateTime]::UtcNow.ToString("yyyyMMdd_HHmmss") }
+                $rawBody = $readRes.Body
+                $saveObj = $null
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($rawBody)) {
+                        $saveObj = $rawBody | ConvertFrom-Json
+                    }
+                } catch {
+                    $saveObj = $null
+                }
+
+                $sessId = if ($saveObj -and $saveObj.session_id) { [string]$saveObj.session_id } else { $null }
+                if (-not $saveObj -or [string]::IsNullOrWhiteSpace($sessId)) {
+                    Write-BridgeLog "Payload de sessao rejeitado em /v1/sessions/save: JSON invalido ou session_id ausente" "WARN"
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON must be valid object containing session_id" }
+                    continue
+                }
+
                 $safeSessId = ($sessId -replace '[^a-zA-Z0-9_-]', '_')
 
                 $sessoesDir = Join-Path $DataDir "sessoes"
@@ -660,7 +1037,13 @@ try {
                 }
 
                 $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
-                [System.IO.File]::WriteAllText($sessFile, $rawBody, [System.Text.Encoding]::UTF8)
+                $sessTmp = Join-Path $sessoesDir "sessao_$safeSessId.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                [System.IO.File]::WriteAllText($sessTmp, $rawBody, [System.Text.Encoding]::UTF8)
+                if (Test-Path $sessFile) {
+                    [System.IO.File]::Replace($sessTmp, $sessFile, $null)
+                } else {
+                    [System.IO.File]::Move($sessTmp, $sessFile)
+                }
 
                 # Atualiza catalogo local de sessoes (catalogo_sessoes.json)
                 $catFile = Join-Path $DataDir "catalogo_sessoes.json"
@@ -710,7 +1093,13 @@ try {
                 $catalogList.Add($summaryRecord)
 
                 $catJson = $catalogList | ConvertTo-Json -Depth 5
-                [System.IO.File]::WriteAllText($catFile, $catJson, [System.Text.Encoding]::UTF8)
+                $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
+                if (Test-Path $catFile) {
+                    [System.IO.File]::Replace($catTmp, $catFile, $null)
+                } else {
+                    [System.IO.File]::Move($catTmp, $catFile)
+                }
 
                 # Persiste tambem todos os eventos da sessao no events.jsonl
                 if ($saveObj -and $saveObj.events) {
@@ -783,7 +1172,14 @@ try {
                     if (-not ($currentAcks -contains $mark)) {
                         $currentAcks += $mark
                         $script:ActiveSession.acks = $currentAcks
-                        $script:ActiveSession | ConvertTo-Json | Set-Content -Path $scheduleFile -Force
+                        $schedTmp = Join-Path $DataDir "active_schedule.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                        $schedJson = $script:ActiveSession | ConvertTo-Json
+                        [System.IO.File]::WriteAllText($schedTmp, $schedJson, [System.Text.Encoding]::UTF8)
+                        if (Test-Path $scheduleFile) {
+                            [System.IO.File]::Replace($schedTmp, $scheduleFile, $null)
+                        } else {
+                            [System.IO.File]::Move($schedTmp, $scheduleFile)
+                        }
                     }
                 }
 
@@ -797,70 +1193,265 @@ try {
             }
 
             if ($path -eq "/v1/alert" -and $request.HttpMethod -eq "POST") {
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
+                }
+
                 $mark = 20
-                try {
-                    $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
-                    $bodyRaw = $reader.ReadToEnd()
-                    $reader.Close()
-                    if ($bodyRaw) {
-                        $body = $bodyRaw | ConvertFrom-Json
-                        if ($body.mark) { $mark = [int]$body.mark }
+                if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) {
+                    try {
+                        $body = $readRes.Body | ConvertFrom-Json
+                        if ($body -and $body.mark) { $mark = [int]$body.mark }
+                    } catch {
+                        Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "Invalid JSON in alert request" }
+                        continue
                     }
-                } catch {}
+                }
 
                 Show-NativeCheckpointAlert -mark $mark
-                $respObj = @{ status = "triggered"; mark = $mark }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "triggered"; mark = $mark }
                 continue
             }
 
             if ($path -eq "/v1/events" -and $request.HttpMethod -eq "POST") {
-                try {
-                    $reader = New-Object System.IO.StreamReader($request.InputStream, $request.ContentEncoding)
-                    $eventJson = $reader.ReadToEnd()
-                    $reader.Close()
-
-                    if ($eventJson) {
-                        $eventsFile = Join-Path $DataDir "events.jsonl"
-                        [System.IO.File]::AppendAllText($eventsFile, "$eventJson`r`n", [System.Text.Encoding]::UTF8)
-                        Sync-EventsToSupabase
-                    }
-                } catch {
-                    Write-BridgeLog "Falha ao gravar evento no disco: $($_.Exception.Message)" "WARN"
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
                 }
 
-                $respObj = @{ status = "persisted" }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
+                $rawJson = $readRes.Body
+                $eventObj = $null
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($rawJson)) {
+                        $eventObj = $rawJson | ConvertFrom-Json
+                    }
+                } catch {
+                    $eventObj = $null
+                }
+
+                $evId = if ($eventObj -and $eventObj.event_id) { [string]$eventObj.event_id } else { $null }
+                $sessId = if ($eventObj -and $eventObj.session_id) { [string]$eventObj.session_id } else { $null }
+
+                if (-not $eventObj -or [string]::IsNullOrWhiteSpace($evId) -or [string]::IsNullOrWhiteSpace($sessId)) {
+                    Write-BridgeLog "Evento rejeitado por JSON invalido ou ausencia de event_id/session_id" "WARN"
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON must be valid object containing event_id and session_id" }
+                    continue
+                }
+
+                try {
+                    $eventsFile = Join-Path $DataDir "events.jsonl"
+                    $compactJson = $eventObj | ConvertTo-Json -Depth 10 -Compress
+                    [System.IO.File]::AppendAllText($eventsFile, "$compactJson`r`n", [System.Text.Encoding]::UTF8)
+                    Sync-EventsToSupabase
+                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "persisted"; event_id = $evId; session_id = $sessId }
+                } catch {
+                    Write-BridgeLog "Falha ao gravar evento no disco: $($_.Exception.Message)" "WARN"
+                    Send-BridgeResponse -Response $response -StatusCode 500 -Payload @{ error = "Internal Server Error" }
+                }
                 continue
             }
 
             if ($path -eq "/v1/sessions/reset" -and $request.HttpMethod -eq "POST") {
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
+                }
+
+                $reqObj = $null
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) {
+                        $reqObj = $readRes.Body | ConvertFrom-Json
+                    }
+                } catch {
+                    $reqObj = $null
+                }
+
+                $reqSessId = if ($reqObj -and $reqObj.session_id) { [string]$reqObj.session_id } else { $null }
+                if ([string]::IsNullOrWhiteSpace($reqSessId)) {
+                    Write-BridgeLog "Requisicao /v1/sessions/reset rejeitada: session_id e obrigatorio" "WARN"
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "session_id is required" }
+                    continue
+                }
+
+                $reason = if ($reqObj -and $reqObj.reason) { [string]$reqObj.reason } else { "" }
+                $explicitPurge = ($reqObj -and ($reqObj.purge -eq $true -or $reqObj.action -eq "purge" -or $reason -in @("ethical_refusal", "abandonment", "withdraw", "refusal", "purge")))
+                $explicitCompleted = ($reqObj -and ($reqObj.completed -eq $true -or $reason -eq "prepare_next"))
+
+                # Verificar se sessao consta como concluida no catalogo local
+                $catFile = Join-Path $DataDir "catalogo_sessoes.json"
+                $isCatalogCompleted = $false
+                if (Test-Path $catFile) {
+                    try {
+                        $catJson = Get-Content -Path $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                        if ($catJson -is [System.Collections.IEnumerable]) {
+                            foreach ($item in $catJson) {
+                                if ($item.session_id -eq $reqSessId -and $item.status -eq "completed") {
+                                    $isCatalogCompleted = $true
+                                    break
+                                }
+                            }
+                        } elseif ($catJson -and $catJson.session_id -eq $reqSessId -and $catJson.status -eq "completed") {
+                            $isCatalogCompleted = $true
+                        }
+                    } catch {}
+                }
+
+                $shouldPurge = $explicitPurge -or (-not $explicitCompleted -and -not $isCatalogCompleted)
+
+                # Resetar estado ativo em memoria e agenda
                 $script:ActiveSession = $null
                 $script:LastAlertMark = 0
                 $script:AlertCount = 0
                 if (Test-Path $scheduleFile) {
                     try { Remove-Item -LiteralPath $scheduleFile -Force -ErrorAction SilentlyContinue } catch {}
                 }
-                $respObj = @{ status = "reset" }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
+
+                if (-not $shouldPurge) {
+                    Write-BridgeLog "Preparando proxima oficina. Sessao concluida $reqSessId preservada na base local." "INFO"
+                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "preserved"; session_id = $reqSessId; purged = $false }
+                    continue
+                }
+
+                # PURGA ATOMICA
+                $safeSessId = ($reqSessId -replace '[^a-zA-Z0-9_-]', '_')
+
+                # Snapshot/arquivo da sessao
+                $sessoesDir = Join-Path $DataDir "sessoes"
+                $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
+                if (Test-Path $sessFile) {
+                    try { Remove-Item -LiteralPath $sessFile -Force -ErrorAction SilentlyContinue } catch {}
+                }
+
+                # Eventos de events.jsonl
+                $purgedEventIds = [System.Collections.Generic.HashSet[string]]::new()
+                $eventsFile = Join-Path $DataDir "events.jsonl"
+                if (Test-Path $eventsFile) {
+                    try {
+                        $allLines = [System.IO.File]::ReadAllLines($eventsFile, [System.Text.Encoding]::UTF8)
+                        $survivingLines = [System.Collections.Generic.List[string]]::new()
+                        foreach ($line in $allLines) {
+                            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                            try {
+                                $evObj = $line | ConvertFrom-Json
+                                if ($evObj.session_id -eq $reqSessId) {
+                                    if ($evObj.event_id) { [void]$purgedEventIds.Add([string]$evObj.event_id) }
+                                    continue
+                                }
+                                $survivingLines.Add($line)
+                            } catch {
+                                $survivingLines.Add($line)
+                            }
+                        }
+                        $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                        [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+                        if (Test-Path $eventsFile) {
+                            [System.IO.File]::Replace($eventsTmp, $eventsFile, $null)
+                        } else {
+                            [System.IO.File]::Move($eventsTmp, $eventsFile)
+                        }
+                    } catch {
+                        Write-BridgeLog "Aviso ao purgar eventos de $safeSessId`: $($_.Exception.Message)" "WARN"
+                    }
+                }
+
+                # Eventos arquivados e payloads de quarentena pertencem ao mesmo registro da sessao.
+                foreach ($jsonlSpec in @(
+                    @{ Path = (Join-Path $DataDir "events_archive.jsonl"); Nested = $false; TempPrefix = "events_archive_purge" },
+                    @{ Path = (Join-Path $DataDir "events_quarantine.jsonl"); Nested = $true; TempPrefix = "events_quarantine_payloads_purge" }
+                )) {
+                    if (-not (Test-Path -LiteralPath $jsonlSpec.Path)) { continue }
+                    try {
+                        $allLines = [System.IO.File]::ReadAllLines($jsonlSpec.Path, [System.Text.Encoding]::UTF8)
+                        $survivingLines = [System.Collections.Generic.List[string]]::new()
+                        foreach ($line in $allLines) {
+                            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                            try {
+                                $recordObj = $line | ConvertFrom-Json
+                                $recordSessionId = if ($jsonlSpec.Nested) {
+                                    if ($recordObj.session_id) { [string]$recordObj.session_id } elseif ($recordObj.event -and $recordObj.event.session_id) { [string]$recordObj.event.session_id } else { "" }
+                                } else {
+                                    [string]$recordObj.session_id
+                                }
+                                if ($recordSessionId -eq $reqSessId) {
+                                    if ($recordObj.event_id) { [void]$purgedEventIds.Add([string]$recordObj.event_id) }
+                                    continue
+                                }
+                                $survivingLines.Add($line)
+                            } catch {
+                                $survivingLines.Add($line)
+                            }
+                        }
+                        $jsonlTmp = Join-Path $DataDir "$($jsonlSpec.TempPrefix).tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                        [System.IO.File]::WriteAllLines($jsonlTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+                        [System.IO.File]::Replace($jsonlTmp, $jsonlSpec.Path, $null)
+                    } catch {
+                        Write-BridgeLog "Aviso ao purgar $($jsonlSpec.Path) para $safeSessId`: $($_.Exception.Message)" "WARN"
+                    }
+                }
+
+                # Catalogo de sessoes
+                if (Test-Path $catFile) {
+                    try {
+                        $catExisting = Get-Content -Path $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                        $survivingCatalog = [System.Collections.Generic.List[object]]::new()
+                        if ($catExisting -is [System.Collections.IEnumerable]) {
+                            foreach ($item in $catExisting) {
+                                if ($item.session_id -ne $reqSessId) {
+                                    $survivingCatalog.Add($item)
+                                }
+                            }
+                        } elseif ($catExisting -and $catExisting.session_id -ne $reqSessId) {
+                            $survivingCatalog.Add($catExisting)
+                        }
+                        $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
+                        $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                        [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
+                        [System.IO.File]::Replace($catTmp, $catFile, $null)
+                    } catch {
+                        Write-BridgeLog "Aviso ao purgar catalogo para $safeSessId`: $($_.Exception.Message)" "WARN"
+                    }
+                }
+
+                # Trackers locais
+                if ($purgedEventIds.Count -gt 0) {
+                    foreach ($pid in $purgedEventIds) {
+                        [void]$script:SyncedEventIds.Remove($pid)
+                        [void]$script:QuarantinedEventIds.Remove($pid)
+                    }
+                    if (Test-Path $script:SyncedTrackerFile) {
+                        try {
+                            $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                            [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
+                            [System.IO.File]::Replace($syncTmp, $script:SyncedTrackerFile, $null)
+                        } catch {}
+                    }
+                    if (Test-Path $script:QuarantinedTrackerFile) {
+                        try {
+                            $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                            [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
+                            [System.IO.File]::Replace($quarTmp, $script:QuarantinedTrackerFile, $null)
+                        } catch {}
+                    }
+                }
+
+                Write-BridgeLog "Sessao $safeSessId expurgada com sucesso (motivo: $reason). Nenhum payload mantido." "INFO"
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "purged"; session_id = $reqSessId; purged = $true; purged_events = $purgedEventIds.Count }
                 continue
             }
 
             if ($path -eq "/v1/spike/metrics" -and $request.HttpMethod -eq "GET") {
+                $minTime = [DateTime]::MinValue
+                if ($script:ActiveSession -and $script:ActiveSession.started_at) {
+                    try {
+                        $minTime = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$script:ActiveSession.started_at).UtcDateTime
+                    } catch {}
+                }
                 $metrics = if (Get-Command Get-SpikeProjectMetrics -ErrorAction SilentlyContinue) {
-                    Get-SpikeProjectMetrics
+                    Get-SpikeProjectMetrics -MinLastWriteTime $minTime
                 } else {
                     @{ source = "spike_project"; project_saved = $false; error = "parser_not_loaded" }
                 }

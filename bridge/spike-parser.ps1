@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # PulseLab — Parser Seguro e Offline de Projetos LEGO SPIKE (.llsp3 / .llsp)
 # ==============================================================================
 # Extrai métricas agregadas de programação Scratch/Word-blocks para inferência
@@ -14,7 +14,8 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyCon
 
 function Find-LatestSpikeProject {
     param(
-        [string]$CustomDirectory = ""
+        [string]$CustomDirectory = "",
+        [DateTime]$MinLastWriteTime = [DateTime]::MinValue
     )
 
     $searchDir = if ($CustomDirectory -and (Test-Path $CustomDirectory)) {
@@ -28,6 +29,7 @@ function Find-LatestSpikeProject {
     }
 
     $candidates = Get-ChildItem -Path $searchDir -Include "*.llsp3", "*.llsp", "*.spk" -Recurse -File -ErrorAction SilentlyContinue |
+        Where-Object { $MinLastWriteTime -eq [DateTime]::MinValue -or $_.LastWriteTimeUtc -ge $MinLastWriteTime } |
         Sort-Object LastWriteTime -Descending
 
     if ($candidates -and $candidates.Count -gt 0) {
@@ -76,13 +78,14 @@ function Infer-SpikeStage {
 function Get-SpikeProjectMetrics {
     param(
         [string]$ProjectPath = "",
-        [psobject]$PreviousMetrics = $null
+        [psobject]$PreviousMetrics = $null,
+        [DateTime]$MinLastWriteTime = [DateTime]::MinValue
     )
 
     $targetFile = if ($ProjectPath -and (Test-Path $ProjectPath)) {
         $ProjectPath
     } else {
-        Find-LatestSpikeProject
+        Find-LatestSpikeProject -MinLastWriteTime $MinLastWriteTime
     }
 
     if (-not $targetFile -or -not (Test-Path $targetFile)) {

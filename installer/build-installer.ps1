@@ -65,7 +65,7 @@ PULSELAB $Version — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
 
 O PulseLab é o ambiente de acompanhamento de oficinas de robótica escolar com LEGO SPIKE.
 Totalmente desacoplado: interface executada diretamente no navegador padrão (PWA 100% offline),
-servidor Bridge local mínimo em loopback (porta 43127) e leitura automática de projetos (.llsp3).
+servidor Bridge local mínimo em loopback (porta 43128) e leitura automática de projetos (.llsp3).
 
 REQUISITOS:
 - Windows 10 ou 11 com Windows PowerShell 5.1 (já nativo no Windows).
@@ -77,7 +77,7 @@ COMO USAR:
 OPÇÃO 1: EXECUÇÃO DIRETA (Recomendado — Sem instalação)
 1. Extraia todo o arquivo ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
 2. Dê dois cliques em "Iniciar-PulseLab.bat".
-3. O navegador padrão abrirá automaticamente em http://127.0.0.1:43127/alunos/.
+3. O navegador padrão abrirá automaticamente em http://127.0.0.1:43128/alunos/.
 4. O Bridge emitirá alertas sonoros e visuais aos 20 e 40 minutos de oficina.
 
 OPÇÃO 2: INSTALAÇÃO NO SISTEMA (Com atalho na Área de Trabalho)

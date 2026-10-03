@@ -1,9 +1,17 @@
 #Requires -Version 5.1
-# PulseLab - Launcher com Atualizacao Automatica (GitHub / Nuvem)
+# PulseLab - Launcher Portatil Offline (Oficina de Robotica)
 [CmdletBinding()]
-param([switch]$DebugMode)
+param(
+    [switch]$DebugMode,
+    [switch]$AllowUpdate
+)
 
 $ErrorActionPreference = "Stop"
+
+# Auto-update remoto desabilitado por politica de seguranca institucional
+if ($AllowUpdate) {
+    throw "Atualizacao remota desabilitada: nao ha infraestrutura institucional de assinatura digital configurada. Realize a atualizacao manual utilizando pacote institucional previamente verificado e autenticado pela instituicao."
+}
 
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -18,146 +26,9 @@ if (-not (Test-Path -LiteralPath $bridge) -or -not (Test-Path -LiteralPath (Join
     throw "Pacote incompleto. Extraia todo o ZIP antes de iniciar."
 }
 
-# --- FUNCAO DE COMPARACAO DE VERSAO ---
-function Compare-SemVer {
-    param([string]$V1, [string]$V2)
-    $clean1 = ($V1 -replace '[^0-9\.]', '').Trim('.')
-    $clean2 = ($V2 -replace '[^0-9\.]', '').Trim('.')
-    try {
-        $parsed1 = [System.Version]::Parse($clean1)
-        $parsed2 = [System.Version]::Parse($clean2)
-        if ($parsed1 -gt $parsed2) { return 1 }
-        if ($parsed1 -lt $parsed2) { return -1 }
-        return 0
-    } catch {
-        if ($clean1 -ne $clean2) { return 1 }
-        return 0
-    }
-}
-
-# --- ROTINA DE ATUALIZACAO AUTOMATICA VIA GITHUB ---
-function Check-PulseLabUpdate {
-    param(
-        [string]$CurrentVersion = "2.1.0",
-        [string]$InstallDir = $scriptRoot
-    )
-
-    $versionEndpoints = @(
-        "https://raw.githubusercontent.com/vfamim/pulselab/main/VERSION",
-        "https://raw.githubusercontent.com/vfamim/pulselab/test/research-protocol-v2/VERSION",
-        "https://pulselab-robotica-edu.web.app/VERSION"
-    )
-
-    try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-    } catch {}
-
-    $highestVer = $CurrentVersion
-    foreach ($endpoint in $versionEndpoints) {
-        try {
-            $req = [System.Net.WebRequest]::Create($endpoint)
-            $req.Timeout = 2500
-            $req.Method = "GET"
-            $resp = $req.GetResponse()
-            $stream = $resp.GetResponseStream()
-            $reader = New-Object System.IO.StreamReader($stream)
-            $content = ($reader.ReadToEnd()).Trim()
-            $reader.Close()
-            $resp.Close()
-            if ($content -and $content.Length -lt 25) {
-                if ((Compare-SemVer -V1 $content -V2 $highestVer) -gt 0) {
-                    $highestVer = $content
-                }
-            }
-        } catch {}
-    }
-
-    if ((Compare-SemVer -V1 $highestVer -V2 $CurrentVersion) -le 0) { return }
-    $remoteVer = $highestVer
-
-    $cmp = Compare-SemVer -V1 $remoteVer -V2 $CurrentVersion
-    if ($cmp -gt 0) {
-        Write-Host ""
-        Write-Host "====================================================================" -ForegroundColor Magenta
-        Write-Host "  [ATUALIZACAO] Nova versao v$remoteVer disponivel! Atualizando..." -ForegroundColor Magenta
-        Write-Host "====================================================================" -ForegroundColor Magenta
-
-        $zipCandidates = @(
-            "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-$remoteVer-Windows.zip",
-            "https://raw.githubusercontent.com/vfamim/pulselab/test/research-protocol-v2/instalador/downloads/PulseLab-$remoteVer-Windows.zip",
-            "https://github.com/vfamim/pulselab/releases/download/v$remoteVer/PulseLab-$remoteVer-Windows.zip",
-            "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip",
-            "https://pulselab-robotica-edu.web.app/instalador/downloads/PulseLab-Alunos-Offline-v$remoteVer.zip"
-        )
-
-        $tempZip = Join-Path $env:TEMP "PulseLab-Update-$remoteVer.zip"
-        $tempExtract = Join-Path $env:TEMP "PulseLab-Update-$remoteVer"
-
-        $downloaded = $false
-        $wc = New-Object System.Net.WebClient
-        foreach ($zipUrl in $zipCandidates) {
-            try {
-                if (Test-Path -LiteralPath $tempZip) { Remove-Item -LiteralPath $tempZip -Force -ErrorAction SilentlyContinue }
-                $wc.DownloadFile($zipUrl, $tempZip)
-                if ((Test-Path -LiteralPath $tempZip) -and ((Get-Item -LiteralPath $tempZip).Length -gt 50000)) {
-                    $downloaded = $true
-                    break
-                }
-            } catch {}
-        }
-
-        if ($downloaded -and (Test-Path -LiteralPath $tempZip)) {
-            try {
-                if (Test-Path -LiteralPath $tempExtract) { Remove-Item -Recurse -Force $tempExtract -ErrorAction SilentlyContinue }
-                Add-Type -AssemblyName System.IO.Compression.FileSystem -ErrorAction SilentlyContinue
-                [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $tempExtract)
-
-                $sourceRoot = $tempExtract
-                $subDirs = Get-ChildItem -LiteralPath $tempExtract -Directory
-                if ($subDirs.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $subDirs[0].FullName "pulselab.ps1"))) {
-                    $sourceRoot = $subDirs[0].FullName
-                }
-
-                $itemsToUpdate = @("alunos", "app", "bridge", "config", "tools", "VERSION", "pulselab.ps1", "Iniciar-PulseLab.bat")
-                foreach ($item in $itemsToUpdate) {
-                    $srcItem = Join-Path $sourceRoot $item
-                    $dstItem = Join-Path $InstallDir $item
-                    if (Test-Path -LiteralPath $srcItem) {
-                        if (Test-Path -LiteralPath $srcItem -PathType Container) {
-                            if (-not (Test-Path -LiteralPath $dstItem)) { New-Item -ItemType Directory -Path $dstItem -Force | Out-Null }
-                            Copy-Item -Path "$srcItem\*" -Destination $dstItem -Recurse -Force -ErrorAction SilentlyContinue
-                        } else {
-                            Copy-Item -LiteralPath $srcItem -Destination $dstItem -Force -ErrorAction SilentlyContinue
-                        }
-                    }
-                }
-
-                Write-Host "  [OK] PulseLab atualizado com sucesso para a versao v$remoteVer!" -ForegroundColor Green
-                Write-Host "====================================================================" -ForegroundColor Green
-                Write-Host ""
-            } catch {
-                Write-Host "  [AVISO] Falha ao descompactar atualizacao. Continuando com versao local..." -ForegroundColor Yellow
-            } finally {
-                Remove-Item -Force -LiteralPath $tempZip -ErrorAction SilentlyContinue
-                Remove-Item -Recurse -Force -LiteralPath $tempExtract -ErrorAction SilentlyContinue
-            }
-        }
-    }
-}
-
-# --- VERIFICA VERSAO LOCAL E EXECUTA CHECAGEM DE UPDATE ---
+# --- VERIFICA VERSAO LOCAL ---
 $localVersion = "2.1.0"
 $verFile = Join-Path $scriptRoot "VERSION"
-if (Test-Path -LiteralPath $verFile) {
-    try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
-}
-
-# Auto-update silencioso e resiliente
-try {
-    Check-PulseLabUpdate -CurrentVersion $localVersion -InstallDir $scriptRoot
-} catch {}
-
-# Recarrega a versao local atualizada
 if (Test-Path -LiteralPath $verFile) {
     try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
 }
@@ -167,21 +38,22 @@ Write-Host "           PULSELAB $localVersion - OFICINA DE ROBOTICA"
 Write-Host "===================================================================="
 
 # --- INICIALIZACAO DO SERVIDOR LOCAL (BRIDGE) ---
+$port = 43128
 $running = $null
-try { $running = Invoke-RestMethod -Uri "http://127.0.0.1:43127/health" -TimeoutSec 1 } catch {}
+try { $running = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 1 } catch {}
 
 if (-not $running) {
-    Start-Process powershell.exe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + $bridge + '"'), "-AppRoot", ('"' + $app + '"'))
+    Start-Process powershell.exe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + $bridge + '"'), "-Port", "$port", "-AppRoot", ('"' + $app + '"'))
     $ready = $false
     for ($i = 0; $i -lt 20; $i++) {
         try {
-            $health = Invoke-RestMethod -Uri "http://127.0.0.1:43127/health" -TimeoutSec 1
+            $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 1
             if ($health) { $ready = $true; break }
         } catch {}
         Start-Sleep -Milliseconds 250
     }
-    if (-not $ready) { throw "Servidor local nao iniciou. Confira a janela do PowerShell." }
+    if (-not $ready) { throw "Servidor local nao iniciou na porta $port. Confira a janela do PowerShell." }
 }
 
-Write-Host "[OK] Servidor ativo em http://127.0.0.1:43127/alunos/"
-Start-Process "http://127.0.0.1:43127/alunos/"
+Write-Host "[OK] Servidor ativo em http://127.0.0.1:$port/alunos/"
+Start-Process "http://127.0.0.1:$port/alunos/"

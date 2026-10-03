@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # ==============================================================================
 # PulseLab - Exportador de Dados Locais para Pendrive USB (Modo Offline)
 # ==============================================================================
@@ -206,19 +206,45 @@ $manifestContent = [System.Text.StringBuilder]::new()
 [void]$manifestContent.AppendLine("")
 
 $sha = [System.Security.Cryptography.SHA256]::Create()
+$targetNormalized = (Resolve-Path $targetExportDir).Path.TrimEnd('\', '/')
 foreach ($fPath in $copiedFiles) {
     try {
         $bytes = [System.IO.File]::ReadAllBytes($fPath)
         $hashBytes = $sha.ComputeHash($bytes)
         $hashStr = [BitConverter]::ToString($hashBytes) -replace '-'
-        $fName = Split-Path $fPath -Leaf
-        [void]$manifestContent.AppendLine("$hashStr  $fName")
+        $fullNormalized = (Resolve-Path $fPath).Path
+        if ($fullNormalized.StartsWith($targetNormalized, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $relPath = $fullNormalized.Substring($targetNormalized.Length).TrimStart('\', '/').Replace('\', '/')
+        } else {
+            $relPath = Split-Path $fPath -Leaf
+        }
+        [void]$manifestContent.AppendLine("$hashStr  $relPath")
     } catch {}
 }
 $sha.Dispose()
 
 [System.IO.File]::WriteAllText($manifestFile, $manifestContent.ToString(), [System.Text.Encoding]::UTF8)
 Write-Host "      [OK] manifesto_coleta.txt (hashes SHA-256 gerados)" -ForegroundColor Green
+
+# 7. Assinatura de autenticidade institucional HMAC-SHA256 (exclusivamente via variavel de ambiente)
+$manifestHmacKey = $env:PULSELAB_MANIFEST_HMAC_KEY
+if (-not [string]::IsNullOrWhiteSpace($manifestHmacKey)) {
+    try {
+        $sigFile = Join-Path $targetExportDir "manifesto_coleta.sig"
+        $manifestBytes = [System.IO.File]::ReadAllBytes($manifestFile)
+        $keyBytes = [System.Text.Encoding]::UTF8.GetBytes($manifestHmacKey)
+        $hmac = [System.Security.Cryptography.HMACSHA256]::new($keyBytes)
+        $sigBytes = $hmac.ComputeHash($manifestBytes)
+        $sigHex = ([BitConverter]::ToString($sigBytes) -replace '-').ToLowerInvariant()
+        $hmac.Dispose()
+        [System.IO.File]::WriteAllText($sigFile, $sigHex, [System.Text.Encoding]::UTF8)
+        Write-Host "      [OK] manifesto_coleta.sig (assinatura HMAC-SHA256 institucional gerada)" -ForegroundColor Green
+    } catch {
+        Write-Host "      [AVISO] Falha ao assinar manifesto com HMAC-SHA256: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "      [INFO] Assinatura institucional HMAC nao gerada (PULSELAB_MANIFEST_HMAC_KEY nao definida no ambiente)." -ForegroundColor Cyan
+}
 
 Write-Host ""
 Write-Host "====================================================================" -ForegroundColor Green

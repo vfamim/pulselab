@@ -8,10 +8,14 @@ import {
   formatEventName
 } from "../lib/contracts.js";
 import {
+  deleteSessionEvents,
   listPendingEvents,
+  listQuarantinedEvents,
   markEventDelivered,
   markSessionEvents,
   pruneDeliveredEvents,
+  enforceAbsoluteRetention,
+  purgeSession,
   removeSession,
   saveEvent,
   saveSession
@@ -20,10 +24,19 @@ import {
   flushPendingEvents,
   syncSingleEvent
 } from "../lib/sync-engine.js";
+import {
+  downloadSessionData,
+  isAllAssented,
+  isPostScreenReady,
+  resolveMemberExperiences,
+  validateFinalTelemetry,
+  validateRestoredSession
+} from "../lib/evaluation.js";
 
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
-const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
+const INSTALLATION_KEY = "pulselab_installation_id_v1";
+const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
 const CLIENT_VERSION = "student-pwa/2.2.0";
 
 const DEFAULT_CONTEXT = {
@@ -39,6 +52,7 @@ const PRE_DEFAULT = { experience: null };
 const POST_DEFAULT = {
   experience: null,
   experienceSkipped: false,
+  memberExperiences: [],
   raceResult: null,
   raceTimeSeconds: "",
   assemblyResult: null,
@@ -70,29 +84,35 @@ const POST_EXPERIENCE_OPTIONS = [
 const RACE_RESULT_OPTIONS = [
   ["success", "🏆 Concluiu com sucesso", "Carrinho completou o percurso no circuito"],
   ["partial", "⏱️ Não concluiu o percurso", "Travou, saiu da pista ou precisou de ajuste"],
-  ["tech_failure", "⚠️ Falha técnica / Bluetooth", "Problema de bateria, desconexão ou peça solta"]
+  ["tech_failure", "⚠️ Falha técnica / Bluetooth", "Problema de bateria, desconexão ou peça solta"],
+  ["not_observed", "👁️ Não observado / Sem oportunidade", "Não houve teste na pista ou não foi observado"]
 ];
 
 const ASSEMBLY_OPTIONS = [
   ["complete", "🧩 Concluída conforme o roteiro", "Estrutura firme, motores e rodas alinhados"],
   ["partial", "🔧 Parcial / com adaptações", "Montagem com peças faltantes ou ajustes manuais"],
-  ["incomplete", "❌ Não concluída", "Não completou a estrutura básica do carrinho"]
+  ["incomplete", "❌ Não concluída", "Não completou a estrutura básica do carrinho"],
+  ["not_observed", "👁️ Não observado", "Não foi possível verificar a montagem física"]
 ];
 
 const QUIZ_OPTIONS = [
   ["participated", "🎮 Realizada com botões do robô", "A bancada participou da dinâmica lúdica A/B"],
-  ["skipped", "⏭️ Dinâmica não realizada", "Tempo insuficiente ou atividade não aplicada"]
+  ["skipped", "⏭️ Dinâmica não realizada", "Tempo insuficiente ou atividade não aplicada"],
+  ["not_applicable", "🚫 Não aplicável", "Oficina sem previsão dessa dinâmica"]
 ];
 
 const SUPPORT_OPTIONS = [
   ["independent", "🟢 Autônomo", "Trabalharam praticamente sozinhos"],
   ["occasional", "🟡 Apoio pontual", "Dúvidas breves tiradas com o instrutor"],
-  ["constant", "🔴 Apoio constante", "Mediação intensiva necessária durante a oficina"]
+  ["constant", "🔴 Apoio constante", "Mediação intensiva necessária durante a oficina"],
+  ["not_observed", "👁️ Não observado", "Nível de apoio não registrado"]
 ];
 
-const BRIDGE_URL = "http://127.0.0.1:43127";
+const BRIDGE_PORT = 43128;
+const BRIDGE_URL = `http://127.0.0.1:${BRIDGE_PORT}`;
 
-async function notifyBridgeSession(sessionId, startedAt, marks = []) {
+async function notifyBridgeSession(sessionId, startedAt, marks = [], allowed = true) {
+  if (!allowed) return;
   try {
     await fetch(`${BRIDGE_URL}/v1/sessions`, {
       method: "POST",
@@ -128,7 +148,8 @@ async function fetchBridgeConfig() {
   return null;
 }
 
-async function notifyBridgeEvent(event) {
+async function notifyBridgeEvent(event, allowed = true) {
+  if (!allowed) return;
   try {
     await fetch(`${BRIDGE_URL}/v1/events`, {
       method: "POST",
@@ -140,7 +161,8 @@ async function notifyBridgeEvent(event) {
   }
 }
 
-async function notifyBridgeSessionSave(sessionPayload) {
+async function notifyBridgeSessionSave(sessionPayload, allowed = true) {
+  if (!allowed) return;
   try {
     await fetch(`${BRIDGE_URL}/v1/sessions/save`, {
       method: "POST",
@@ -192,10 +214,17 @@ async function triggerBridgeAlert(mark = 20) {
   }
 }
 
-async function resetBridgeSession() {
+async function resetBridgeSession(sessionId = null, options = {}) {
   try {
     await fetch(`${BRIDGE_URL}/v1/sessions/reset`, {
-      method: "POST"
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: sessionId,
+        reason: options.reason || (options.purge ? "ethical_refusal" : "prepare_next"),
+        purge: Boolean(options.purge),
+        completed: Boolean(options.completed)
+      })
     });
   } catch {
     // Operação normal mesmo sem o Bridge
@@ -234,16 +263,20 @@ function readJson(key, fallback) {
   }
 }
 
-function getInstallationId() {
-  const current = localStorage.getItem(INSTALLATION_KEY);
-  if (current) return current;
-  const created = createUuid();
-  localStorage.setItem(INSTALLATION_KEY, created);
-  return created;
+function getPersistedInstallationId() {
+  try {
+    return localStorage.getItem(INSTALLATION_KEY) || localStorage.getItem(LEGACY_INSTALLATION_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function getInstallationId(fallbackId = null) {
+  return getPersistedInstallationId() || fallbackId || createUuid();
 }
 
 function getComputerId(installationId) {
-  const id = installationId || getInstallationId();
+  const id = installationId || getPersistedInstallationId() || "000000";
   return `PC-${id.slice(0, 6).toUpperCase()}`;
 }
 
@@ -356,16 +389,78 @@ const REGIONS = [
 
 function RegionMetadataModal({ isOpen, onClose, context, onSave, configHash, computerId, systemMetadata }) {
   const [selectedRegion, setSelectedRegion] = useState(context.regional || "Nordeste");
-  useEffect(() => { setSelectedRegion(context.regional || "Nordeste"); }, [context, isOpen]);
+  const modalRef = useRef(null);
+  const previouslyFocusedElementRef = useRef(null);
+
+  useEffect(() => {
+    setSelectedRegion(context.regional || "Nordeste");
+  }, [context, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    previouslyFocusedElementRef.current = document.activeElement;
+
+    const focusTimer = setTimeout(() => {
+      if (modalRef.current) {
+        const focusable = modalRef.current.querySelectorAll(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        if (focusable.length > 0) {
+          focusable[0].focus();
+        }
+      }
+    }, 30);
+
+    function handleKeyDown(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+      if (e.key === "Tab") {
+        if (!modalRef.current) return;
+        const focusables = Array.from(
+          modalRef.current.querySelectorAll(
+            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+          )
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === first) {
+            e.preventDefault();
+            last.focus();
+          }
+        } else {
+          if (document.activeElement === last) {
+            e.preventDefault();
+            first.focus();
+          }
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      clearTimeout(focusTimer);
+      window.removeEventListener("keydown", handleKeyDown);
+      if (previouslyFocusedElementRef.current && typeof previouslyFocusedElementRef.current.focus === "function") {
+        previouslyFocusedElementRef.current.focus();
+      }
+    };
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
   return (
-    <div className="alert-modal-backdrop" role="dialog" aria-modal="true">
-      <div className="alert-modal" style={{ maxWidth: "520px", textAlign: "left" }}>
+    <div className="alert-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="region-modal-title">
+      <div className="alert-modal" ref={modalRef} style={{ maxWidth: "520px", textAlign: "left" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-          <h2 style={{ margin: 0, fontSize: "1.25rem", color: "#f8fafc" }}>📍 Região & Metadados do Computador</h2>
-          <button className="topbar-btn" onClick={onClose} type="button" style={{ padding: "4px 10px" }}>✕</button>
+          <h2 id="region-modal-title" style={{ margin: 0, fontSize: "1.25rem", color: "#f8fafc" }}>📍 Região & Metadados do Computador</h2>
+          <button className="topbar-btn" onClick={onClose} type="button" aria-label="Fechar" style={{ padding: "4px 10px" }}>✕</button>
         </div>
         <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "16px" }}>
           Selecione apenas a região de onde os dados estão vindo. Os metadados da máquina são detectados automaticamente para o comparativo.
@@ -436,12 +531,24 @@ function PreScreen({
   onDecline,
   resumable,
   onResume,
-  teamRole,
-  setTeamRole,
+  teamSize,
+  setTeamSize,
   assentAgreed,
-  setAssentAgreed
+  memberAssents = { 1: false, 2: false, 3: false, 4: false },
+  setMemberAssents
 }) {
-  const ready = !assentAgreed || answers.experience !== null;
+  const allAssented = isAllAssented(teamSize, memberAssents);
+  const ready = !allAssented || answers.experience !== null;
+
+  function toggleMemberAssent(memberIndex, checked) {
+    if (typeof setMemberAssents === "function") {
+      setMemberAssents((prev) => ({
+        ...prev,
+        [memberIndex]: checked
+      }));
+    }
+  }
+
   return (
     <Card
       eyebrow="Etapa 1 de 3 · Início da Bancada"
@@ -450,7 +557,7 @@ function PreScreen({
       footer={
         <div className="action-row">
           <span className="footer-hint">Sua resposta fica salva assim que você clica em começar.</span>
-          {!assentAgreed ? (
+          {!allAssented ? (
             <button className="button button--ghost" onClick={onDecline} type="button">
               Usar apenas o robô (sem pesquisa)
             </button>
@@ -462,10 +569,10 @@ function PreScreen({
           <button
             className="button button--primary"
             disabled={!ready}
-            onClick={assentAgreed ? onSubmit : onDecline}
+            onClick={allAssented ? onSubmit : onDecline}
             type="button"
           >
-            {assentAgreed ? "Começar Atividade!" : "Começar sem Pesquisa"}
+            {allAssented ? "Começar Atividade!" : "Começar sem Pesquisa"}
           </button>
         </div>
       }
@@ -482,43 +589,30 @@ function PreScreen({
         </div>
       ) : null}
 
-      <div style={{ margin: "0 0 18px", padding: "14px 18px", background: assentAgreed ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)", border: `1px solid ${assentAgreed ? "rgba(34, 197, 94, 0.3)" : "rgba(239, 68, 68, 0.3)"}`, borderRadius: "12px", display: "flex", gap: "12px", alignItems: "flex-start" }}>
-        <input
-          id="ethical-assent-checkbox"
-          type="checkbox"
-          checked={assentAgreed}
-          onChange={(e) => setAssentAgreed(e.target.checked)}
-          style={{ width: "20px", height: "20px", marginTop: "2px", accentColor: "#16a34a", cursor: "pointer" }}
-        />
-        <label htmlFor="ethical-assent-checkbox" style={{ cursor: "pointer", display: "flex", flexDirection: "column", gap: "3px" }}>
-          <strong style={{ fontSize: "0.95rem", color: assentAgreed ? "#15803d" : "#b91c1c" }}>
-            📋 Assentimento Voluntário e Anônimo da Pesquisa
-          </strong>
-          <small style={{ color: assentAgreed ? "#166534" : "#991b1b", fontSize: "0.82rem", lineHeight: "1.4" }}>
-            {assentAgreed
-              ? "✓ Concordamos em responder aos questionários curtos da pesquisa PulseLab (100% anônimo e voluntário)."
-              : "✋ Recusa informada: A equipe prefere não participar da pesquisa científica. Vocês usarão o robô LEGO SPIKE e o cronômetro livremente sem coleta de dados."}
-          </small>
-        </label>
-      </div>
-
+      {/* Composição da Bancada com Acessibilidade Semântica */}
       <div style={{ margin: "0 0 20px", padding: "14px 16px", background: "rgba(99, 102, 241, 0.06)", borderRadius: "12px", border: "1px solid rgba(99, 102, 241, 0.2)" }}>
         <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "8px" }}>
           👥 Composição da Equipe na Bancada
         </span>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
+        <div
+          role="group"
+          aria-label="Composição da Equipe na Bancada"
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}
+        >
           {[
-            ["dyad", "👫 Dupla de Trabalho", "Dois estudantes compartilhando computador e peças"],
-            ["individual", "👤 Individual", "1 estudante realizando todas as etapas"],
-            ["group", "👥 Bancada Coletiva", "3 a 4 estudantes colaborando no mesmo desafio"]
+            [1, "👤 1 Aluno", "Individual"],
+            [2, "👫 2 Alunos", "Dupla"],
+            [3, "👥 3 Alunos", "Trio"],
+            [4, "👥 4 Alunos", "Quarteto"]
           ].map(([val, label, sub]) => {
-            const isSel = teamRole === val;
+            const isSel = teamSize === val;
             return (
               <button
                 key={val}
                 type="button"
+                aria-pressed={isSel}
                 className={`scale-option ${isSel ? "is-selected" : ""}`}
-                onClick={() => setTeamRole(val)}
+                onClick={() => setTeamSize(val)}
                 style={{ textAlign: "left", padding: "10px 12px", minHeight: "auto" }}
               >
                 <strong style={{ fontSize: "0.92rem" }}>{label}</strong>
@@ -529,7 +623,58 @@ function PreScreen({
         </div>
       </div>
 
-      {assentAgreed ? (
+      {/* Assentimento Ético Obrigatório Individual por Participante */}
+      <div style={{ margin: "0 0 18px", padding: "14px 18px", background: allAssented ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)", border: `1px solid ${allAssented ? "rgba(34, 197, 94, 0.3)" : "rgba(239, 68, 68, 0.3)"}`, borderRadius: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+          <strong style={{ fontSize: "0.95rem", color: allAssented ? "#15803d" : "#b91c1c" }}>
+            📋 Assentimento Voluntário por Participante
+          </strong>
+        </div>
+
+        <p style={{ fontSize: "0.82rem", color: allAssented ? "#166534" : "#991b1b", margin: "0 0 12px", lineHeight: "1.4" }}>
+          {allAssented
+            ? "✓ Participação voluntária e anônima: Todos os integrantes da bancada concordaram individualmente em participar da pesquisa anônima."
+            : "✋ Modo Livre: Como a bancada compartilha a montagem, o projeto e a telemetria do robô, se qualquer integrante não concordar, a bancada inteira usará o robô LEGO SPIKE livremente, com zero gravação de pesquisa e zero telemetria."}
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+          {Array.from({ length: teamSize }, (_, idx) => {
+            const memberIdx = idx + 1;
+            const isAssented = Boolean(memberAssents[memberIdx]);
+            const memberLabel = teamSize === 1 ? "Estudante da Bancada" : `Estudante ${memberIdx} de ${teamSize}`;
+
+            return (
+              <label
+                key={memberIdx}
+                htmlFor={memberIdx === 1 ? "ethical-assent-checkbox" : `ethical-assent-member-${memberIdx}`}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "10px",
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  background: isAssented ? "rgba(34, 197, 94, 0.12)" : "rgba(255, 255, 255, 0.03)",
+                  border: `1px solid ${isAssented ? "rgba(34, 197, 94, 0.4)" : "rgba(255, 255, 255, 0.08)"}`,
+                  cursor: "pointer"
+                }}
+              >
+                <input
+                  id={memberIdx === 1 ? "ethical-assent-checkbox" : `ethical-assent-member-${memberIdx}`}
+                  type="checkbox"
+                  checked={isAssented}
+                  onChange={(e) => toggleMemberAssent(memberIdx, e.target.checked)}
+                  style={{ width: "18px", height: "18px", accentColor: "#16a34a", cursor: "pointer" }}
+                />
+                <span style={{ fontSize: "0.86rem", color: isAssented ? "#15803d" : "inherit" }}>
+                  <strong>{memberLabel}</strong>: {isAssented ? "Concorda em participar da pesquisa anônima" : "Prefere não responder questionários"}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {allAssented ? (
         <ScaleQuestion
           legend="Vocês na bancada já montaram ou programaram robôs ou blocos antes?"
           onChange={(experience) => setAnswers({ ...answers, experience })}
@@ -547,8 +692,10 @@ function ActivityScreen({
   spikeTelemetry,
   onAdvanceToFinalChallenge,
   assentAgreed,
+  isFreeMode,
   onRefreshTelemetry
 }) {
+  const isFree = Boolean(isFreeMode || !assentAgreed);
   const hasSpikeCode = Boolean(spikeTelemetry && (spikeTelemetry.executable_blocks > 0 || spikeTelemetry.project_saved));
 
   return (
@@ -559,7 +706,7 @@ function ActivityScreen({
       footer={
         <div className="action-row" style={{ justifyContent: "space-between", width: "100%", alignItems: "center" }}>
           <span className="footer-hint" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-            {assentAgreed ? "⏱️ Coleta contínua e silenciosa em segundo plano." : "Oficina livre sem coleta de dados."}
+            {isFree ? "Oficina livre sem coleta de dados (Modo Livre · Zero gravação)." : "⏱️ Coleta contínua e silenciosa em segundo plano."}
           </span>
           <button
             className="button button--primary"
@@ -574,32 +721,40 @@ function ActivityScreen({
       <div className="activity-timer" aria-live="polite">
         <span>Tempo total de oficina</span>
         <strong>{formatClock(elapsedMs)}</strong>
-        <small>Coleta silenciosa em segundo plano · Sem interrupções</small>
+        <small>{isFree ? "Modo Livre pedagógico · Zero coleta de dados" : "Coleta silenciosa em segundo plano · Sem interrupções"}</small>
       </div>
 
-      <div style={{ background: hasSpikeCode ? "rgba(16, 185, 129, 0.08)" : "rgba(56, 189, 248, 0.08)", border: `1px solid ${hasSpikeCode ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`, borderRadius: "12px", padding: "14px 18px", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-        <div>
-          <span style={{ fontSize: "0.88rem", color: hasSpikeCode ? "#6ee7b7" : "#7dd3fc" }}>
-            🤖 <strong>Telemetria LEGO SPIKE:</strong>{" "}
-            {hasSpikeCode
-              ? `${spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: ${spikeTelemetry.inferred_stage || "em edição"} · ${spikeTelemetry.file_name || "projeto .llsp3"}`
-              : "Aguardando projeto salvo no app LEGO SPIKE (.llsp3)"}
+      {isFree ? (
+        <div style={{ background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.3)", borderRadius: "12px", padding: "14px 18px", margin: "16px 0" }}>
+          <span style={{ fontSize: "0.88rem", color: "#7dd3fc" }}>
+            🤖 <strong>Modo Livre Pedagógico:</strong> O robô LEGO SPIKE funciona livremente. Nenhuma telemetria, código ou evento é gravado nesta oficina.
           </span>
-          {hasSpikeCode && (
-            <small style={{ display: "block", color: "rgba(255, 255, 255, 0.6)", marginTop: "4px", fontSize: "0.78rem" }}>
-              Início da programação detectado automaticamente · Coletando deltas de código em silêncio
-            </small>
-          )}
         </div>
-        <button
-          type="button"
-          className="inst-btn"
-          onClick={onRefreshTelemetry}
-          style={{ fontSize: "0.78rem", padding: "4px 10px", background: "rgba(255, 255, 255, 0.08)", color: "#e2e8f0", borderColor: "rgba(255, 255, 255, 0.2)" }}
-        >
-          🔄 Atualizar telemetria
-        </button>
-      </div>
+      ) : (
+        <div style={{ background: hasSpikeCode ? "rgba(16, 185, 129, 0.08)" : "rgba(56, 189, 248, 0.08)", border: `1px solid ${hasSpikeCode ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`, borderRadius: "12px", padding: "14px 18px", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+          <div>
+            <span style={{ fontSize: "0.88rem", color: hasSpikeCode ? "#6ee7b7" : "#7dd3fc" }}>
+              🤖 <strong>Telemetria LEGO SPIKE:</strong>{" "}
+              {hasSpikeCode
+                ? `${spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: ${spikeTelemetry.inferred_stage || "em edição"} · ${spikeTelemetry.file_name || "projeto .llsp3"}`
+                : "Aguardando projeto salvo no app LEGO SPIKE (.llsp3)"}
+            </span>
+            {hasSpikeCode && (
+              <small style={{ display: "block", color: "rgba(255, 255, 255, 0.6)", marginTop: "4px", fontSize: "0.78rem" }}>
+                Início da programação detectado automaticamente · Coletando deltas de código em silêncio
+              </small>
+            )}
+          </div>
+          <button
+            type="button"
+            className="inst-btn"
+            onClick={onRefreshTelemetry}
+            style={{ fontSize: "0.78rem", padding: "4px 10px", background: "rgba(255, 255, 255, 0.08)", color: "#e2e8f0", borderColor: "rgba(255, 255, 255, 0.2)" }}
+          >
+            🔄 Atualizar telemetria
+          </button>
+        </div>
+      )}
 
       <div className="activity-instructions">
         <article>
@@ -609,8 +764,12 @@ function ActivityScreen({
         </article>
         <article>
           <span>2</span>
-          <strong>Telemetria 100% Silenciosa</strong>
-          <p>O PulseLab acompanha o tempo e detecta os blocos de código em segundo plano, sem travar nem pedir confirmações.</p>
+          <strong>{isFree ? "Uso Livre do Robô" : "Telemetria 100% Silenciosa"}</strong>
+          <p>
+            {isFree
+              ? "Montem e programem livremente. Nesta bancada, nenhuma telemetria ou código é coletado ou gravado."
+              : "O PulseLab acompanha o tempo e detecta os blocos de código em segundo plano, sem travar nem pedir confirmações."}
+          </p>
         </article>
         <article>
           <span>3</span>
@@ -622,12 +781,33 @@ function ActivityScreen({
   );
 }
 
-function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
-  const ready =
-    (answers.experience !== null || answers.experienceSkipped) ||
-    answers.raceResult !== null ||
-    answers.assemblyResult !== null ||
-    answers.supportLevel !== null;
+function PostScreen({
+  answers,
+  setAnswers,
+  onSubmit,
+  onDecline,
+  teamSize = 2,
+  memberAssents = { 1: false, 2: false, 3: false, 4: false }
+}) {
+  const experiences = useMemo(() => {
+    return resolveMemberExperiences(teamSize, memberAssents, answers.memberExperiences);
+  }, [answers.memberExperiences, teamSize, memberAssents]);
+
+  const ready = isPostScreenReady(teamSize, experiences);
+
+  function handleMemberRating(memberIndex, rating) {
+    const updated = experiences.map((m) =>
+      m.memberIndex === memberIndex ? { ...m, rating, skipped: false } : m
+    );
+    setAnswers({ ...answers, memberExperiences: updated });
+  }
+
+  function handleToggleMemberSkip(memberIndex) {
+    const updated = experiences.map((m) =>
+      m.memberIndex === memberIndex ? { ...m, rating: null, skipped: !m.skipped } : m
+    );
+    setAnswers({ ...answers, memberExperiences: updated });
+  }
 
   return (
     <Card
@@ -647,7 +827,7 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
           <button
             className="button button--primary"
             disabled={!ready}
-            onClick={onSubmit}
+            onClick={() => onSubmit()}
             type="button"
           >
             Concluir e Salvar Oficina
@@ -655,61 +835,88 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
         </div>
       }
     >
-      {/* Eixo 1: Experiência Subjetiva */}
+      {/* Eixo 1: Experiência Subjetiva Individual de Cada Integrante */}
       <fieldset className="question-block" style={{ marginBottom: "26px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
-          <legend className="question-legend" style={{ fontSize: "1.1rem", color: "#f8fafc", fontWeight: 700, margin: 0 }}>
-            ✨ Eixo 1: Como foi participar da oficina de robótica de hoje?
-          </legend>
-          <button
-            type="button"
-            className="button button--ghost"
-            onClick={() => setAnswers({
-              ...answers,
-              experience: null,
-              experienceSkipped: !answers.experienceSkipped
-            })}
-            style={{
-              fontSize: "0.78rem",
-              padding: "4px 10px",
-              borderColor: answers.experienceSkipped ? "#38bdf8" : "rgba(255, 255, 255, 0.2)",
-              color: answers.experienceSkipped ? "#38bdf8" : "#94a3b8"
-            }}
-          >
-            {answers.experienceSkipped ? "✓ Prefere não responder" : "Prefiro não responder"}
-          </button>
-        </div>
-        <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "14px" }}>
-          Avaliação individual da experiência da oficina. Não exige consenso da bancada.
+        <legend className="question-legend" style={{ fontSize: "1.1rem", color: "#f8fafc", fontWeight: 700, marginBottom: "4px" }}>
+          ✨ Eixo 1: Como foi participar da oficina de robótica de hoje?
+        </legend>
+        <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "16px" }}>
+          Avaliação individual da experiência da oficina. Cada integrante responde de forma independente, sem exigir consenso na bancada.
         </p>
 
-        {!answers.experienceSkipped ? (
-          <div className="scale-grid">
-            {POST_EXPERIENCE_OPTIONS.map(([optionValue, label, sublabel]) => {
-              const parts = String(label).match(/^(\S+)\s+(.+)$/);
-              const icon = parts ? parts[1] : optionValue;
-              const title = parts ? parts[2] : label;
-              const isSelected = answers.experience === optionValue;
-              return (
-                <button
-                  className={`scale-option ${isSelected ? "is-selected" : ""}`}
-                  key={optionValue}
-                  onClick={() => setAnswers({ ...answers, experience: optionValue, experienceSkipped: false })}
-                  type="button"
-                  aria-pressed={isSelected}
-                >
-                  <span className="scale-option__icon">{icon}</span>
-                  <strong className="scale-option__title">{title}</strong>
-                  {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <div style={{ padding: "10px 14px", background: "rgba(56, 189, 248, 0.08)", border: "1px dashed rgba(56, 189, 248, 0.3)", borderRadius: "10px", color: "#38bdf8", fontSize: "0.85rem" }}>
-            Participante optou por não responder a avaliação subjetiva de experiência.
-          </div>
-        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          {experiences.map((member) => {
+            const memberLabel =
+              teamSize === 1
+                ? "Avaliação do Estudante"
+                : `Estudante ${member.memberIndex} de ${teamSize}`;
+
+            return (
+              <div
+                key={member.memberIndex}
+                style={{
+                  padding: "14px 16px",
+                  background: "rgba(255, 255, 255, 0.03)",
+                  border: "1px solid rgba(255, 255, 255, 0.1)",
+                  borderRadius: "12px"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+                  <strong style={{ fontSize: "0.95rem", color: "#e2e8f0" }}>
+                    👤 {memberLabel}:
+                  </strong>
+                  {!member.declinedAssent ? (
+                    <button
+                      type="button"
+                      className="button button--ghost"
+                      onClick={() => handleToggleMemberSkip(member.memberIndex)}
+                      style={{
+                        fontSize: "0.78rem",
+                        padding: "3px 10px",
+                        borderColor: member.skipped ? "#38bdf8" : "rgba(255, 255, 255, 0.2)",
+                        color: member.skipped ? "#38bdf8" : "#94a3b8"
+                      }}
+                    >
+                      {member.skipped ? "✓ Optou por não responder" : "Prefiro não responder"}
+                    </button>
+                  ) : null}
+                </div>
+
+                {member.declinedAssent ? (
+                  <div style={{ padding: "8px 12px", background: "rgba(239, 68, 68, 0.08)", border: "1px dashed rgba(239, 68, 68, 0.3)", borderRadius: "8px", color: "#f87171", fontSize: "0.82rem" }}>
+                    Estudante optou por não participar da pesquisa no início da oficina. Nenhuma resposta é coletada para esta posição.
+                  </div>
+                ) : !member.skipped ? (
+                  <div className="scale-grid">
+                    {POST_EXPERIENCE_OPTIONS.map(([optionValue, label, sublabel]) => {
+                      const parts = String(label).match(/^(\S+)\s+(.+)$/);
+                      const icon = parts ? parts[1] : optionValue;
+                      const title = parts ? parts[2] : label;
+                      const isSelected = member.rating === optionValue;
+                      return (
+                        <button
+                          className={`scale-option ${isSelected ? "is-selected" : ""}`}
+                          key={optionValue}
+                          onClick={() => handleMemberRating(member.memberIndex, optionValue)}
+                          type="button"
+                          aria-pressed={isSelected}
+                        >
+                          <span className="scale-option__icon">{icon}</span>
+                          <strong className="scale-option__title">{title}</strong>
+                          {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: "8px 12px", background: "rgba(56, 189, 248, 0.08)", border: "1px dashed rgba(56, 189, 248, 0.3)", borderRadius: "8px", color: "#38bdf8", fontSize: "0.82rem" }}>
+                    Estudante optou por não responder a avaliação de experiência.
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </fieldset>
 
       {/* Eixo 2: Resultados Práticos Imediatos & Apoio do Instrutor */}
@@ -737,7 +944,7 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
                     value={val}
                     checked={isSelected}
                     onChange={() => setAnswers({ ...answers, raceResult: val })}
-                    style={{ display: "none" }}
+                    style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0, opacity: 0.001 }}
                   />
                   <span className="option-row__body">
                     <strong style={{ fontSize: "0.95rem", color: "#f1f5f9" }}>{title}</strong>
@@ -790,7 +997,7 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
                     value={val}
                     checked={isSelected}
                     onChange={() => setAnswers({ ...answers, assemblyResult: val })}
-                    style={{ display: "none" }}
+                    style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0, opacity: 0.001 }}
                   />
                   <span className="option-row__body">
                     <strong style={{ fontSize: "0.9rem", color: "#f1f5f9" }}>{title}</strong>
@@ -811,13 +1018,14 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
           <span style={{ fontSize: "0.78rem", color: "#94a3b8", display: "block", marginBottom: "8px" }}>
             Brincadeira de entretenimento de encerramento (não utilizada como avaliação de aprendizagem).
           </span>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+          <div role="group" aria-label="Dinâmica Lúdica do Quiz A/B pelos Botões do Robô" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
             {QUIZ_OPTIONS.map(([val, label]) => {
               const isSelected = answers.quizCompleted === val;
               return (
                 <button
                   key={val}
                   type="button"
+                  aria-pressed={isSelected}
                   className={`scale-option ${isSelected ? "is-selected" : ""}`}
                   style={{ padding: "8px 12px", minHeight: "auto", textAlign: "left", fontSize: "0.82rem" }}
                   onClick={() => setAnswers({ ...answers, quizCompleted: val })}
@@ -845,7 +1053,7 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
                     value={val}
                     checked={isSelected}
                     onChange={() => setAnswers({ ...answers, supportLevel: val })}
-                    style={{ display: "none" }}
+                    style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0, opacity: 0.001 }}
                   />
                   <span className="option-row__body">
                     <strong style={{ fontSize: "0.9rem", color: "#f1f5f9" }}>{title}</strong>
@@ -862,7 +1070,36 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
   );
 }
 
-function FinishedScreen({ pendingCount, onDownload, onRestart }) {
+function FreeModeFinishedScreen({ onRestart }) {
+  return (
+    <Card
+      compact
+      eyebrow="Oficina Livre"
+      title="Oficina concluída com sucesso!"
+      description="A atividade prática foi realizada livremente sem questionários ou telemetria de pesquisa."
+      footer={
+        <div className="action-row">
+          <button className="button button--primary" onClick={onRestart} type="button">
+            Preparar Nova Oficina
+          </button>
+        </div>
+      }
+    >
+      <div className="summary-status summary-status--success">
+        <span className="summary-status__mark">✓</span>
+        <div>
+          <span>Modo Livre Pedagógico</span>
+          <h2>Parabéns pelo trabalho na oficina!</h2>
+          <p>
+            Esta atividade ocorreu em modo pedagógico livre. Nenhuma informação pessoal, resposta ou telemetria foi salva ou transmitida.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function FinishedScreen({ pendingCount, quarantinedCount = 0, onDownload, onRestart }) {
   return (
     <Card
       compact
@@ -885,10 +1122,14 @@ function FinishedScreen({ pendingCount, onDownload, onRestart }) {
         <div>
           <span>Sessão concluída</span>
           <h2>Parabéns pelo trabalho!</h2>
-          {pendingCount === 0 ? (
-            <p>Todos os registros foram sincronizados com a nuvem da pesquisa com sucesso.</p>
+          {quarantinedCount > 0 ? (
+            <p style={{ color: "#f87171" }}>
+              ⚠️ {quarantinedCount} registro(s) em quarentena local para análise do pesquisador. Os demais registros estão salvos no computador.
+            </p>
           ) : (
-            <p>{pendingCount} registro(s) salvos no computador. Serão sincronizados automaticamente com a nuvem assim que houver conexão à internet.</p>
+            <p>
+              {pendingCount} registro(s) salvos no computador com segurança (armazenamento offline-first). Os dados serão consolidados pelo pesquisador via pendrive ou importador autorizado.
+            </p>
           )}
         </div>
       </div>
@@ -933,7 +1174,18 @@ function EvidencePanel({ events }) {
 
 export default function StudentPage() {
   const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
-  const savedSession = useMemo(() => readJson(ACTIVE_SESSION_KEY, null), []);
+  const rawSavedSession = useMemo(() => readJson(ACTIVE_SESSION_KEY, null), []);
+  const savedSession = useMemo(() => {
+    if (!rawSavedSession) return null;
+    const validated = validateRestoredSession(rawSavedSession);
+    if (!validated) {
+      try {
+        localStorage.removeItem(ACTIVE_SESSION_KEY);
+      } catch {}
+      return null;
+    }
+    return validated;
+  }, [rawSavedSession]);
 
   const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
   const [resumable, setResumable] = useState(savedSession);
@@ -947,7 +1199,12 @@ export default function StudentPage() {
   const [activityStage, setActivityStage] = useState(() => savedSession?.activityStage || 2);
   const [sessionId, setSessionId] = useState(() => savedSession?.sessionId || createUuid());
   const [groupId, setGroupId] = useState(() => savedSession?.groupId || createUuid());
-  const [installationId] = useState(getInstallationId);
+  const [installationId, setInstallationId] = useState(() => {
+    if (savedSession && isAllAssented(savedSession.teamSize, savedSession.memberAssents)) {
+      return savedSession.installation_id || getPersistedInstallationId() || createUuid();
+    }
+    return createUuid();
+  });
   const [startedAt, setStartedAt] = useState(() => savedSession?.startedAt || Date.now());
   const [activityStartedAt, setActivityStartedAt] = useState(() => savedSession?.activityStartedAt || null);
   const [elapsedMs, setElapsedMs] = useState(() => {
@@ -967,9 +1224,36 @@ export default function StudentPage() {
     ...POST_DEFAULT,
     ...(savedSession?.postAnswers && typeof savedSession.postAnswers === "object" ? savedSession.postAnswers : {})
   }));
-  const [teamRole, setTeamRole] = useState(() => savedSession?.teamRole || "dyad");
+  const [teamSize, setTeamSize] = useState(() => savedSession?.teamSize || 2);
   const [currentRole, setCurrentRole] = useState(() => savedSession?.currentRole || "computer");
-  const [assentAgreed, setAssentAgreed] = useState(() => savedSession?.assentAgreed ?? true);
+  const [memberAssents, setMemberAssentsState] = useState(() => savedSession?.memberAssents || { 1: false, 2: false, 3: false, 4: false });
+  const memberAssentsRef = useRef(savedSession?.memberAssents || { 1: false, 2: false, 3: false, 4: false });
+  const [assentAgreed, setAssentAgreedState] = useState(() => {
+    if (savedSession?.memberAssents) {
+      return isAllAssented(savedSession?.teamSize || 2, savedSession.memberAssents);
+    }
+    return false;
+  });
+  const assentAgreedRef = useRef(assentAgreed);
+  const [isFreeMode, setIsFreeMode] = useState(() => savedSession?.isFreeMode || false);
+
+  function setMemberAssents(valOrFn) {
+    setMemberAssentsState((prev) => {
+      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn;
+      memberAssentsRef.current = next;
+      const allAssented = isAllAssented(teamSize, next);
+      assentAgreedRef.current = allAssented;
+      setAssentAgreedState(allAssented);
+      return next;
+    });
+  }
+
+  function handleTeamSizeChange(newSize) {
+    setTeamSize(newSize);
+    const allAssented = isAllAssented(newSize, memberAssentsRef.current);
+    assentAgreedRef.current = allAssented;
+    setAssentAgreedState(allAssented);
+  }
   const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || false);
   const [showContextModal, setShowContextModal] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -977,7 +1261,17 @@ export default function StudentPage() {
   const [showInstructorTools, setShowInstructorTools] = useState(labMode);
   const sequenceRef = useRef(savedSession?.sequence || 0);
   const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || false);
+  const isSubmittingRef = useRef(false);
 
+
+  useEffect(() => {
+    if (!savedSession || !isAllAssented(savedSession.teamSize, savedSession.memberAssents)) {
+      try {
+        localStorage.removeItem(INSTALLATION_KEY);
+        localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+      } catch {}
+    }
+  }, [savedSession]);
 
   useEffect(() => {
     const storedContext = localStorage.getItem(CONTEXT_KEY);
@@ -999,24 +1293,35 @@ export default function StudentPage() {
   }, []);
 
   const [dbPendingCount, setDbPendingCount] = useState(0);
+  const [dbQuarantinedCount, setDbQuarantinedCount] = useState(0);
 
-  const refreshPendingCount = React.useCallback(async () => {
+  const refreshDeliveryCounts = React.useCallback(async () => {
     try {
       const pending = await listPendingEvents();
       setDbPendingCount(pending.length);
+      const quarantined = await listQuarantinedEvents();
+      setDbQuarantinedCount(quarantined.length);
     } catch {
       // IndexedDB indisponível em fallback
     }
   }, []);
 
+  const refreshPendingCount = refreshDeliveryCounts;
+
   useEffect(() => {
-    pruneDeliveredEvents(7).catch(() => {});
-    refreshPendingCount();
-  }, [refreshPendingCount]);
+    enforceAbsoluteRetention(7).catch(() => {});
+    refreshDeliveryCounts();
+    const interval = setInterval(() => {
+      enforceAbsoluteRetention(7).catch(() => {});
+    }, 60 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [refreshDeliveryCounts]);
 
   const allEvents = [...timeline, ...responses];
   const memoryPendingCount = allEvents.filter((event) => event._delivery_state === "queued").length;
   const pendingCount = Math.max(memoryPendingCount, dbPendingCount);
+  const memoryQuarantinedCount = allEvents.filter((event) => event._delivery_state === "quarantined").length;
+  const quarantinedCount = Math.max(memoryQuarantinedCount, dbQuarantinedCount);
   const activeStep = stepForState(screen, activityStage);
 
   function flash(message) {
@@ -1067,23 +1372,27 @@ export default function StudentPage() {
   }
 
   function persist(event) {
+    if (!assentAgreedRef.current || isFreeMode) return;
     void saveEvent(event).then(() => {
-      void refreshPendingCount();
+      void refreshDeliveryCounts();
     }).catch(() =>
       flash("Não foi possível salvar no armazenamento local deste navegador.")
     );
     void notifyBridgeEvent(event);
     if (typeof navigator !== "undefined" && navigator.onLine) {
-      void syncSingleEvent(event).then((synced) => {
-        if (synced) {
+      void syncSingleEvent(event).then((result) => {
+        if (result && result.success === true) {
           updateEventDeliveryState(event.event_id, "delivered");
+        } else if (result && result.quarantined) {
+          updateEventDeliveryState(event.event_id, "quarantined");
         }
-        void refreshPendingCount();
+        void refreshDeliveryCounts();
       });
     }
   }
 
   function emitTimeline(eventType, overrides = {}) {
+    if (isFreeMode || !assentAgreedRef.current) return null;
     const sysMeta = getSystemMetadata();
     const event = eventBase(eventType, {
       _target_table: "research_session_events",
@@ -1097,7 +1406,8 @@ export default function StudentPage() {
         runtime: "browser_pwa",
         os: sysMeta.os,
         screen_resolution: sysMeta.screen_resolution,
-        ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {})
+        ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
+        ...overrides.details
       },
       ...overrides
     });
@@ -1107,10 +1417,11 @@ export default function StudentPage() {
   }
 
   function emitResponse(eventType, overrides = {}) {
+    if (isFreeMode || !assentAgreedRef.current) return null;
     const sysMeta = getSystemMetadata();
-    const role = teamRole === "individual" ? "individual" : (teamRole === "group" ? "group" : currentRole);
-    const participantSuffix = teamRole === "individual" ? "IND" : (teamRole === "group" ? "GRUPO" : "BANCADA");
-    const groupSize = teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2);
+    const role = teamSize === 1 ? "individual" : "group";
+    const participantSuffix = "BANCADA";
+    const groupSize = teamSize;
 
     const event = eventBase(eventType, {
       _target_table: "research_events",
@@ -1131,43 +1442,76 @@ export default function StudentPage() {
   }
 
   async function captureSpikeTelemetry(stageLabel) {
-    const metrics = await fetchBridgeSpikeMetrics();
-    if (metrics && metrics.project_saved !== false) {
-      setSpikeTelemetry(metrics);
-      emitTimeline("spike_telemetry", {
-        activity_stage: stageLabel,
-        details: {
-          executable_blocks: metrics.executable_blocks,
-          inferred_stage: metrics.inferred_stage,
-          uses_motor: metrics.uses_motor,
-          uses_sensor: metrics.uses_sensor,
-          uses_loop: metrics.uses_loop,
-          uses_condition: metrics.uses_condition
-        }
-      });
+    if (isFreeMode || !assentAgreedRef.current) return { metrics: null, event: null };
+    try {
+      const metrics = await fetchBridgeSpikeMetrics();
+      if (metrics && metrics.project_saved !== false) {
+        setSpikeTelemetry(metrics);
+        const event = emitTimeline("spike_telemetry", {
+          activity_stage: stageLabel,
+          details: {
+            executable_blocks: metrics.executable_blocks,
+            top_level_stacks: metrics.top_level_stacks,
+            uses_motor: metrics.uses_motor,
+            uses_sensor: metrics.uses_sensor,
+            uses_loop: metrics.uses_loop,
+            uses_condition: metrics.uses_condition,
+            file_name: metrics.file_name
+          }
+        });
+        return { metrics, event };
+      }
+      return { metrics: metrics || null, event: null };
+    } catch {
+      return { metrics: null, event: null };
     }
   }
 
   function resumeSession() {
     if (!resumable) return;
-    setContext(resumable.context || DEFAULT_CONTEXT);
-    setSessionId(resumable.sessionId);
-    setGroupId(resumable.groupId);
-    setStartedAt(resumable.startedAt);
-    setActivityStartedAt(resumable.activityStartedAt);
-    setElapsedMs(resumable.activityStartedAt ? Math.max(0, Date.now() - resumable.activityStartedAt) : (resumable.elapsedMs || 0));
-    setActivityStage(resumable.activityStage || 2);
-    setTimeline(resumable.timeline || []);
-    setResponses(resumable.responses || []);
-    setSpikeTelemetry(resumable.spikeTelemetry || null);
-    setPreAnswers(resumable.preAnswers || PRE_DEFAULT);
-    setPostAnswers(resumable.postAnswers || POST_DEFAULT);
-    setTeamRole(resumable.teamRole || "dyad");
-    setCurrentRole(resumable.currentRole || "computer");
-    setAssentAgreed(resumable.assentAgreed ?? true);
-    setIsSyntheticSession(resumable.isSyntheticSession || false);
-    sequenceRef.current = resumable.sequence || 0;
-    setScreen(resumable.screen);
+    const valid = validateRestoredSession(resumable);
+    if (!valid) {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      setResumable(null);
+      flash("Sessão salva corrompida ou inválida descartada por segurança.");
+      return;
+    }
+    setContext(valid.context || DEFAULT_CONTEXT);
+    setSessionId(valid.sessionId);
+    setGroupId(valid.groupId);
+    setStartedAt(valid.startedAt);
+    setActivityStartedAt(valid.activityStartedAt);
+    setElapsedMs(valid.activityStartedAt ? Math.max(0, Date.now() - valid.activityStartedAt) : (valid.elapsedMs || 0));
+    setActivityStage(valid.activityStage || 2);
+    setTimeline(valid.timeline || []);
+    setResponses(valid.responses || []);
+    setSpikeTelemetry(valid.spikeTelemetry || null);
+    setPreAnswers(valid.preAnswers || PRE_DEFAULT);
+    setPostAnswers(valid.postAnswers || POST_DEFAULT);
+    const restoredTeamSize = valid.teamSize;
+    setTeamSize(restoredTeamSize);
+    setCurrentRole(valid.currentRole || "computer");
+    const restoredAssents = valid.memberAssents || { 1: false, 2: false, 3: false, 4: false };
+    setMemberAssentsState(restoredAssents);
+    memberAssentsRef.current = restoredAssents;
+    const allAssented = isAllAssented(restoredTeamSize, restoredAssents);
+    assentAgreedRef.current = allAssented;
+    setAssentAgreedState(allAssented);
+    if (allAssented) {
+      const validInstId = valid.installation_id || getPersistedInstallationId() || installationId;
+      setInstallationId(validInstId);
+      try {
+        localStorage.setItem(INSTALLATION_KEY, validInstId);
+      } catch {}
+    } else {
+      try {
+        localStorage.removeItem(INSTALLATION_KEY);
+        localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+      } catch {}
+    }
+    setIsSyntheticSession(valid.isSyntheticSession || false);
+    sequenceRef.current = valid.sequence || 0;
+    setScreen(valid.screen);
     flash("Sessão retomada do armazenamento local.");
   }
 
@@ -1215,13 +1559,19 @@ export default function StudentPage() {
   function submitPre() {
     requestNotificationPermission();
 
+    if (assentAgreedRef.current) {
+      try {
+        localStorage.setItem(INSTALLATION_KEY, installationId);
+      } catch {}
+    }
+
     emitTimeline("session_started", {
       activity_stage: "1. Introdução",
       details: {
         runtime: "browser_pwa",
-        team_role: teamRole,
+        team_role: teamSize === 1 ? "individual" : "group",
         ethical_assent: assentAgreed,
-        participant_count: teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2),
+        participant_count: teamSize,
         expected_checkpoints: []
       }
     });
@@ -1236,7 +1586,7 @@ export default function StudentPage() {
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
     setActivityStage(2);
-    void notifyBridgeSession(sessionId, activityStart, []);
+    void notifyBridgeSession(sessionId, activityStart, [], assentAgreedRef.current);
     emitTimeline("phase_completed", { activity_stage: "1. Início" });
     emitTimeline("phase_transition", {
       activity_stage: "2. Oficina Prática",
@@ -1251,69 +1601,84 @@ export default function StudentPage() {
     setScreen("activity");
   }
 
-  function handleDeclinePre() {
-    setAssentAgreed(false);
-    emitTimeline("session_started", {
-      activity_stage: "1. Início",
-      details: {
-        runtime: "browser_pwa",
-        research_declined: true,
-        participant_count: teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2),
-        expected_checkpoints: []
-      }
-    });
-    emitResponse("pre", {
-      activity_stage: "1. Início",
-      response_status: "declined"
-    });
+  async function handleDeclinePre() {
+    try {
+      await purgeSession(sessionId);
+    } catch (e) {
+      console.warn("Erro ao expurgar sessão no IndexedDB:", e);
+    }
+    try {
+      localStorage.removeItem(INSTALLATION_KEY);
+      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+    } catch {}
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    await resetBridgeSession(sessionId, { reason: "ethical_refusal", purge: true });
+    setIsFreeMode(true);
+    assentAgreedRef.current = false;
+    setAssentAgreedState(false);
+    setTimeline([]);
+    setResponses([]);
+    setSpikeTelemetry(null);
+    setResumable(null);
     const activityStart = Date.now();
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
     setActivityStage(2);
-    void notifyBridgeSession(sessionId, activityStart, []);
-    emitTimeline("phase_completed", { activity_stage: "1. Início" });
-    emitTimeline("phase_transition", {
-      activity_stage: "2. Oficina Prática",
-      details: { runtime: "browser_pwa", from_stage: "1. Início", to_stage: "2. Oficina Prática" }
-    });
-    emitTimeline("activity_started", {
-      activity_stage: "2. Oficina Prática",
-      details: { runtime: "browser_pwa", free_pedagogical_mode: true }
-    });
-    setResumable(null);
     setScreen("activity");
-    flash("Oficina liberada em modo livre (sem questionários).");
+    flash("Oficina liberada em modo livre (sem questionários e sem coleta de dados).");
   }
 
   function handleAdvanceToFinalChallenge() {
-    emitTimeline("phase_completed", {
-      activity_stage: "2. Oficina Prática",
-      details: { elapsed_ms: elapsedMs }
-    });
-    emitTimeline("phase_transition", {
-      activity_stage: "3. Desafio da Corrida",
-      details: {
-        runtime: "browser_pwa",
-        from_stage: "2. Oficina Prática",
-        to_stage: "3. Desafio da Corrida",
-        elapsed_ms: elapsedMs
-      }
-    });
-    void captureSpikeTelemetry("final_challenge_start");
+    if (!isFreeMode && assentAgreedRef.current) {
+      emitTimeline("phase_completed", {
+        activity_stage: "2. Oficina Prática",
+        details: { elapsed_ms: elapsedMs }
+      });
+      emitTimeline("phase_transition", {
+        activity_stage: "3. Desafio da Corrida",
+        details: {
+          runtime: "browser_pwa",
+          from_stage: "2. Oficina Prática",
+          to_stage: "3. Desafio da Corrida",
+          elapsed_ms: elapsedMs
+        }
+      });
+      void captureSpikeTelemetry("final_challenge_start");
+    }
     setScreen("post");
     flash("Avançado para o Desafio da Corrida & Avaliação Final.");
   }
 
-  function submitPost(answersOverride = null) {
-    const answers = answersOverride || postAnswers;
-    emitResponse("post", {
+  async function submitPost(answersOverride = null) {
+    isSubmittingRef.current = true;
+    const isSyntheticEvent = answersOverride && (
+      answersOverride.nativeEvent ||
+      typeof answersOverride.preventDefault === "function" ||
+      typeof answersOverride.stopPropagation === "function" ||
+      Boolean(answersOverride.target)
+    );
+    const answers = (!isSyntheticEvent && answersOverride) ? answersOverride : postAnswers;
+
+    if (!assentAgreedRef.current || isFreeMode) {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      setScreen("finished");
+      return;
+    }
+
+    const finalEvents = [];
+
+    const missionPerf = answers.raceResult === "success" ? 1 : (answers.raceResult === "partial" || answers.raceResult === "tech_failure" ? 0 : null);
+    const primaryIssue = answers.raceResult === "tech_failure" ? "technical" : (answers.raceResult === "not_observed" ? "not_observed" : "none");
+
+    const resolvedExperiences = resolveMemberExperiences(teamSize, memberAssents, answers.memberExperiences);
+
+    finalEvents.push(emitResponse("post", {
       activity_stage: "3. Desafio da Corrida",
-      mission_performance: answers.raceResult === "success" ? 1 : 0,
-      primary_issue: answers.raceResult === "tech_failure" ? "technical" : "none",
+      mission_performance: missionPerf,
+      primary_issue: primaryIssue,
       knowledge_answers: {
         target_constructs: ["experiencia_participacao", "resultados_praticos_bancada", "apoio_instrutor"],
-        experience_rating: answers.experienceSkipped ? null : answers.experience,
-        experience_skipped: Boolean(answers.experienceSkipped),
+        member_experiences: resolvedExperiences,
         race_result: answers.raceResult,
         race_time_seconds: answers.raceTimeSeconds ? parseFloat(answers.raceTimeSeconds) : null,
         assembly_result: answers.assemblyResult,
@@ -1321,31 +1686,36 @@ export default function StudentPage() {
         support_level: answers.supportLevel
       },
       response_status: "completed"
-    });
+    }));
 
-    if (answers.experience !== null || answers.experienceSkipped) {
-      emitTimeline("experience_recorded", {
-        activity_stage: "3. Desafio da Corrida",
-        details: {
-          runtime: "browser_pwa",
-          rating: answers.experience,
-          skipped: Boolean(answers.experienceSkipped)
-        }
-      });
+    // Eixo 1: Registra a experiência individual de cada aluno da bancada que avaliou ou optou por não responder a avaliação
+    for (const member of resolvedExperiences) {
+      if (member.rating !== null || member.skipped) {
+        finalEvents.push(emitTimeline("experience_recorded", {
+          activity_stage: "3. Desafio da Corrida",
+          participant_id: `${groupId.slice(0, 8).toUpperCase()}-MEMBER-${member.memberIndex}`,
+          details: {
+            runtime: "browser_pwa",
+            member_index: member.memberIndex,
+            rating: member.rating,
+            skipped: Boolean(member.skipped)
+          }
+        }));
+      }
     }
 
     if (answers.raceResult !== null) {
-      emitTimeline("race_recorded", {
+      finalEvents.push(emitTimeline("race_recorded", {
         activity_stage: "3. Desafio da Corrida",
         details: {
           runtime: "browser_pwa",
           race_result: answers.raceResult,
           race_time_seconds: answers.raceTimeSeconds ? parseFloat(answers.raceTimeSeconds) : null
         }
-      });
+      }));
     }
 
-    emitTimeline("rubric_completed", {
+    finalEvents.push(emitTimeline("rubric_completed", {
       activity_stage: "3. Desafio da Corrida",
       details: {
         runtime: "browser_pwa",
@@ -1353,15 +1723,22 @@ export default function StudentPage() {
         quiz_completed: answers.quizCompleted,
         support_level: answers.supportLevel
       }
-    });
+    }));
 
-    emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" });
-    emitTimeline("session_completed", {
+    finalEvents.push(emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" }));
+
+    // Ordem estrita: a telemetria terminal entra ANTES do encerramento final da sessão
+    const { metrics: rawFinalMetrics, event: finalTelemetryEvent } = await captureSpikeTelemetry("session_completed");
+    if (finalTelemetryEvent) {
+      finalEvents.push(finalTelemetryEvent);
+    }
+
+    finalEvents.push(emitTimeline("session_completed", {
       activity_stage: "completed",
       details: { runtime: "browser_pwa" }
-    });
+    }));
 
-    void captureSpikeTelemetry("session_completed");
+    const { effectiveTelemetry, technicalStatus } = validateFinalTelemetry(rawFinalMetrics, spikeTelemetry);
 
     const fullSession = {
       session_id: sessionId,
@@ -1376,30 +1753,56 @@ export default function StudentPage() {
       started_at: new Date(startedAt).toISOString(),
       completed_at: new Date().toISOString(),
       duration_seconds: Math.round(elapsedMs / 1000),
-      team_role: teamRole,
+      group_size: teamSize,
+      team_size: teamSize,
+      team_role: teamSize === 1 ? "individual" : "group",
       status: "completed",
       pre_answers: preAnswers,
       post_answers: answers,
-      events: [...timeline, ...responses],
-      spike_telemetry: spikeTelemetry
+      events: [...timeline, ...responses, ...finalEvents],
+      spike_telemetry: effectiveTelemetry,
+      telemetry_status: technicalStatus
     };
-    void notifyBridgeSessionSave(fullSession);
+
+    await notifyBridgeSessionSave(fullSession, assentAgreedRef.current);
+    await saveSession(fullSession).catch(() => {});
 
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     void runSync(true);
     setScreen("finished");
   }
 
-  function handleDeclinePost() {
-    emitResponse("post", {
-      activity_stage: "4. Desafio Final",
+  async function handleDeclinePost() {
+    isSubmittingRef.current = true;
+    if (!assentAgreedRef.current || isFreeMode) {
+      try {
+        localStorage.removeItem(INSTALLATION_KEY);
+        localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+      } catch {}
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      setScreen("finished");
+      return;
+    }
+
+    const finalEvents = [];
+    finalEvents.push(emitResponse("post", {
+      activity_stage: "3. Desafio da Corrida",
       response_status: "declined"
-    });
-    emitTimeline("phase_completed", { activity_stage: "4. Desafio Final" });
-    emitTimeline("session_completed", {
+    }));
+    finalEvents.push(emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" }));
+
+    // Ordem estrita: a telemetria terminal entra ANTES do encerramento final da sessão
+    const { metrics: rawFinalMetrics, event: finalTelemetryEvent } = await captureSpikeTelemetry("session_completed");
+    if (finalTelemetryEvent) {
+      finalEvents.push(finalTelemetryEvent);
+    }
+
+    finalEvents.push(emitTimeline("session_completed", {
       activity_stage: "completed",
       details: { runtime: "browser_pwa", response_status: "declined" }
-    });
+    }));
+
+    const { effectiveTelemetry, technicalStatus } = validateFinalTelemetry(rawFinalMetrics, spikeTelemetry);
 
     const fullSession = {
       session_id: sessionId,
@@ -1414,36 +1817,98 @@ export default function StudentPage() {
       started_at: new Date(startedAt).toISOString(),
       completed_at: new Date().toISOString(),
       duration_seconds: Math.round(elapsedMs / 1000),
-      team_role: teamRole,
+      group_size: teamSize,
+      team_size: teamSize,
+      team_role: teamSize === 1 ? "individual" : "group",
       status: "declined",
-      events: [...timeline, ...responses]
+      pre_answers: preAnswers,
+      post_answers: postAnswers,
+      events: [...timeline, ...responses, ...finalEvents],
+      spike_telemetry: effectiveTelemetry,
+      telemetry_status: technicalStatus
     };
-    void notifyBridgeSessionSave(fullSession);
+
+    await notifyBridgeSessionSave(fullSession, assentAgreedRef.current);
+    await saveSession(fullSession).catch(() => {});
 
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     void runSync(true);
     setScreen("finished");
   }
 
-  function resetToPre() {
+  async function prepareNextWorkshop() {
+    isSubmittingRef.current = false;
+    try {
+      localStorage.removeItem(INSTALLATION_KEY);
+      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+    } catch {}
     localStorage.removeItem(ACTIVE_SESSION_KEY);
-    void resetBridgeSession();
+    await resetBridgeSession(sessionId, { reason: "prepare_next", purge: false, completed: true });
     const nextSessionId = createUuid();
     const nextGroupId = createUuid();
     setSessionId(nextSessionId);
     setGroupId(nextGroupId);
+    setInstallationId(createUuid());
     setStartedAt(Date.now());
     setActivityStartedAt(null);
     setElapsedMs(0);
-    setActivityStage(2);
+    setActivityStage(1);
     setTimeline([]);
     setResponses([]);
     setSpikeTelemetry(null);
-    setHelpActive(false);
     isSyntheticSessionRef.current = false;
     setIsSyntheticSession(false);
+    setIsFreeMode(false);
     setPreAnswers(PRE_DEFAULT);
     setPostAnswers(POST_DEFAULT);
+    assentAgreedRef.current = false;
+    setAssentAgreedState(false);
+    const initialAssents = { 1: false, 2: false, 3: false, 4: false };
+    memberAssentsRef.current = initialAssents;
+    setMemberAssentsState(initialAssents);
+    setTeamSize(2);
+    sequenceRef.current = 0;
+    setResumable(null);
+    setScreen("pre");
+    flash("Nova oficina preparada! Pronto para a próxima bancada.");
+  }
+
+  async function resetToPre() {
+    isSubmittingRef.current = false;
+    try {
+      await purgeSession(sessionId);
+    } catch (e) {
+      console.warn("Erro ao expurgar sessão no IndexedDB:", e);
+    }
+    try {
+      localStorage.removeItem(INSTALLATION_KEY);
+      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+    } catch {}
+    localStorage.removeItem(ACTIVE_SESSION_KEY);
+    await resetBridgeSession(sessionId, { reason: "abandonment", purge: true });
+    const nextSessionId = createUuid();
+    const nextGroupId = createUuid();
+    setSessionId(nextSessionId);
+    setGroupId(nextGroupId);
+    setInstallationId(createUuid());
+    setStartedAt(Date.now());
+    setActivityStartedAt(null);
+    setElapsedMs(0);
+    setActivityStage(1);
+    setTimeline([]);
+    setResponses([]);
+    setSpikeTelemetry(null);
+    isSyntheticSessionRef.current = false;
+    setIsSyntheticSession(false);
+    setIsFreeMode(false);
+    setPreAnswers(PRE_DEFAULT);
+    setPostAnswers(POST_DEFAULT);
+    assentAgreedRef.current = false;
+    setAssentAgreedState(false);
+    const initialAssents = { 1: false, 2: false, 3: false, 4: false };
+    memberAssentsRef.current = initialAssents;
+    setMemberAssentsState(initialAssents);
+    setTeamSize(2);
     sequenceRef.current = 0;
     setResumable(null);
     setScreen("pre");
@@ -1451,6 +1916,10 @@ export default function StudentPage() {
   }
 
   function handleConfirmReset() {
+    if (screen === "finished") {
+      prepareNextWorkshop();
+      return;
+    }
     const confirmed = window.confirm(
       "Deseja realmente reiniciar a oficina do zero?\n\nIsso apagará a sessão atual neste computador e iniciará uma nova oficina limpa."
     );
@@ -1512,30 +1981,36 @@ export default function StudentPage() {
   }
 
   function downloadSession() {
-    const payload = JSON.stringify(
-      {
-        session_id: sessionId,
-        group_id: groupId,
-        installation_id: installationId,
-        site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
-        regional_hub: context.regional || "Nordeste",
-        school_code: context.school || "geral",
-        workshop_code: context.workshop || "oficina-spike",
-        class_code: context.class || "turma-geral",
-        activity_id: context.activity || "atividade-01-spike",
-        started_at: new Date(startedAt).toISOString(),
-        completed_at: new Date().toISOString(),
-        duration_seconds: Math.round(elapsedMs / 1000),
-        team_role: teamRole,
-        status: screen === "finished" ? "completed" : "in_progress",
-        pre_answers: preAnswers,
-        post_answers: postAnswers,
-        spike_telemetry: spikeTelemetry,
-        events: allEvents
-      },
-      null,
-      2
-    );
+    const rawData = {
+      session_id: sessionId,
+      group_id: groupId,
+      installation_id: installationId,
+      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+      regional_hub: context.regional || "Nordeste",
+      school_code: context.school || "geral",
+      workshop_code: context.workshop || "oficina-spike",
+      class_code: context.class || "turma-geral",
+      activity_id: context.activity || "atividade-01-spike",
+      started_at: new Date(startedAt).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_seconds: Math.round(elapsedMs / 1000),
+      team_size: teamSize,
+      team_role: teamSize === 1 ? "individual" : "group",
+      status: screen === "finished" ? "completed" : "in_progress",
+      pre_answers: preAnswers,
+      post_answers: postAnswers,
+      spike_telemetry: spikeTelemetry,
+      telemetry_status: spikeTelemetry ? (spikeTelemetry.project_saved !== false ? "ok" : "project_not_saved") : "no_telemetry",
+      events: allEvents
+    };
+
+    const validated = downloadSessionData(rawData, { isFreeMode, assentAgreed });
+    if (!validated) {
+      flash("Exportação de dados bloqueada no Modo Livre ou sem assentimento ético.");
+      return;
+    }
+
+    const payload = JSON.stringify(validated, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -1607,7 +2082,7 @@ export default function StudentPage() {
   }, []);
 
   useEffect(() => {
-    if (screen !== "activity" || !activityStartedAt) return undefined;
+    if (screen !== "activity" || !activityStartedAt || isFreeMode || !assentAgreedRef.current) return undefined;
     const tick = () => {
       const nextElapsed = Math.max(0, Date.now() - activityStartedAt);
       setElapsedMs(nextElapsed);
@@ -1617,6 +2092,7 @@ export default function StudentPage() {
 
     // Coleta silenciosa e periódica da telemetria do LEGO SPIKE a cada 10 segundos
     const pollSpike = async () => {
+      if (isFreeMode || !assentAgreedRef.current) return;
       try {
         const metrics = await fetchBridgeSpikeMetrics();
         if (metrics && metrics.project_saved !== false) {
@@ -1653,13 +2129,14 @@ export default function StudentPage() {
       window.clearTimeout(firstCheck);
       window.clearInterval(spikeInterval);
     };
-  }, [activityStartedAt, screen]);
+  }, [activityStartedAt, screen, isFreeMode, assentAgreed]);
 
   useEffect(() => {
-    if (screen === "finished") return;
+    if (screen === "finished" || screen === "pre" || !assentAgreedRef.current || isFreeMode || isSubmittingRef.current) return;
     const snapshot = {
       sessionId,
       groupId,
+      installation_id: installationId,
       context,
       startedAt,
       activityStartedAt,
@@ -1671,15 +2148,19 @@ export default function StudentPage() {
       spikeTelemetry,
       preAnswers,
       postAnswers,
-      teamRole,
+      teamSize,
+      group_size: teamSize,
+      team_size: teamSize,
+      team_role: teamSize === 1 ? "individual" : "group",
       currentRole,
       assentAgreed,
+      memberAssents: memberAssentsRef.current,
       sequence: sequenceRef.current,
       savedAt: new Date().toISOString()
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
     void saveSession({ session_id: sessionId, status: "in_progress", ...snapshot }).catch(() => {});
-  }, [activityStartedAt, activityStage, assentAgreed, context, currentRole, elapsedMs, groupId, postAnswers, preAnswers, responses, screen, sessionId, spikeTelemetry, startedAt, teamRole, timeline]);
+  }, [activityStartedAt, activityStage, assentAgreed, context, currentRole, elapsedMs, groupId, installationId, isFreeMode, memberAssents, postAnswers, preAnswers, responses, screen, sessionId, spikeTelemetry, startedAt, teamSize, timeline]);
 
   let content;
 
@@ -1692,10 +2173,11 @@ export default function StudentPage() {
         setAnswers={setPreAnswers}
         onSubmit={submitPre}
         onDecline={handleDeclinePre}
-        teamRole={teamRole}
-        setTeamRole={setTeamRole}
+        teamSize={teamSize}
+        setTeamSize={handleTeamSizeChange}
         assentAgreed={assentAgreed}
-        setAssentAgreed={setAssentAgreed}
+        memberAssents={memberAssents}
+        setMemberAssents={setMemberAssents}
       />
     );
   } else if (screen === "activity") {
@@ -1706,7 +2188,8 @@ export default function StudentPage() {
         spikeTelemetry={spikeTelemetry}
         onAdvanceToFinalChallenge={handleAdvanceToFinalChallenge}
         assentAgreed={assentAgreed}
-        onRefreshTelemetry={() => captureSpikeTelemetry("manual_refresh")}
+        isFreeMode={isFreeMode}
+        onRefreshTelemetry={() => void captureSpikeTelemetry("manual_refresh")}
       />
     );
   } else if (screen === "post") {
@@ -1716,10 +2199,21 @@ export default function StudentPage() {
         setAnswers={setPostAnswers}
         onSubmit={submitPost}
         onDecline={handleDeclinePost}
+        teamSize={teamSize}
+        memberAssents={memberAssents}
       />
     );
+  } else if (isFreeMode || !assentAgreed) {
+    content = <FreeModeFinishedScreen onRestart={prepareNextWorkshop} />;
   } else {
-    content = <FinishedScreen pendingCount={pendingCount} onDownload={downloadSession} onRestart={resetToPre} />;
+    content = (
+      <FinishedScreen
+        pendingCount={pendingCount}
+        quarantinedCount={quarantinedCount}
+        onDownload={downloadSession}
+        onRestart={prepareNextWorkshop}
+      />
+    );
   }
 
   return (
@@ -1735,8 +2229,8 @@ export default function StudentPage() {
           </span>
         </div>
         <div className="topbar__notice">
-          <span>{labMode ? "LAB" : "OFFLINE"}</span>
-          <p>{labMode ? "Modo acelerado para testes" : "Sem burocracia · telemetria automática do SPIKE"}</p>
+          <span>{isFreeMode ? "MODO LIVRE" : (labMode ? "LAB" : "OFFLINE")}</span>
+          <p>{isFreeMode ? "Zero coleta de dados · Uso livre do robô" : (labMode ? "Modo acelerado para testes" : "Sem burocracia · telemetria automática do SPIKE")}</p>
         </div>
         <div className="topbar__controls">
           <button
@@ -1795,9 +2289,11 @@ export default function StudentPage() {
             <button className="inst-btn" onClick={autoFillCurrentStep} type="button">
               ✨ Preencher teste
             </button>
-            <button className="inst-btn" onClick={downloadSession} type="button" title="Baixar arquivo JSON desta oficina">
-              💾 Exportar (.json)
-            </button>
+            {!isFreeMode && assentAgreed ? (
+              <button className="inst-btn" onClick={downloadSession} type="button" title="Baixar arquivo JSON desta oficina">
+                💾 Exportar (.json)
+              </button>
+            ) : null}
             <button className="inst-btn inst-btn--accent" onClick={syncNow} type="button">
               ☁️ Sincronizar Nuvem
             </button>
@@ -1823,8 +2319,12 @@ export default function StudentPage() {
           <div className="stage-toolbar">
             <div>
               <span className={`connection-dot ${online ? "is-online" : ""}`} />
-              <strong>{online ? (pendingCount === 0 ? "Dispositivo Conectado · Sincronizado" : "Dispositivo Conectado · Enviando dados...") : "Modo Offline (salvando localmente)"}</strong>
-              <small>{pendingCount === 0 ? "Todos os registros salvos na nuvem da pesquisa" : `${pendingCount} registro(s) pendente(s) de envio`}</small>
+              <strong>{quarantinedCount > 0 ? "Atenção · Registros em Quarentena" : (online ? "Dispositivo Pronto · Armazenamento Local Seguro" : "Modo Offline (salvando localmente)")}</strong>
+              <small>
+                {quarantinedCount > 0
+                  ? `${quarantinedCount} registro(s) em quarentena local para análise do pesquisador`
+                  : `${pendingCount} registro(s) salvos no dispositivo (offline-first)`}
+              </small>
             </div>
             {labMode ? (
               <>

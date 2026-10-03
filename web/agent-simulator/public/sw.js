@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "pulselab-test-v2-";
-const CACHE_NAME = CACHE_PREFIX + "2.0.0-test.1";
+const CACHE_NAME = CACHE_PREFIX + "2.1.0";
 const SHELL = [
   "/alunos/",
   "/alunos/index.html",
@@ -10,6 +10,13 @@ const SHELL = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
+      // Remove caches anteriores já na instalação para liberar armazenamento
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_NAME)
+          .map((k) => caches.delete(k)),
+      );
       const cache = await caches.open(CACHE_NAME);
       await cache.addAll(SHELL);
       const response = await fetch("/alunos/index.html", { cache: "reload" });
