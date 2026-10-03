@@ -47,10 +47,9 @@ const POST_DEFAULT = {
 };
 
 const FLOW_STEPS = [
-  { id: 1, label: "Introdução" },
-  { id: 2, label: "Montagem" },
-  { id: 3, label: "Experimentação" },
-  { id: 4, label: "Desafio Final" }
+  { id: 1, label: "Início" },
+  { id: 2, label: "Oficina com Robô" },
+  { id: 3, label: "Desafio & Avaliação" }
 ];
 
 const EXPERIENCE_OPTIONS = [
@@ -220,12 +219,10 @@ function showWebNotification(mark) {
   }
 }
 
-function stepForState(screen, activityStage) {
+function stepForState(screen) {
   if (screen === "pre") return 1;
-  if (screen === "activity") {
-    return activityStage === 3 ? 3 : 2;
-  }
-  return 4;
+  if (screen === "activity") return 2;
+  return 3;
 }
 
 function readJson(key, fallback) {
@@ -447,7 +444,7 @@ function PreScreen({
   const ready = !assentAgreed || answers.experience !== null;
   return (
     <Card
-      eyebrow="Oficina de Robótica · Início da Bancada"
+      eyebrow="Etapa 1 de 3 · Início da Bancada"
       title="Como vocês chegam para esta oficina?"
       description="Respondam rapidamente para caracterizar a bancada antes de começar a montar e programar o robô LEGO SPIKE."
       footer={
@@ -545,8 +542,6 @@ function PreScreen({
 }
 
 function ActivityScreen({
-  activityStage,
-  onChangeStage,
   elapsedMs,
   labMode,
   spikeTelemetry,
@@ -554,80 +549,53 @@ function ActivityScreen({
   assentAgreed,
   onRefreshTelemetry
 }) {
-  const isMontagem = activityStage === 2;
+  const hasSpikeCode = Boolean(spikeTelemetry && (spikeTelemetry.executable_blocks > 0 || spikeTelemetry.project_saved));
 
   return (
     <Card
-      eyebrow={isMontagem ? "Etapa 2 de 4 · Montagem Guiada" : "Etapa 3 de 4 · Experimentação & Circuito"}
-      title={isMontagem ? "Construção do Carrinho Robô" : "Testes, Ajustes e Programação"}
-      description={
-        isMontagem
-          ? "Montem o carrinho usando as peças LEGO conforme o roteiro guiado, alinhando as rodas e conectando os motores."
-          : "Conectem o robô via Bluetooth, programem os blocos e testem o percurso na pista do circuito."
-      }
+      eyebrow="Etapa 2 de 3 · Oficina Prática com Robô"
+      title="Construção, Programação & Testes do Robô"
+      description="Usem o kit LEGO SPIKE Prime e o aplicativo oficial em tela cheia para montar, programar e testar o carrinho no circuito."
       footer={
         <div className="action-row" style={{ justifyContent: "space-between", width: "100%", alignItems: "center" }}>
           <span className="footer-hint" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
             {assentAgreed ? "⏱️ Coleta contínua e silenciosa em segundo plano." : "Oficina livre sem coleta de dados."}
           </span>
-          {isMontagem ? (
-            <button
-              className="button button--primary"
-              onClick={() => onChangeStage(3)}
-              type="button"
-            >
-              Avançar para Experimentação (Testes) ➔
-            </button>
-          ) : (
-            <button
-              className="button button--primary"
-              onClick={onAdvanceToFinalChallenge}
-              type="button"
-            >
-              🏁 Avançar para Desafio Final (Corrida)
-            </button>
-          )}
+          <button
+            className="button button--primary"
+            onClick={onAdvanceToFinalChallenge}
+            type="button"
+          >
+            🏁 Finalizar Oficina & Ir para Corrida ➔
+          </button>
         </div>
       }
     >
-      <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
-        <button
-          type="button"
-          className={`scale-option ${isMontagem ? "is-selected" : ""}`}
-          style={{ padding: "8px 14px", minHeight: "auto", flex: 1, textAlign: "left" }}
-          onClick={() => onChangeStage(2)}
-        >
-          <strong style={{ fontSize: "0.9rem" }}>2. Montagem do Robô</strong>
-          <small style={{ fontSize: "0.74rem", display: "block" }}>Peças LEGO & alinhamento mecânico</small>
-        </button>
-        <button
-          type="button"
-          className={`scale-option ${!isMontagem ? "is-selected" : ""}`}
-          style={{ padding: "8px 14px", minHeight: "auto", flex: 1, textAlign: "left" }}
-          onClick={() => onChangeStage(3)}
-        >
-          <strong style={{ fontSize: "0.9rem" }}>3. Experimentação no Circuito</strong>
-          <small style={{ fontSize: "0.74rem", display: "block" }}>Programação & testes de pista</small>
-        </button>
-      </div>
-
       <div className="activity-timer" aria-live="polite">
-        <span>Tempo de oficina</span>
+        <span>Tempo total de oficina</span>
         <strong>{formatClock(elapsedMs)}</strong>
-        <small>Etapa atual: {isMontagem ? "Montagem guiada" : "Testes no circuito"}</small>
+        <small>Coleta silenciosa em segundo plano · Sem interrupções</small>
       </div>
 
-      <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "12px", padding: "12px 16px", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+      <div style={{ background: hasSpikeCode ? "rgba(16, 185, 129, 0.08)" : "rgba(56, 189, 248, 0.08)", border: `1px solid ${hasSpikeCode ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`, borderRadius: "12px", padding: "14px 18px", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
         <div>
-          <span style={{ fontSize: "0.85rem", color: "#6ee7b7" }}>
-            🤖 <strong>LEGO SPIKE Conectado:</strong> {spikeTelemetry ? `${spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: ${spikeTelemetry.inferred_stage || "em edição"}` : "Aguardando sincronização do projeto (.llsp3)"}
+          <span style={{ fontSize: "0.88rem", color: hasSpikeCode ? "#6ee7b7" : "#7dd3fc" }}>
+            🤖 <strong>Telemetria LEGO SPIKE:</strong>{" "}
+            {hasSpikeCode
+              ? `${spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: ${spikeTelemetry.inferred_stage || "em edição"} · ${spikeTelemetry.file_name || "projeto .llsp3"}`
+              : "Aguardando projeto salvo no app LEGO SPIKE (.llsp3)"}
           </span>
+          {hasSpikeCode && (
+            <small style={{ display: "block", color: "rgba(255, 255, 255, 0.6)", marginTop: "4px", fontSize: "0.78rem" }}>
+              Início da programação detectado automaticamente · Coletando deltas de código em silêncio
+            </small>
+          )}
         </div>
         <button
           type="button"
           className="inst-btn"
           onClick={onRefreshTelemetry}
-          style={{ fontSize: "0.78rem", padding: "4px 10px", background: "rgba(16, 185, 129, 0.2)", color: "#a7f3d0", borderColor: "rgba(16, 185, 129, 0.4)" }}
+          style={{ fontSize: "0.78rem", padding: "4px 10px", background: "rgba(255, 255, 255, 0.08)", color: "#e2e8f0", borderColor: "rgba(255, 255, 255, 0.2)" }}
         >
           🔄 Atualizar telemetria
         </button>
@@ -636,18 +604,18 @@ function ActivityScreen({
       <div className="activity-instructions">
         <article>
           <span>1</span>
-          <strong>Foco no Robô LEGO</strong>
-          <p>Usem o app oficial LEGO SPIKE em tela cheia para programar e testar o carrinho na pista.</p>
+          <strong>Foco Total no Robô LEGO</strong>
+          <p>Trabalhem na montagem física e abram o app oficial LEGO SPIKE em tela cheia para programar e testar.</p>
         </article>
         <article>
           <span>2</span>
-          <strong>Telemetria Silenciosa</strong>
-          <p>O PulseLab acompanha o tempo e o progresso em segundo plano, sem travar nem interromper a oficina.</p>
+          <strong>Telemetria 100% Silenciosa</strong>
+          <p>O PulseLab acompanha o tempo e detecta os blocos de código em segundo plano, sem travar nem pedir confirmações.</p>
         </article>
         <article>
           <span>3</span>
-          <strong>Desafio Final</strong>
-          <p>Ao terminar os testes na pista, voltem a esta tela para registrar o resultado da corrida e a avaliação.</p>
+          <strong>Desafio Final & Corrida</strong>
+          <p>Ao terminar a montagem e os testes, cliquem no botão abaixo para registrar a corrida na pista e a avaliação final.</p>
         </article>
       </div>
     </Card>
@@ -663,7 +631,7 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
 
   return (
     <Card
-      eyebrow="Etapa 4 de 4 · Desafio Final & Encerramento"
+      eyebrow="Etapa 3 de 3 · Desafio da Corrida & Avaliação Final"
       title="Desafio da Corrida & Avaliação Final"
       description="Avaliação estruturada em dois eixos independentes: a experiência subjetiva dos alunos e os resultados objetivos da bancada na pista."
       footer={
@@ -1269,16 +1237,16 @@ export default function StudentPage() {
     setElapsedMs(0);
     setActivityStage(2);
     void notifyBridgeSession(sessionId, activityStart, []);
-    emitTimeline("phase_completed", { activity_stage: "1. Introdução" });
+    emitTimeline("phase_completed", { activity_stage: "1. Início" });
     emitTimeline("phase_transition", {
-      activity_stage: "2. Montagem",
-      details: { runtime: "browser_pwa", from_stage: "1. Introdução", to_stage: "2. Montagem" }
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", from_stage: "1. Início", to_stage: "2. Oficina Prática" }
     });
     emitTimeline("activity_started", {
-      activity_stage: "2. Montagem",
-      details: { runtime: "browser_pwa", stage: "montagem" }
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", stage: "pratica" }
     });
-    void captureSpikeTelemetry("montagem_start");
+    void captureSpikeTelemetry("pratica_start");
     setResumable(null);
     setScreen("activity");
   }
@@ -1286,7 +1254,7 @@ export default function StudentPage() {
   function handleDeclinePre() {
     setAssentAgreed(false);
     emitTimeline("session_started", {
-      activity_stage: "1. Introdução",
+      activity_stage: "1. Início",
       details: {
         runtime: "browser_pwa",
         research_declined: true,
@@ -1295,7 +1263,7 @@ export default function StudentPage() {
       }
     });
     emitResponse("pre", {
-      activity_stage: "1. Introdução",
+      activity_stage: "1. Início",
       response_status: "declined"
     });
     const activityStart = Date.now();
@@ -1303,13 +1271,13 @@ export default function StudentPage() {
     setElapsedMs(0);
     setActivityStage(2);
     void notifyBridgeSession(sessionId, activityStart, []);
-    emitTimeline("phase_completed", { activity_stage: "1. Introdução" });
+    emitTimeline("phase_completed", { activity_stage: "1. Início" });
     emitTimeline("phase_transition", {
-      activity_stage: "2. Montagem",
-      details: { runtime: "browser_pwa", from_stage: "1. Introdução", to_stage: "2. Montagem" }
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", from_stage: "1. Início", to_stage: "2. Oficina Prática" }
     });
     emitTimeline("activity_started", {
-      activity_stage: "2. Montagem",
+      activity_stage: "2. Oficina Prática",
       details: { runtime: "browser_pwa", free_pedagogical_mode: true }
     });
     setResumable(null);
@@ -1317,47 +1285,29 @@ export default function StudentPage() {
     flash("Oficina liberada em modo livre (sem questionários).");
   }
 
-  function handleTransitionStage(nextStage) {
-    const fromLabel = activityStage === 2 ? "2. Montagem" : "3. Experimentação";
-    const toLabel = nextStage === 3 ? "3. Experimentação" : "2. Montagem";
-    setActivityStage(nextStage);
-    emitTimeline("phase_transition", {
-      activity_stage: toLabel,
-      details: {
-        runtime: "browser_pwa",
-        from_stage: fromLabel,
-        to_stage: toLabel,
-        elapsed_ms: elapsedMs
-      }
-    });
-    void captureSpikeTelemetry(`stage_${nextStage}`);
-    flash(`Etapa alterada: ${toLabel}`);
-  }
-
   function handleAdvanceToFinalChallenge() {
-    const fromLabel = activityStage === 3 ? "3. Experimentação" : "2. Montagem";
     emitTimeline("phase_completed", {
-      activity_stage: fromLabel,
+      activity_stage: "2. Oficina Prática",
       details: { elapsed_ms: elapsedMs }
     });
     emitTimeline("phase_transition", {
-      activity_stage: "4. Desafio Final",
+      activity_stage: "3. Desafio da Corrida",
       details: {
         runtime: "browser_pwa",
-        from_stage: fromLabel,
-        to_stage: "4. Desafio Final",
+        from_stage: "2. Oficina Prática",
+        to_stage: "3. Desafio da Corrida",
         elapsed_ms: elapsedMs
       }
     });
     void captureSpikeTelemetry("final_challenge_start");
     setScreen("post");
-    flash("Avançado para o Desafio Final (Corrida & Encerramento).");
+    flash("Avançado para o Desafio da Corrida & Avaliação Final.");
   }
 
   function submitPost(answersOverride = null) {
     const answers = answersOverride || postAnswers;
     emitResponse("post", {
-      activity_stage: "4. Desafio Final",
+      activity_stage: "3. Desafio da Corrida",
       mission_performance: answers.raceResult === "success" ? 1 : 0,
       primary_issue: answers.raceResult === "tech_failure" ? "technical" : "none",
       knowledge_answers: {
@@ -1375,7 +1325,7 @@ export default function StudentPage() {
 
     if (answers.experience !== null || answers.experienceSkipped) {
       emitTimeline("experience_recorded", {
-        activity_stage: "4. Desafio Final",
+        activity_stage: "3. Desafio da Corrida",
         details: {
           runtime: "browser_pwa",
           rating: answers.experience,
@@ -1386,7 +1336,7 @@ export default function StudentPage() {
 
     if (answers.raceResult !== null) {
       emitTimeline("race_recorded", {
-        activity_stage: "4. Desafio Final",
+        activity_stage: "3. Desafio da Corrida",
         details: {
           runtime: "browser_pwa",
           race_result: answers.raceResult,
@@ -1396,7 +1346,7 @@ export default function StudentPage() {
     }
 
     emitTimeline("rubric_completed", {
-      activity_stage: "4. Desafio Final",
+      activity_stage: "3. Desafio da Corrida",
       details: {
         runtime: "browser_pwa",
         assembly_result: answers.assemblyResult,
@@ -1405,7 +1355,7 @@ export default function StudentPage() {
       }
     });
 
-    emitTimeline("phase_completed", { activity_stage: "4. Desafio Final" });
+    emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" });
     emitTimeline("session_completed", {
       activity_stage: "completed",
       details: { runtime: "browser_pwa" }
@@ -1511,17 +1461,17 @@ export default function StudentPage() {
   function forceStage(stageNum) {
     if (stageNum === 1) {
       setScreen("pre");
-    } else if (stageNum === 2 || stageNum === 3) {
+    } else if (stageNum === 2) {
       if (screen === "pre") {
         setActivityStartedAt(Date.now());
         setElapsedMs(0);
       }
-      setActivityStage(stageNum);
+      setActivityStage(2);
       setScreen("activity");
-      flash(`Navegado para Etapa ${stageNum} (${stageNum === 2 ? "Montagem" : "Experimentação"}).`);
-    } else if (stageNum === 4) {
+      flash("Navegado para a Oficina Prática (Robô LEGO SPIKE).");
+    } else if (stageNum === 3) {
       setScreen("post");
-      flash("Avançado para o Desafio Final (Corrida & Encerramento).");
+      flash("Avançado para o Desafio da Corrida & Avaliação Final.");
     }
   }
 
@@ -1544,11 +1494,7 @@ export default function StudentPage() {
       setPreAnswers({ experience: 2 });
       flash("Início preenchido com dados sintéticos de teste. Clique em 'Começar Atividade!'");
     } else if (screen === "activity") {
-      if (activityStage === 2) {
-        handleTransitionStage(3);
-      } else {
-        handleAdvanceToFinalChallenge();
-      }
+      handleAdvanceToFinalChallenge();
     } else if (screen === "post") {
       const synthetic = {
         experience: 5,
@@ -1668,7 +1614,45 @@ export default function StudentPage() {
     };
     tick();
     const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
+
+    // Coleta silenciosa e periódica da telemetria do LEGO SPIKE a cada 10 segundos
+    const pollSpike = async () => {
+      try {
+        const metrics = await fetchBridgeSpikeMetrics();
+        if (metrics && metrics.project_saved !== false) {
+          setSpikeTelemetry((prev) => {
+            const isFirstDetection = !prev || (!prev.executable_blocks && metrics.executable_blocks > 0);
+            const blocksChanged = prev && prev.executable_blocks !== metrics.executable_blocks;
+            if (isFirstDetection || blocksChanged) {
+              emitTimeline("spike_telemetry", {
+                activity_stage: isFirstDetection ? "primeira_programacao_detectada" : "atualizacao_codigo_spike",
+                details: {
+                  executable_blocks: metrics.executable_blocks,
+                  inferred_stage: metrics.inferred_stage,
+                  uses_motor: metrics.uses_motor,
+                  uses_sensor: metrics.uses_sensor,
+                  file_name: metrics.file_name,
+                  first_coding_detected: isFirstDetection,
+                  elapsed_ms: Math.max(0, Date.now() - activityStartedAt)
+                }
+              });
+            }
+            return metrics;
+          });
+        }
+      } catch {
+        // Falha silenciosa
+      }
+    };
+
+    const firstCheck = window.setTimeout(pollSpike, 2000);
+    const spikeInterval = window.setInterval(pollSpike, 10000);
+
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(firstCheck);
+      window.clearInterval(spikeInterval);
+    };
   }, [activityStartedAt, screen]);
 
   useEffect(() => {
@@ -1717,8 +1701,6 @@ export default function StudentPage() {
   } else if (screen === "activity") {
     content = (
       <ActivityScreen
-        activityStage={activityStage}
-        onChangeStage={handleTransitionStage}
         elapsedMs={elapsedMs}
         labMode={labMode}
         spikeTelemetry={spikeTelemetry}
@@ -1766,7 +1748,7 @@ export default function StudentPage() {
             📍 Região: {context.regional || "Nordeste"}
           </button>
           <div className="topbar__step-badge" title="Etapa atual da oficina">
-            🧭 Etapa {activeStep}/4 · {FLOW_STEPS.find((s) => s.id === activeStep)?.label}
+            🧭 Etapa {activeStep}/3 · {FLOW_STEPS.find((s) => s.id === activeStep)?.label}
           </div>
           <div className="topbar__session">
             <span>Sessão</span>
@@ -1795,20 +1777,17 @@ export default function StudentPage() {
         <div className="instructor-banner">
           <div className="instructor-banner__info">
             <strong>🛠️ Controles de Demonstração & Instrutor</strong>
-            <span>Avance entre as 4 etapas da oficina ou sincronize com a nuvem</span>
+            <span>Avance entre as etapas da oficina ou sincronize com a nuvem</span>
           </div>
           <div className="instructor-banner__actions">
             <button className="inst-btn inst-btn--accent" onClick={() => setShowContextModal(true)} type="button">
               📍 Região ({context.regional || "Nordeste"})
             </button>
             <button className="inst-btn" onClick={() => forceStage(2)} type="button">
-              ⏩ 2. Montagem
+              🤖 2. Oficina Prática
             </button>
             <button className="inst-btn" onClick={() => forceStage(3)} type="button">
-              ⏩ 3. Experimentação
-            </button>
-            <button className="inst-btn" onClick={() => forceStage(4)} type="button">
-              🏁 4. Desafio Final
+              🏁 3. Desafio da Corrida
             </button>
             <button className="inst-btn" onClick={() => addMinutes(5)} type="button">
               ⏱️ +5 min relógio
