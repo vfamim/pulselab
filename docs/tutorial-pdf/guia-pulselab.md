@@ -137,7 +137,7 @@ style: |
     Guia Operacional Ilustrado
   </span>
   <h1 style="font-size: 2.8rem; margin-top: 10px; color: #1e40af;">
-    PulseLab 1.8.0
+    PulseLab 2.1.0
   </h1>
   <p style="font-size: 1.15rem; color: #475569; max-width: 860px; margin: 0 auto 20px auto; font-weight: 600;">
     Instalação 100% offline, controles do pesquisador, telemetria passiva do LEGO SPIKE (.llsp3), sincronização automática na nuvem e check-ins rápidos por dupla.
@@ -182,7 +182,7 @@ style: |
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Baixar o ZIP:</strong> Obtenha <code>PulseLab-1.8.0-Windows.zip</code> (~2.4 MB) pela web ou transporte via pendrive para os computadores da escola.</div>
+        <div><strong>Baixar o ZIP:</strong> Obtenha <code>PulseLab-2.1.0-Windows.zip</code> (~2.5 MB) pela web ou transporte via pendrive para os computadores da escola.</div>
       </li>
       <li class="step-item">
         <span class="step-num">2</span>

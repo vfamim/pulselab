@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CONFIG_HASH,
+  INSTRUMENT_MANIFEST,
+  INSTRUMENT_VERSION,
+  PROTOCOL_VERSION,
   createUuid,
   formatEventName
 } from "../lib/contracts.js";
@@ -21,7 +24,7 @@ import {
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.1.0";
+const CLIENT_VERSION = "student-pwa/2.2.0";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -32,96 +35,69 @@ const DEFAULT_CONTEXT = {
   activity: "atividade-01-spike"
 };
 
-const PRE_DEFAULT = { experience: null, confidence: null };
-const CHECKPOINT_DEFAULT = {
-  effort: null,
-  progress: null,
-  collaboration: null,
-  help: false
+const PRE_DEFAULT = { experience: null };
+const POST_DEFAULT = {
+  experience: null,
+  experienceSkipped: false,
+  raceResult: null,
+  raceTimeSeconds: "",
+  assemblyResult: null,
+  quizCompleted: "participated",
+  supportLevel: null
 };
-const POST_DEFAULT = { understanding: null, affect: null, returnIntent: null };
 
 const FLOW_STEPS = [
   { id: 1, label: "Início" },
-  { id: 2, label: "Atividade" },
-  { id: 3, label: "Check-in" },
-  { id: 4, label: "Finalizar" }
+  { id: 2, label: "Oficina com Robô" },
+  { id: 3, label: "Desafio & Avaliação" }
 ];
 
 const EXPERIENCE_OPTIONS = [
-  [1, "🐣 Primeira vez", "Nunca mexemos com robôs"],
-  [2, "🧩 Pouca prática", "Já vimos ou usamos 1 ou 2 vezes"],
-  [3, "🚀 Já fizemos", "Montamos ou programamos antes"],
-  [4, "⚡ Muita prática", "Já dominamos e sabemos bem"]
+  [1, "🐣 Primeira vez", "Ninguém na bancada mexeu com robôs"],
+  [2, "🧩 Pouca prática", "Alguém já viu ou usou 1 ou 2 vezes"],
+  [3, "🚀 Já praticamos", "Já montamos ou programamos antes"],
+  [4, "⚡ Muita prática", "Temos facilidade com montagem e código"]
 ];
 
-const CONFIDENCE_OPTIONS = [
-  [1, "😅 Inseguros", "Acho que vai ser difícil"],
-  [2, "🤔 Curiosos", "Vamos descobrir como faz"],
-  [3, "😊 Confiantes", "Acho que vai dar certo"],
-  [4, "🔥 Animados!", "Empolgação total para o desafio"]
+const POST_EXPERIENCE_OPTIONS = [
+  [1, "😞 Muito ruim", "Não gostei da experiência"],
+  [2, "🙁 Ruim", "Poderia ter sido melhor"],
+  [3, "😐 Nem boa nem ruim", "Achei normal"],
+  [4, "🙂 Boa", "Gostei da oficina"],
+  [5, "😄 Muito boa", "Adorei a atividade"]
 ];
 
-const EFFORT_OPTIONS = [
-  [1, "🟢 Muito Fácil", "Estamos tirando de letra"],
-  [2, "🟡 Normal", "Dá pra fazer com calma"],
-  [3, "🟠 Puxado", "Exige bastante atenção"],
-  [4, "🔴 Muito Difícil", "Super desafiador agora"]
+const RACE_RESULT_OPTIONS = [
+  ["success", "🏆 Concluiu com sucesso", "Carrinho completou o percurso no circuito"],
+  ["partial", "⏱️ Não concluiu o percurso", "Travou, saiu da pista ou precisou de ajuste"],
+  ["tech_failure", "⚠️ Falha técnica / Bluetooth", "Problema de bateria, desconexão ou peça solta"]
 ];
 
-const PROGRESS_OPTIONS = [
-  ["needs_help_now", "🛑 Travamos", "Não sabemos como sair do lugar"],
-  ["trying_without_progress", "⏳ Tentando", "Testando caminhos, ainda sem funcionar"],
-  ["progressing_with_doubt", "💡 Avançando", "Parte funciona, com algumas dúvidas"],
-  ["progressing_independently", "🚀 Voando!", "Tudo funcionando e testando sozinhos"]
+const ASSEMBLY_OPTIONS = [
+  ["complete", "🧩 Concluída conforme o roteiro", "Estrutura firme, motores e rodas alinhados"],
+  ["partial", "🔧 Parcial / com adaptações", "Montagem com peças faltantes ou ajustes manuais"],
+  ["incomplete", "❌ Não concluída", "Não completou a estrutura básica do carrinho"]
 ];
 
-const COLLABORATION_OPTIONS = [
-  [1, "👤 Pouca troca", "Cada um ficou no seu canto"],
-  [2, "🗣️ Desigual", "Um faz quase tudo, outro só olha"],
-  [3, "🤝 Em equipe", "Decidimos juntos com boa conversa"],
-  [4, "🔄 Revezamento", "Trocamos tarefas de montagem e código"]
+const QUIZ_OPTIONS = [
+  ["participated", "🎮 Realizada com botões do robô", "A bancada participou da dinâmica lúdica A/B"],
+  ["skipped", "⏭️ Dinâmica não realizada", "Tempo insuficiente ou atividade não aplicada"]
 ];
 
-const UNDERSTANDING_OPTIONS = [
-  [1, "❓ Quase nada", "Ficou meio confuso pra gente"],
-  [2, "🧩 O básico", "Entendemos uma parte"],
-  [3, "👍 Quase tudo", "Entendemos bem a lógica"],
-  [4, "🧠 Totalmente", "Sabemos explicar para qualquer um"]
-];
-
-const RETURN_OPTIONS = [
-  [1, "👎 Não", "Não gostamos muito"],
-  [2, "🤷 Talvez", "Depende da atividade"],
-  [3, "🙋 Com certeza!", "Foi muito bacana"],
-  [4, "🤩 Quero sempre!", "Adoramos a experiência!"]
-];
-
-const AFFECT_OPTIONS = [
-  ["frustrated", "😤 Frustração", "Não saiu como a gente queria"],
-  ["tired", "🥱 Cansaço", "Foi puxado e exigiu muita energia"],
-  ["curious", "🧐 Curiosidade", "Deu vontade de aprender mais"],
-  ["confident", "🏆 Orgulho!", "Conseguimos vencer o desafio!"]
+const SUPPORT_OPTIONS = [
+  ["independent", "🟢 Autônomo", "Trabalharam praticamente sozinhos"],
+  ["occasional", "🟡 Apoio pontual", "Dúvidas breves tiradas com o instrutor"],
+  ["constant", "🔴 Apoio constante", "Mediação intensiva necessária durante a oficina"]
 ];
 
 const BRIDGE_URL = "http://127.0.0.1:43127";
 
-async function notifyBridgeSession(sessionId, startedAt, marks = [20, 40]) {
+async function notifyBridgeSession(sessionId, startedAt, marks = []) {
   try {
     await fetch(`${BRIDGE_URL}/v1/sessions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId, started_at: startedAt, marks })
-    });
-  } catch {
-    // Operação normal mesmo sem o Bridge
-  }
-}
-
-async function notifyBridgeCheckpointAck(sessionId, mark) {
-  try {
-    await fetch(`${BRIDGE_URL}/v1/sessions/${sessionId}/checkpoints/${mark}/ack`, {
-      method: "POST"
     });
   } catch {
     // Operação normal mesmo sem o Bridge
@@ -158,6 +134,18 @@ async function notifyBridgeEvent(event) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(event)
+    });
+  } catch {
+    // Operação normal mesmo sem o Bridge
+  }
+}
+
+async function notifyBridgeSessionSave(sessionPayload) {
+  try {
+    await fetch(`${BRIDGE_URL}/v1/sessions/save`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(sessionPayload)
     });
   } catch {
     // Operação normal mesmo sem o Bridge
@@ -231,11 +219,10 @@ function showWebNotification(mark) {
   }
 }
 
-function stepForScreen(screen) {
+function stepForState(screen) {
   if (screen === "pre") return 1;
   if (screen === "activity") return 2;
-  if (screen.startsWith("checkpoint")) return 3;
-  return 4;
+  return 3;
 }
 
 function readJson(key, fallback) {
@@ -454,12 +441,12 @@ function PreScreen({
   assentAgreed,
   setAssentAgreed
 }) {
-  const ready = !assentAgreed || (answers.experience !== null && answers.confidence !== null);
+  const ready = !assentAgreed || answers.experience !== null;
   return (
     <Card
-      eyebrow="Oficina de Robótica · Início rápido"
+      eyebrow="Etapa 1 de 3 · Início da Bancada"
       title="Como vocês chegam para esta oficina?"
-      description="Responda rapidamente antes de começar a montar e programar o robô LEGO SPIKE."
+      description="Respondam rapidamente para caracterizar a bancada antes de começar a montar e programar o robô LEGO SPIKE."
       footer={
         <div className="action-row">
           <span className="footer-hint">Sua resposta fica salva assim que você clica em começar.</span>
@@ -521,9 +508,9 @@ function PreScreen({
         </span>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
           {[
-            ["dyad", "👫 Dupla com Papéis", "1 no código e 1 na montagem, com revezamento"],
-            ["individual", "👤 Individual", "1 estudante realizando todas as tarefas"],
-            ["group", "👥 Equipe Conjunta", "Grupo compartilhando a mesma tela"]
+            ["dyad", "👫 Dupla de Trabalho", "Dois estudantes compartilhando computador e peças"],
+            ["individual", "👤 Individual", "1 estudante realizando todas as etapas"],
+            ["group", "👥 Bancada Coletiva", "3 a 4 estudantes colaborando no mesmo desafio"]
           ].map(([val, label, sub]) => {
             const isSel = teamRole === val;
             return (
@@ -543,176 +530,110 @@ function PreScreen({
       </div>
 
       {assentAgreed ? (
-        <>
-          <ScaleQuestion
-            legend="Já montou ou programou robôs ou blocos antes?"
-            onChange={(experience) => setAnswers({ ...answers, experience })}
-            options={EXPERIENCE_OPTIONS}
-            value={answers.experience}
-          />
-          <ScaleQuestion
-            legend="Como está a animação e confiança do grupo para o desafio?"
-            onChange={(confidence) => setAnswers({ ...answers, confidence })}
-            options={CONFIDENCE_OPTIONS}
-            value={answers.confidence}
-          />
-        </>
+        <ScaleQuestion
+          legend="Vocês na bancada já montaram ou programaram robôs ou blocos antes?"
+          onChange={(experience) => setAnswers({ ...answers, experience })}
+          options={EXPERIENCE_OPTIONS}
+          value={answers.experience}
+        />
       ) : null}
     </Card>
   );
 }
 
-function ActivityScreen({ elapsedMs, currentMark, labMode, spikeTelemetry }) {
-  const targetMs = currentMark * 60 * 1000;
-  const remaining = Math.max(0, targetMs - elapsedMs);
+function ActivityScreen({
+  elapsedMs,
+  labMode,
+  spikeTelemetry,
+  onAdvanceToFinalChallenge,
+  assentAgreed,
+  onRefreshTelemetry
+}) {
+  const hasSpikeCode = Boolean(spikeTelemetry && (spikeTelemetry.executable_blocks > 0 || spikeTelemetry.project_saved));
+
   return (
     <Card
-      eyebrow="Desafio em Andamento"
-      title="Pode focar no projeto do SPIKE"
-      description={`Construam e programem normalmente. O próximo check-in curto será aberto automaticamente aos ${currentMark} minutos.`}
+      eyebrow="Etapa 2 de 3 · Oficina Prática com Robô"
+      title="Construção, Programação & Testes do Robô"
+      description="Usem o kit LEGO SPIKE Prime e o aplicativo oficial em tela cheia para montar, programar e testar o carrinho no circuito."
       footer={
-        <div className="action-row" style={{ justifyContent: "center" }}>
-          <span className="footer-hint" style={{ margin: "0 auto", textAlign: "center", fontSize: "0.95rem", color: "var(--muted)" }}>
-            ⏱️ O check-in de {currentMark} minutos abrirá automaticamente nesta tela.
+        <div className="action-row" style={{ justifyContent: "space-between", width: "100%", alignItems: "center" }}>
+          <span className="footer-hint" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
+            {assentAgreed ? "⏱️ Coleta contínua e silenciosa em segundo plano." : "Oficina livre sem coleta de dados."}
           </span>
+          <button
+            className="button button--primary"
+            onClick={onAdvanceToFinalChallenge}
+            type="button"
+          >
+            🏁 Finalizar Oficina & Ir para Corrida ➔
+          </button>
         </div>
       }
     >
       <div className="activity-timer" aria-live="polite">
-        <span>Tempo de atividade</span>
+        <span>Tempo total de oficina</span>
         <strong>{formatClock(elapsedMs)}</strong>
-        <small>Próximo check-in em {formatClock(remaining)}</small>
+        <small>Coleta silenciosa em segundo plano · Sem interrupções</small>
       </div>
 
-      {spikeTelemetry ? (
-        <div style={{ background: "rgba(73, 217, 206, 0.1)", border: "1px solid rgba(73, 217, 206, 0.3)", borderRadius: "10px", padding: "12px 16px", margin: "16px 0", fontSize: "0.85rem", color: "#6ee7b7" }}>
-          <span>🤖 <strong>LEGO SPIKE Conectado:</strong> {spikeTelemetry.executable_blocks || 0} blocos detectados · Estágio: <em>{spikeTelemetry.inferred_stage || "em edição"}</em></span>
+      <div style={{ background: hasSpikeCode ? "rgba(16, 185, 129, 0.08)" : "rgba(56, 189, 248, 0.08)", border: `1px solid ${hasSpikeCode ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`, borderRadius: "12px", padding: "14px 18px", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
+        <div>
+          <span style={{ fontSize: "0.88rem", color: hasSpikeCode ? "#6ee7b7" : "#7dd3fc" }}>
+            🤖 <strong>Telemetria LEGO SPIKE:</strong>{" "}
+            {hasSpikeCode
+              ? `${spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: ${spikeTelemetry.inferred_stage || "em edição"} · ${spikeTelemetry.file_name || "projeto .llsp3"}`
+              : "Aguardando projeto salvo no app LEGO SPIKE (.llsp3)"}
+          </span>
+          {hasSpikeCode && (
+            <small style={{ display: "block", color: "rgba(255, 255, 255, 0.6)", marginTop: "4px", fontSize: "0.78rem" }}>
+              Início da programação detectado automaticamente · Coletando deltas de código em silêncio
+            </small>
+          )}
         </div>
-      ) : null}
+        <button
+          type="button"
+          className="inst-btn"
+          onClick={onRefreshTelemetry}
+          style={{ fontSize: "0.78rem", padding: "4px 10px", background: "rgba(255, 255, 255, 0.08)", color: "#e2e8f0", borderColor: "rgba(255, 255, 255, 0.2)" }}
+        >
+          🔄 Atualizar telemetria
+        </button>
+      </div>
 
       <div className="activity-instructions">
         <article>
           <span>1</span>
-          <strong>Mantenha esta página aberta</strong>
-          <p>Ela pode ficar em uma aba ao lado enquanto vocês usam o app do SPIKE.</p>
+          <strong>Foco Total no Robô LEGO</strong>
+          <p>Trabalhem na montagem física e abram o app oficial LEGO SPIKE em tela cheia para programar e testar.</p>
         </article>
         <article>
           <span>2</span>
-          <strong>Programem e testem à vontade</strong>
-          <p>O PulseLab captura o avanço do código do SPIKE de forma 100% segura e anônima.</p>
+          <strong>Telemetria 100% Silenciosa</strong>
+          <p>O PulseLab acompanha o tempo e detecta os blocos de código em segundo plano, sem travar nem pedir confirmações.</p>
         </article>
         <article>
           <span>3</span>
-          <strong>Respondam aos 20 e 40 minutos</strong>
-          <p>Um alerta sonoro e visual avisará quando for a hora do check-in de 30 segundos.</p>
+          <strong>Desafio Final & Corrida</strong>
+          <p>Ao terminar a montagem e os testes, cliquem no botão abaixo para registrar a corrida na pista e a avaliação final.</p>
         </article>
       </div>
-    </Card>
-  );
-}
-
-function CheckpointScreen({
-  mark,
-  answers,
-  setAnswers,
-  onSubmit,
-  onDecline,
-  teamRole,
-  currentRole,
-  onRoleSwap
-}) {
-  const ready = answers.effort !== null && answers.progress && answers.collaboration;
-  return (
-    <Card
-      eyebrow={`Check-in de ${mark} minutos · Pausa rápida de 30 segundos`}
-      title="Como está indo o projeto?"
-      description="Respondam como está o andamento da montagem e do código agora para voltarem direto para a robótica."
-      footer={
-        <div className="action-row">
-          <button
-            className="button button--ghost"
-            onClick={onDecline}
-            type="button"
-            style={{ marginRight: "auto" }}
-          >
-            Prefiro não responder
-          </button>
-          <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
-            Salvar e continuar
-          </button>
-        </div>
-      }
-    >
-      <div className="checkpoint-meta">
-        <span className="time-chip">{mark}:00 de atividade</span>
-      </div>
-
-      {teamRole === "dyad" ? (
-        <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.3)", borderRadius: "12px", padding: "12px 18px", marginBottom: "18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-          <div>
-            <span style={{ fontSize: "0.8rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#059669", fontWeight: 800 }}>Papel no Check-in:</span>
-            <div style={{ fontSize: "1rem", fontWeight: 700, color: "#065f46" }}>
-              {currentRole === "computer" ? "💻 Participante A (Computador / Código)" : "🛠️ Participante B (Montagem / Testes)"}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="inst-btn"
-            style={{ background: "#d1fae5", color: "#065f46", borderColor: "#a7f3d0", fontWeight: 700 }}
-            onClick={onRoleSwap}
-          >
-            🔄 Trocar Papéis da Dupla
-          </button>
-        </div>
-      ) : null}
-
-      <ScaleQuestion
-        legend="Como está o nível de dificuldade do desafio até aqui?"
-        onChange={(effort) => setAnswers({ ...answers, effort })}
-        options={EFFORT_OPTIONS}
-        value={answers.effort}
-      />
-      <OptionQuestion
-        legend="Como está o robô e o código agora?"
-        onChange={(progress) => setAnswers({ ...answers, progress })}
-        options={PROGRESS_OPTIONS}
-        value={answers.progress}
-      />
-      <ScaleQuestion
-        legend="Como a dupla ou grupo está dividindo as tarefas?"
-        onChange={(collaboration) => setAnswers({ ...answers, collaboration })}
-        options={COLLABORATION_OPTIONS}
-        value={answers.collaboration}
-      />
-      <button
-        type="button"
-        className={`help-toggle-btn ${answers.help ? "is-active" : ""}`}
-        onClick={() => setAnswers({ ...answers, help: !answers.help })}
-        aria-pressed={answers.help}
-      >
-        <span className="help-toggle-btn__icon">{answers.help ? "🚨" : "🙋‍♂️"}</span>
-        <div className="help-toggle-btn__content">
-          <strong>{answers.help ? "Ajuda registrada para a pesquisa!" : "Precisa de ajuda do professor na bancada?"}</strong>
-          <small>{answers.help ? "Pedido registrado no sistema! Por favor, levantem a mão na sala para o professor localizar sua bancada." : "Clique aqui para registrar a dúvida e levantem a mão na sala para chamar o professor."}</small>
-        </div>
-        <span className="help-toggle-btn__badge">
-          {answers.help ? "✓ LEVANTAR A MÃO" : "CHAMAR PROFESSOR"}
-        </span>
-      </button>
     </Card>
   );
 }
 
 function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
   const ready =
-    answers.understanding !== null &&
-    answers.returnIntent !== null &&
-    answers.affect;
+    (answers.experience !== null || answers.experienceSkipped) ||
+    answers.raceResult !== null ||
+    answers.assemblyResult !== null ||
+    answers.supportLevel !== null;
+
   return (
     <Card
-      eyebrow="Encerramento da Oficina · Último passo (30 segundos)"
-      title="Como foi a experiência do grupo?"
-      description="Últimas 3 perguntas sobre a oficina de robótica."
+      eyebrow="Etapa 3 de 3 · Desafio da Corrida & Avaliação Final"
+      title="Desafio da Corrida & Avaliação Final"
+      description="Avaliação estruturada em dois eixos independentes: a experiência subjetiva dos alunos e os resultados objetivos da bancada na pista."
       footer={
         <div className="action-row">
           <button
@@ -721,32 +642,222 @@ function PostScreen({ answers, setAnswers, onSubmit, onDecline }) {
             type="button"
             style={{ marginRight: "auto" }}
           >
-            Prefiro não responder
+            Pular avaliação e finalizar
           </button>
-          <button className="button button--primary" disabled={!ready} onClick={onSubmit} type="button">
-            Concluir Oficina
+          <button
+            className="button button--primary"
+            disabled={!ready}
+            onClick={onSubmit}
+            type="button"
+          >
+            Concluir e Salvar Oficina
           </button>
         </div>
       }
     >
-      <ScaleQuestion
-        legend="O quanto vocês entenderam sobre o que o robô faz?"
-        onChange={(understanding) => setAnswers({ ...answers, understanding })}
-        options={UNDERSTANDING_OPTIONS}
-        value={answers.understanding}
-      />
-      <ScaleQuestion
-        legend="Gostariam de participar de outra oficina como esta?"
-        onChange={(returnIntent) => setAnswers({ ...answers, returnIntent })}
-        options={RETURN_OPTIONS}
-        value={answers.returnIntent}
-      />
-      <OptionQuestion
-        legend="Qual emoji melhor resume o sentimento do grupo agora?"
-        onChange={(affect) => setAnswers({ ...answers, affect })}
-        options={AFFECT_OPTIONS}
-        value={answers.affect}
-      />
+      {/* Eixo 1: Experiência Subjetiva */}
+      <fieldset className="question-block" style={{ marginBottom: "26px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px", flexWrap: "wrap", gap: "8px" }}>
+          <legend className="question-legend" style={{ fontSize: "1.1rem", color: "#f8fafc", fontWeight: 700, margin: 0 }}>
+            ✨ Eixo 1: Como foi participar da oficina de robótica de hoje?
+          </legend>
+          <button
+            type="button"
+            className="button button--ghost"
+            onClick={() => setAnswers({
+              ...answers,
+              experience: null,
+              experienceSkipped: !answers.experienceSkipped
+            })}
+            style={{
+              fontSize: "0.78rem",
+              padding: "4px 10px",
+              borderColor: answers.experienceSkipped ? "#38bdf8" : "rgba(255, 255, 255, 0.2)",
+              color: answers.experienceSkipped ? "#38bdf8" : "#94a3b8"
+            }}
+          >
+            {answers.experienceSkipped ? "✓ Prefere não responder" : "Prefiro não responder"}
+          </button>
+        </div>
+        <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "14px" }}>
+          Avaliação individual da experiência da oficina. Não exige consenso da bancada.
+        </p>
+
+        {!answers.experienceSkipped ? (
+          <div className="scale-grid">
+            {POST_EXPERIENCE_OPTIONS.map(([optionValue, label, sublabel]) => {
+              const parts = String(label).match(/^(\S+)\s+(.+)$/);
+              const icon = parts ? parts[1] : optionValue;
+              const title = parts ? parts[2] : label;
+              const isSelected = answers.experience === optionValue;
+              return (
+                <button
+                  className={`scale-option ${isSelected ? "is-selected" : ""}`}
+                  key={optionValue}
+                  onClick={() => setAnswers({ ...answers, experience: optionValue, experienceSkipped: false })}
+                  type="button"
+                  aria-pressed={isSelected}
+                >
+                  <span className="scale-option__icon">{icon}</span>
+                  <strong className="scale-option__title">{title}</strong>
+                  {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ padding: "10px 14px", background: "rgba(56, 189, 248, 0.08)", border: "1px dashed rgba(56, 189, 248, 0.3)", borderRadius: "10px", color: "#38bdf8", fontSize: "0.85rem" }}>
+            Participante optou por não responder a avaliação subjetiva de experiência.
+          </div>
+        )}
+      </fieldset>
+
+      {/* Eixo 2: Resultados Práticos Imediatos & Apoio do Instrutor */}
+      <div style={{ padding: "18px 20px", background: "rgba(36, 86, 77, 0.15)", border: "1px solid rgba(73, 217, 206, 0.3)", borderRadius: "16px", marginTop: "10px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+          <span style={{ fontSize: "1.2rem" }}>🏁</span>
+          <strong style={{ fontSize: "1.05rem", color: "#49d9ce" }}>
+            Eixo 2: Resultados Práticos da Bancada & Observação do Instrutor
+          </strong>
+        </div>
+
+        {/* 1. Corrida / Desafio da Pista */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
+            1. Desfecho do Desafio da Pista / Corrida do Robô:
+          </label>
+          <div className="option-list">
+            {RACE_RESULT_OPTIONS.map(([val, title, desc]) => {
+              const isSelected = answers.raceResult === val;
+              return (
+                <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer" }}>
+                  <input
+                    type="radio"
+                    name="race-result"
+                    value={val}
+                    checked={isSelected}
+                    onChange={() => setAnswers({ ...answers, raceResult: val })}
+                    style={{ display: "none" }}
+                  />
+                  <span className="option-row__body">
+                    <strong style={{ fontSize: "0.95rem", color: "#f1f5f9" }}>{title}</strong>
+                    <small style={{ color: "#94a3b8" }}>{desc}</small>
+                  </span>
+                  <span className="option-row__radio" />
+                </label>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
+            <label htmlFor="race-time-input" style={{ fontSize: "0.82rem", color: "#cbd5e1" }}>
+              ⏱️ Tempo da corrida (segundos, opcional):
+            </label>
+            <input
+              id="race-time-input"
+              type="number"
+              step="0.1"
+              min="0"
+              placeholder="Ex: 12.5"
+              value={answers.raceTimeSeconds || ""}
+              onChange={(e) => setAnswers({ ...answers, raceTimeSeconds: e.target.value })}
+              style={{
+                width: "110px",
+                padding: "6px 10px",
+                background: "#0f172a",
+                border: "1px solid rgba(255, 255, 255, 0.15)",
+                borderRadius: "8px",
+                color: "#f8fafc",
+                fontSize: "0.88rem"
+              }}
+            />
+          </div>
+        </div>
+
+        {/* 2. Montagem Física */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
+            2. Critérios de Montagem do Carrinho (tutorial com peças LEGO):
+          </label>
+          <div className="option-list">
+            {ASSEMBLY_OPTIONS.map(([val, title, desc]) => {
+              const isSelected = answers.assemblyResult === val;
+              return (
+                <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer", padding: "8px 12px" }}>
+                  <input
+                    type="radio"
+                    name="assembly-result"
+                    value={val}
+                    checked={isSelected}
+                    onChange={() => setAnswers({ ...answers, assemblyResult: val })}
+                    style={{ display: "none" }}
+                  />
+                  <span className="option-row__body">
+                    <strong style={{ fontSize: "0.9rem", color: "#f1f5f9" }}>{title}</strong>
+                    <small style={{ color: "#94a3b8", fontSize: "0.78rem" }}>{desc}</small>
+                  </span>
+                  <span className="option-row__radio" />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 3. Dinâmica Lúdica do Quiz A/B */}
+        <div style={{ marginBottom: "20px" }}>
+          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "4px" }}>
+            3. Dinâmica Lúdica do Quiz A/B pelos Botões do Robô:
+          </label>
+          <span style={{ fontSize: "0.78rem", color: "#94a3b8", display: "block", marginBottom: "8px" }}>
+            Brincadeira de entretenimento de encerramento (não utilizada como avaliação de aprendizagem).
+          </span>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+            {QUIZ_OPTIONS.map(([val, label]) => {
+              const isSelected = answers.quizCompleted === val;
+              return (
+                <button
+                  key={val}
+                  type="button"
+                  className={`scale-option ${isSelected ? "is-selected" : ""}`}
+                  style={{ padding: "8px 12px", minHeight: "auto", textAlign: "left", fontSize: "0.82rem" }}
+                  onClick={() => setAnswers({ ...answers, quizCompleted: val })}
+                >
+                  <strong style={{ fontSize: "0.84rem" }}>{label}</strong>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 4. Nível de Apoio do Instrutor */}
+        <div>
+          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
+            4. Nível de Apoio Pedagógico Recebido pela Bancada:
+          </label>
+          <div className="option-list">
+            {SUPPORT_OPTIONS.map(([val, title, desc]) => {
+              const isSelected = answers.supportLevel === val;
+              return (
+                <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer", padding: "8px 12px" }}>
+                  <input
+                    type="radio"
+                    name="support-level"
+                    value={val}
+                    checked={isSelected}
+                    onChange={() => setAnswers({ ...answers, supportLevel: val })}
+                    style={{ display: "none" }}
+                  />
+                  <span className="option-row__body">
+                    <strong style={{ fontSize: "0.9rem", color: "#f1f5f9" }}>{title}</strong>
+                    <small style={{ color: "#94a3b8", fontSize: "0.78rem" }}>{desc}</small>
+                  </span>
+                  <span className="option-row__radio" />
+                </label>
+              );
+            })}
+          </div>
+        </div>
+      </div>
     </Card>
   );
 }
@@ -819,23 +930,6 @@ function EvidencePanel({ events }) {
   );
 }
 
-function CheckpointAlertModal({ mark, onProceed }) {
-  return (
-    <div className="alert-modal-backdrop" role="dialog" aria-modal="true">
-      <div className="alert-modal">
-        <div className="alert-modal__icon">🤖</div>
-        <span className="alert-modal__eyebrow">Aviso da Oficina · PulseLab</span>
-        <h2>Hora do Check-in de {mark} minutos!</h2>
-        <p>Pausa rápida de 30 segundos na montagem e programação do robô LEGO SPIKE para vocês registrarem como está o progresso.</p>
-        <div className="alert-modal__actions">
-          <button className="button button--primary button--pulse" onClick={onProceed} type="button" autoFocus>
-            Responder Check-in Agora (30s)
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function StudentPage() {
   const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
@@ -843,13 +937,14 @@ export default function StudentPage() {
 
   const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
   const [resumable, setResumable] = useState(savedSession);
-  const VALID_SCREENS = ["pre", "activity", "checkpoint20", "checkpoint40", "post", "finished"];
+  const VALID_SCREENS = ["pre", "activity", "post", "finished"];
   const [screen, setScreen] = useState(() => {
     if (savedSession?.screen && VALID_SCREENS.includes(savedSession.screen)) {
       return savedSession.screen;
     }
     return "pre";
   });
+  const [activityStage, setActivityStage] = useState(() => savedSession?.activityStage || 2);
   const [sessionId, setSessionId] = useState(() => savedSession?.sessionId || createUuid());
   const [groupId, setGroupId] = useState(() => savedSession?.groupId || createUuid());
   const [installationId] = useState(getInstallationId);
@@ -861,21 +956,12 @@ export default function StudentPage() {
     }
     return savedSession?.elapsedMs || 0;
   });
-  const [currentMark, setCurrentMark] = useState(() => savedSession?.currentMark || 20);
   const [timeline, setTimeline] = useState(() => savedSession?.timeline || []);
   const [responses, setResponses] = useState(() => savedSession?.responses || []);
   const [spikeTelemetry, setSpikeTelemetry] = useState(() => savedSession?.spikeTelemetry || null);
   const [preAnswers, setPreAnswers] = useState(() => ({
     ...PRE_DEFAULT,
     ...(savedSession?.preAnswers && typeof savedSession.preAnswers === "object" ? savedSession.preAnswers : {})
-  }));
-  const [checkpoint20Answers, setCheckpoint20Answers] = useState(() => ({
-    ...CHECKPOINT_DEFAULT,
-    ...(savedSession?.checkpoint20Answers && typeof savedSession.checkpoint20Answers === "object" ? savedSession.checkpoint20Answers : {})
-  }));
-  const [checkpoint40Answers, setCheckpoint40Answers] = useState(() => ({
-    ...CHECKPOINT_DEFAULT,
-    ...(savedSession?.checkpoint40Answers && typeof savedSession.checkpoint40Answers === "object" ? savedSession.checkpoint40Answers : {})
   }));
   const [postAnswers, setPostAnswers] = useState(() => ({
     ...POST_DEFAULT,
@@ -884,14 +970,14 @@ export default function StudentPage() {
   const [teamRole, setTeamRole] = useState(() => savedSession?.teamRole || "dyad");
   const [currentRole, setCurrentRole] = useState(() => savedSession?.currentRole || "computer");
   const [assentAgreed, setAssentAgreed] = useState(() => savedSession?.assentAgreed ?? true);
+  const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || false);
   const [showContextModal, setShowContextModal] = useState(false);
   const [online, setOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState("");
-  const [checkpointModalMark, setCheckpointModalMark] = useState(null);
   const [showInstructorTools, setShowInstructorTools] = useState(labMode);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const sequenceRef = useRef(savedSession?.sequence || 0);
-  const checkpointOpeningRef = useRef(false);
+  const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || false);
+
 
   useEffect(() => {
     const storedContext = localStorage.getItem(CONTEXT_KEY);
@@ -931,7 +1017,7 @@ export default function StudentPage() {
   const allEvents = [...timeline, ...responses];
   const memoryPendingCount = allEvents.filter((event) => event._delivery_state === "queued").length;
   const pendingCount = Math.max(memoryPendingCount, dbPendingCount);
-  const activeStep = stepForScreen(screen);
+  const activeStep = stepForState(screen, activityStage);
 
   function flash(message) {
     setToast(message);
@@ -955,18 +1041,17 @@ export default function StudentPage() {
       class_code: context.class || "turma-geral",
       activity_id: context.activity || "atividade-01-spike",
       computer_id: getComputerId(installationId),
-      telemetry_foreground_app: sysMeta.os,
-      telemetry_window_title: `Res: ${sysMeta.screen_resolution}`,
-      protocol_version: "protocolo-pesquisa-v1",
+      protocol_version: PROTOCOL_VERSION,
       occurred_at: new Date(now).toISOString(),
       elapsed_ms: Math.max(0, now - startedAt),
       client_version: CLIENT_VERSION,
-      config_version: "student-pwa-v1",
+      config_version: "student-pwa-v2",
       config_hash: CONFIG_HASH,
       _delivery_state: "queued",
       _sequence: sequenceRef.current,
       _client_occurred_at: new Date(now).toISOString(),
       event_type: eventType,
+      ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
       ...overrides
     };
   }
@@ -999,6 +1084,7 @@ export default function StudentPage() {
   }
 
   function emitTimeline(eventType, overrides = {}) {
+    const sysMeta = getSystemMetadata();
     const event = eventBase(eventType, {
       _target_table: "research_session_events",
       severity: "info",
@@ -1007,7 +1093,12 @@ export default function StudentPage() {
       participant_role: null,
       activity_stage: null,
       scheduled_at: null,
-      details: { runtime: "browser_pwa" },
+      details: {
+        runtime: "browser_pwa",
+        os: sysMeta.os,
+        screen_resolution: sysMeta.screen_resolution,
+        ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {})
+      },
       ...overrides
     });
     setTimeline((current) => [...current, event]);
@@ -1016,18 +1107,22 @@ export default function StudentPage() {
   }
 
   function emitResponse(eventType, overrides = {}) {
+    const sysMeta = getSystemMetadata();
     const role = teamRole === "individual" ? "individual" : (teamRole === "group" ? "group" : currentRole);
-    const participantSuffix = role === "computer" ? "A" : (role === "assembly" ? "B" : (role === "individual" ? "IND" : "GRUPO"));
+    const participantSuffix = teamRole === "individual" ? "IND" : (teamRole === "group" ? "GRUPO" : "BANCADA");
     const groupSize = teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2);
 
     const event = eventBase(eventType, {
       _target_table: "research_events",
-      participant_id: `${sessionId.slice(0, 8).toUpperCase()}-${participantSuffix}`,
+      participant_id: `${groupId.slice(0, 8).toUpperCase()}-${participantSuffix}`,
       participant_role: role,
       response_status: overrides.response_status || "completed",
       interval_mark: null,
       group_size: groupSize,
       activity_stage: null,
+      telemetry_window_title: `Res: ${sysMeta.screen_resolution}`,
+      telemetry_foreground_app: sysMeta.os,
+      ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
       ...overrides
     });
     setResponses((current) => [...current, event]);
@@ -1061,17 +1156,16 @@ export default function StudentPage() {
     setStartedAt(resumable.startedAt);
     setActivityStartedAt(resumable.activityStartedAt);
     setElapsedMs(resumable.activityStartedAt ? Math.max(0, Date.now() - resumable.activityStartedAt) : (resumable.elapsedMs || 0));
-    setCurrentMark(resumable.currentMark || 20);
+    setActivityStage(resumable.activityStage || 2);
     setTimeline(resumable.timeline || []);
     setResponses(resumable.responses || []);
     setSpikeTelemetry(resumable.spikeTelemetry || null);
     setPreAnswers(resumable.preAnswers || PRE_DEFAULT);
-    setCheckpoint20Answers(resumable.checkpoint20Answers || CHECKPOINT_DEFAULT);
-    setCheckpoint40Answers(resumable.checkpoint40Answers || CHECKPOINT_DEFAULT);
     setPostAnswers(resumable.postAnswers || POST_DEFAULT);
     setTeamRole(resumable.teamRole || "dyad");
     setCurrentRole(resumable.currentRole || "computer");
     setAssentAgreed(resumable.assentAgreed ?? true);
+    setIsSyntheticSession(resumable.isSyntheticSession || false);
     sequenceRef.current = resumable.sequence || 0;
     setScreen(resumable.screen);
     flash("Sessão retomada do armazenamento local.");
@@ -1088,7 +1182,7 @@ export default function StudentPage() {
         scheduled_swap: false
       }
     });
-    flash(`Papéis trocados! Agora: ${nextRole === "computer" ? "💻 Computador / Programação" : "🛠️ Montagem / Testes"}.`);
+    flash(`Papéis trocados! Agora: ${nextRole === "computer" ? "💻 Computador / Código" : "🛠️ Montagem / Testes"}.`);
   }
 
   function handleSaveContext(newContext) {
@@ -1122,32 +1216,37 @@ export default function StudentPage() {
     requestNotificationPermission();
 
     emitTimeline("session_started", {
-      activity_stage: "init",
+      activity_stage: "1. Introdução",
       details: {
         runtime: "browser_pwa",
         team_role: teamRole,
         ethical_assent: assentAgreed,
-        participant_count: 1,
-        expected_checkpoints: [20, 40]
+        participant_count: teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2),
+        expected_checkpoints: []
       }
     });
 
     emitResponse("pre", {
-      activity_stage: "pre",
+      activity_stage: "1. Introdução",
       prior_robotics: preAnswers.experience,
-      self_efficacy_pre: preAnswers.confidence
+      response_status: "completed"
     });
 
     const activityStart = Date.now();
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
-    void notifyBridgeSession(sessionId, activityStart, [20, 40]);
-    emitTimeline("phase_completed", { activity_stage: "pre" });
-    emitTimeline("activity_started", {
-      activity_stage: "activity",
-      details: { runtime: "browser_pwa", checkpoints_minutes: [20, 40] }
+    setActivityStage(2);
+    void notifyBridgeSession(sessionId, activityStart, []);
+    emitTimeline("phase_completed", { activity_stage: "1. Início" });
+    emitTimeline("phase_transition", {
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", from_stage: "1. Início", to_stage: "2. Oficina Prática" }
     });
-    void captureSpikeTelemetry("activity_start");
+    emitTimeline("activity_started", {
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", stage: "pratica" }
+    });
+    void captureSpikeTelemetry("pratica_start");
     setResumable(null);
     setScreen("activity");
   }
@@ -1155,172 +1254,137 @@ export default function StudentPage() {
   function handleDeclinePre() {
     setAssentAgreed(false);
     emitTimeline("session_started", {
-      activity_stage: "init",
+      activity_stage: "1. Início",
       details: {
         runtime: "browser_pwa",
         research_declined: true,
-        participant_count: 1,
-        expected_checkpoints: [20, 40]
+        participant_count: teamRole === "individual" ? 1 : (teamRole === "group" ? 3 : 2),
+        expected_checkpoints: []
       }
     });
     emitResponse("pre", {
-      activity_stage: "pre",
+      activity_stage: "1. Início",
       response_status: "declined"
     });
     const activityStart = Date.now();
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
-    void notifyBridgeSession(sessionId, activityStart, [20, 40]);
-    emitTimeline("phase_completed", { activity_stage: "pre" });
+    setActivityStage(2);
+    void notifyBridgeSession(sessionId, activityStart, []);
+    emitTimeline("phase_completed", { activity_stage: "1. Início" });
+    emitTimeline("phase_transition", {
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", from_stage: "1. Início", to_stage: "2. Oficina Prática" }
+    });
     emitTimeline("activity_started", {
-      activity_stage: "activity",
-      details: { runtime: "browser_pwa", checkpoints_minutes: [20, 40] }
+      activity_stage: "2. Oficina Prática",
+      details: { runtime: "browser_pwa", free_pedagogical_mode: true }
     });
     setResumable(null);
     setScreen("activity");
-    flash("Oficina liberada em modo livre (sem envio de respostas de pesquisa).");
+    flash("Oficina liberada em modo livre (sem questionários).");
   }
 
-  function triggerCheckpointAlert(mark = currentMark) {
-    if (checkpointOpeningRef.current) return;
-    playChimeSound();
-    showWebNotification(mark);
-    void triggerBridgeAlert(mark);
-    setCheckpointModalMark(mark);
-
-    if (document.hidden) {
-      let toggle = false;
-      const originalTitle = document.title;
-      const titleTimer = window.setInterval(() => {
-        document.title = toggle ? `🔔 [Check-in ${mark}m] PulseLab` : "PulseLab - Oficina de Robótica";
-        toggle = !toggle;
-      }, 1000);
-
-      const onFocus = () => {
-        window.clearInterval(titleTimer);
-        document.title = originalTitle;
-        window.removeEventListener("focus", onFocus);
-      };
-      window.addEventListener("focus", onFocus);
-    }
-  }
-
-  function handleProceedFromModal() {
-    const markToOpen = checkpointModalMark || currentMark;
-    setCheckpointModalMark(null);
-    openCheckpoint(markToOpen);
-  }
-
-  function openCheckpoint(mark = currentMark) {
-    if (checkpointOpeningRef.current) return;
-    checkpointOpeningRef.current = true;
-    setCheckpointModalMark(null);
-    const checkpointElapsed = Math.max(elapsedMs, mark * 60 * 1000);
-    setElapsedMs(checkpointElapsed);
-    void notifyBridgeCheckpointAck(sessionId, mark);
-    emitTimeline("checkpoint_started", {
-      activity_stage: `checkpoint_${mark}`,
-      interval_mark: mark,
-      elapsed_ms: checkpointElapsed,
+  function handleAdvanceToFinalChallenge() {
+    emitTimeline("phase_completed", {
+      activity_stage: "2. Oficina Prática",
+      details: { elapsed_ms: elapsedMs }
+    });
+    emitTimeline("phase_transition", {
+      activity_stage: "3. Desafio da Corrida",
       details: {
         runtime: "browser_pwa",
-        scheduled_minute: mark
+        from_stage: "2. Oficina Prática",
+        to_stage: "3. Desafio da Corrida",
+        elapsed_ms: elapsedMs
       }
     });
-    void captureSpikeTelemetry(`checkpoint_${mark}`);
-    setScreen(mark === 20 ? "checkpoint20" : "checkpoint40");
+    void captureSpikeTelemetry("final_challenge_start");
+    setScreen("post");
+    flash("Avançado para o Desafio da Corrida & Avaliação Final.");
   }
 
-  function submitCheckpoint(mark) {
-    const answers = mark === 20 ? checkpoint20Answers : checkpoint40Answers;
-    emitResponse("checkpoint", {
-      activity_stage: `checkpoint_${mark}`,
-      interval_mark: mark,
-      mental_effort: answers.effort,
-      progress_state: answers.progress,
-      collaboration: answers.collaboration,
-      help_requested: answers.help
+  function submitPost(answersOverride = null) {
+    const answers = answersOverride || postAnswers;
+    emitResponse("post", {
+      activity_stage: "3. Desafio da Corrida",
+      mission_performance: answers.raceResult === "success" ? 1 : 0,
+      primary_issue: answers.raceResult === "tech_failure" ? "technical" : "none",
+      knowledge_answers: {
+        target_constructs: ["experiencia_participacao", "resultados_praticos_bancada", "apoio_instrutor"],
+        experience_rating: answers.experienceSkipped ? null : answers.experience,
+        experience_skipped: Boolean(answers.experienceSkipped),
+        race_result: answers.raceResult,
+        race_time_seconds: answers.raceTimeSeconds ? parseFloat(answers.raceTimeSeconds) : null,
+        assembly_result: answers.assemblyResult,
+        quiz_completed: answers.quizCompleted,
+        support_level: answers.supportLevel
+      },
+      response_status: "completed"
     });
 
-    if (answers.help) {
-      emitTimeline("help_requested", {
-        activity_stage: `checkpoint_${mark}`,
-        details: { runtime: "browser_pwa" }
+    if (answers.experience !== null || answers.experienceSkipped) {
+      emitTimeline("experience_recorded", {
+        activity_stage: "3. Desafio da Corrida",
+        details: {
+          runtime: "browser_pwa",
+          rating: answers.experience,
+          skipped: Boolean(answers.experienceSkipped)
+        }
       });
     }
 
-    void notifyBridgeCheckpointAck(sessionId, mark);
-    emitTimeline("checkpoint_completed", {
-      activity_stage: `checkpoint_${mark}`,
-      interval_mark: mark,
-      elapsed_ms: elapsedMs,
-      details: { runtime: "browser_pwa" }
-    });
-
-    void captureSpikeTelemetry(`checkpoint_${mark}_done`);
-    checkpointOpeningRef.current = false;
-
-    if (mark === 20) {
-      setCurrentMark(40);
-      if (teamRole === "dyad") {
-        const nextRole = currentRole === "computer" ? "assembly" : "computer";
-        setCurrentRole(nextRole);
-        emitTimeline("role_swapped", {
-          activity_stage: "checkpoint_20",
-          details: { from_role: currentRole, to_role: nextRole, scheduled_swap: true }
-        });
-      }
-      setScreen("activity");
-    } else {
-      setScreen("post");
+    if (answers.raceResult !== null) {
+      emitTimeline("race_recorded", {
+        activity_stage: "3. Desafio da Corrida",
+        details: {
+          runtime: "browser_pwa",
+          race_result: answers.raceResult,
+          race_time_seconds: answers.raceTimeSeconds ? parseFloat(answers.raceTimeSeconds) : null
+        }
+      });
     }
-  }
 
-  function handleDeclineCheckpoint(mark) {
-    emitResponse("checkpoint", {
-      activity_stage: `checkpoint_${mark}`,
-      interval_mark: mark,
-      response_status: "declined"
-    });
-    void notifyBridgeCheckpointAck(sessionId, mark);
-    emitTimeline("checkpoint_completed", {
-      activity_stage: `checkpoint_${mark}`,
-      interval_mark: mark,
-      elapsed_ms: elapsedMs,
-      details: { runtime: "browser_pwa", response_status: "declined" }
-    });
-    checkpointOpeningRef.current = false;
-    if (mark === 20) {
-      setCurrentMark(40);
-      if (teamRole === "dyad") {
-        const nextRole = currentRole === "computer" ? "assembly" : "computer";
-        setCurrentRole(nextRole);
-        emitTimeline("role_swapped", {
-          activity_stage: "checkpoint_20",
-          details: { from_role: currentRole, to_role: nextRole, scheduled_swap: true }
-        });
+    emitTimeline("rubric_completed", {
+      activity_stage: "3. Desafio da Corrida",
+      details: {
+        runtime: "browser_pwa",
+        assembly_result: answers.assemblyResult,
+        quiz_completed: answers.quizCompleted,
+        support_level: answers.supportLevel
       }
-      setScreen("activity");
-    } else {
-      setScreen("post");
-    }
-  }
-
-  function submitPost() {
-    emitResponse("post", {
-      activity_stage: "post",
-      post_understanding: postAnswers.understanding,
-      post_affects: [postAnswers.affect],
-      post_return_intent: postAnswers.returnIntent
     });
 
-    emitTimeline("phase_completed", { activity_stage: "post" });
+    emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" });
     emitTimeline("session_completed", {
       activity_stage: "completed",
       details: { runtime: "browser_pwa" }
     });
 
     void captureSpikeTelemetry("session_completed");
+
+    const fullSession = {
+      session_id: sessionId,
+      group_id: groupId,
+      installation_id: installationId,
+      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+      regional_hub: context.regional || "Nordeste",
+      school_code: context.school || "geral",
+      workshop_code: context.workshop || "oficina-spike",
+      class_code: context.class || "turma-geral",
+      activity_id: context.activity || "atividade-01-spike",
+      started_at: new Date(startedAt).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_seconds: Math.round(elapsedMs / 1000),
+      team_role: teamRole,
+      status: "completed",
+      pre_answers: preAnswers,
+      post_answers: answers,
+      events: [...timeline, ...responses],
+      spike_telemetry: spikeTelemetry
+    };
+    void notifyBridgeSessionSave(fullSession);
+
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     void runSync(true);
     setScreen("finished");
@@ -1328,14 +1392,34 @@ export default function StudentPage() {
 
   function handleDeclinePost() {
     emitResponse("post", {
-      activity_stage: "post",
+      activity_stage: "4. Desafio Final",
       response_status: "declined"
     });
-    emitTimeline("phase_completed", { activity_stage: "post" });
+    emitTimeline("phase_completed", { activity_stage: "4. Desafio Final" });
     emitTimeline("session_completed", {
       activity_stage: "completed",
       details: { runtime: "browser_pwa", response_status: "declined" }
     });
+
+    const fullSession = {
+      session_id: sessionId,
+      group_id: groupId,
+      installation_id: installationId,
+      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+      regional_hub: context.regional || "Nordeste",
+      school_code: context.school || "geral",
+      workshop_code: context.workshop || "oficina-spike",
+      class_code: context.class || "turma-geral",
+      activity_id: context.activity || "atividade-01-spike",
+      started_at: new Date(startedAt).toISOString(),
+      completed_at: new Date().toISOString(),
+      duration_seconds: Math.round(elapsedMs / 1000),
+      team_role: teamRole,
+      status: "declined",
+      events: [...timeline, ...responses]
+    };
+    void notifyBridgeSessionSave(fullSession);
+
     localStorage.removeItem(ACTIVE_SESSION_KEY);
     void runSync(true);
     setScreen("finished");
@@ -1351,17 +1435,16 @@ export default function StudentPage() {
     setStartedAt(Date.now());
     setActivityStartedAt(null);
     setElapsedMs(0);
-    setCurrentMark(20);
+    setActivityStage(2);
     setTimeline([]);
     setResponses([]);
     setSpikeTelemetry(null);
+    setHelpActive(false);
+    isSyntheticSessionRef.current = false;
+    setIsSyntheticSession(false);
     setPreAnswers(PRE_DEFAULT);
-    setCheckpoint20Answers(CHECKPOINT_DEFAULT);
-    setCheckpoint40Answers(CHECKPOINT_DEFAULT);
     setPostAnswers(POST_DEFAULT);
-    setCheckpointModalMark(null);
     sequenceRef.current = 0;
-    checkpointOpeningRef.current = false;
     setResumable(null);
     setScreen("pre");
     flash("Oficina reiniciada do zero com sucesso.");
@@ -1375,21 +1458,21 @@ export default function StudentPage() {
     resetToPre();
   }
 
-  function forceCheckpoint(mark = currentMark) {
-    if (screen === "pre") {
-      const now = Date.now();
-      setActivityStartedAt(now);
-      setElapsedMs(mark * 60 * 1000);
+  function forceStage(stageNum) {
+    if (stageNum === 1) {
+      setScreen("pre");
+    } else if (stageNum === 2) {
+      if (screen === "pre") {
+        setActivityStartedAt(Date.now());
+        setElapsedMs(0);
+      }
+      setActivityStage(2);
       setScreen("activity");
+      flash("Navegado para a Oficina Prática (Robô LEGO SPIKE).");
+    } else if (stageNum === 3) {
+      setScreen("post");
+      flash("Avançado para o Desafio da Corrida & Avaliação Final.");
     }
-    triggerCheckpointAlert(mark);
-  }
-
-  function forcePost() {
-    checkpointOpeningRef.current = false;
-    setCheckpointModalMark(null);
-    setScreen("post");
-    flash("Avançado para a finalização pós-oficina.");
   }
 
   function addMinutes(minutes = 5) {
@@ -1404,37 +1487,62 @@ export default function StudentPage() {
     flash(`Cronômetro adiantado em +${minutes} minutos.`);
   }
 
-  function testSoundAndAlert() {
-    triggerCheckpointAlert(currentMark);
-    flash("Som e Pop-up disparados para demonstração!");
-  }
-
   function autoFillCurrentStep() {
+    isSyntheticSessionRef.current = true;
+    setIsSyntheticSession(true);
     if (screen === "pre") {
-      setPreAnswers({ experience: 2, confidence: 3 });
-      flash("Início preenchido. Clique em 'Começar Atividade!'");
+      setPreAnswers({ experience: 2 });
+      flash("Início preenchido com dados sintéticos de teste. Clique em 'Começar Atividade!'");
     } else if (screen === "activity") {
-      triggerCheckpointAlert(currentMark);
-    } else if (screen === "checkpoint20") {
-      setCheckpoint20Answers({ effort: 2, progress: "progressing_with_doubt", collaboration: 3, help: false });
-      flash("Check-in 20m preenchido. Clique em 'Salvar e continuar'");
-    } else if (screen === "checkpoint40") {
-      setCheckpoint40Answers({ effort: 3, progress: "progressing_independently", collaboration: 4, help: false });
-      flash("Check-in 40m preenchido. Clique em 'Salvar e continuar'");
+      handleAdvanceToFinalChallenge();
     } else if (screen === "post") {
-      setPostAnswers({ understanding: 3, affect: "confident", returnIntent: 4 });
-      flash("Finalização preenchida. Clique em 'Concluir Oficina'");
+      const synthetic = {
+        experience: 5,
+        experienceSkipped: false,
+        raceResult: "success",
+        raceTimeSeconds: "12.4",
+        assemblyResult: "complete",
+        quizCompleted: "participated",
+        supportLevel: "occasional"
+      };
+      setPostAnswers(synthetic);
+      submitPost(synthetic);
+      flash("Avaliação preenchida com sucesso e oficina concluída!");
     }
   }
 
   function downloadSession() {
-    const payload = JSON.stringify({ session_id: sessionId, context, events: allEvents, spike_telemetry: spikeTelemetry }, null, 2);
+    const payload = JSON.stringify(
+      {
+        session_id: sessionId,
+        group_id: groupId,
+        installation_id: installationId,
+        site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
+        regional_hub: context.regional || "Nordeste",
+        school_code: context.school || "geral",
+        workshop_code: context.workshop || "oficina-spike",
+        class_code: context.class || "turma-geral",
+        activity_id: context.activity || "atividade-01-spike",
+        started_at: new Date(startedAt).toISOString(),
+        completed_at: new Date().toISOString(),
+        duration_seconds: Math.round(elapsedMs / 1000),
+        team_role: teamRole,
+        status: screen === "finished" ? "completed" : "in_progress",
+        pre_answers: preAnswers,
+        post_answers: postAnswers,
+        spike_telemetry: spikeTelemetry,
+        events: allEvents
+      },
+      null,
+      2
+    );
     const blob = new Blob([payload], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `pulselab-${sessionId.slice(0, 8)}.json`;
+    link.download = `sessao-${sessionId.slice(0, 8)}.json`;
     link.click();
     URL.revokeObjectURL(link.href);
+    flash("💾 Sessão exportada com sucesso em arquivo .json!");
   }
 
   async function runSync(showFeedback = false) {
@@ -1503,14 +1611,49 @@ export default function StudentPage() {
     const tick = () => {
       const nextElapsed = Math.max(0, Date.now() - activityStartedAt);
       setElapsedMs(nextElapsed);
-      if (nextElapsed >= currentMark * 60 * 1000 && !checkpointOpeningRef.current && checkpointModalMark === null) {
-        triggerCheckpointAlert(currentMark);
-      }
     };
     tick();
     const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [activityStartedAt, checkpointModalMark, currentMark, screen]);
+
+    // Coleta silenciosa e periódica da telemetria do LEGO SPIKE a cada 10 segundos
+    const pollSpike = async () => {
+      try {
+        const metrics = await fetchBridgeSpikeMetrics();
+        if (metrics && metrics.project_saved !== false) {
+          setSpikeTelemetry((prev) => {
+            const isFirstDetection = !prev || (!prev.executable_blocks && metrics.executable_blocks > 0);
+            const blocksChanged = prev && prev.executable_blocks !== metrics.executable_blocks;
+            if (isFirstDetection || blocksChanged) {
+              emitTimeline("spike_telemetry", {
+                activity_stage: isFirstDetection ? "primeira_programacao_detectada" : "atualizacao_codigo_spike",
+                details: {
+                  executable_blocks: metrics.executable_blocks,
+                  inferred_stage: metrics.inferred_stage,
+                  uses_motor: metrics.uses_motor,
+                  uses_sensor: metrics.uses_sensor,
+                  file_name: metrics.file_name,
+                  first_coding_detected: isFirstDetection,
+                  elapsed_ms: Math.max(0, Date.now() - activityStartedAt)
+                }
+              });
+            }
+            return metrics;
+          });
+        }
+      } catch {
+        // Falha silenciosa
+      }
+    };
+
+    const firstCheck = window.setTimeout(pollSpike, 2000);
+    const spikeInterval = window.setInterval(pollSpike, 10000);
+
+    return () => {
+      window.clearInterval(timer);
+      window.clearTimeout(firstCheck);
+      window.clearInterval(spikeInterval);
+    };
+  }, [activityStartedAt, screen]);
 
   useEffect(() => {
     if (screen === "finished") return;
@@ -1521,14 +1664,12 @@ export default function StudentPage() {
       startedAt,
       activityStartedAt,
       elapsedMs,
-      currentMark,
+      activityStage,
       screen,
       timeline,
       responses,
       spikeTelemetry,
       preAnswers,
-      checkpoint20Answers,
-      checkpoint40Answers,
       postAnswers,
       teamRole,
       currentRole,
@@ -1538,7 +1679,7 @@ export default function StudentPage() {
     };
     localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
     void saveSession({ session_id: sessionId, status: "in_progress", ...snapshot }).catch(() => {});
-  }, [activityStartedAt, assentAgreed, checkpoint20Answers, checkpoint40Answers, context, currentMark, currentRole, elapsedMs, groupId, postAnswers, preAnswers, responses, screen, sessionId, spikeTelemetry, startedAt, teamRole, timeline]);
+  }, [activityStartedAt, activityStage, assentAgreed, context, currentRole, elapsedMs, groupId, postAnswers, preAnswers, responses, screen, sessionId, spikeTelemetry, startedAt, teamRole, timeline]);
 
   let content;
 
@@ -1558,31 +1699,14 @@ export default function StudentPage() {
       />
     );
   } else if (screen === "activity") {
-    content = <ActivityScreen currentMark={currentMark} elapsedMs={elapsedMs} labMode={labMode} spikeTelemetry={spikeTelemetry} />;
-  } else if (screen === "checkpoint20") {
     content = (
-      <CheckpointScreen
-        answers={checkpoint20Answers}
-        mark={20}
-        setAnswers={setCheckpoint20Answers}
-        onSubmit={() => submitCheckpoint(20)}
-        onDecline={() => handleDeclineCheckpoint(20)}
-        teamRole={teamRole}
-        currentRole={currentRole}
-        onRoleSwap={handleRoleSwap}
-      />
-    );
-  } else if (screen === "checkpoint40") {
-    content = (
-      <CheckpointScreen
-        answers={checkpoint40Answers}
-        mark={40}
-        setAnswers={setCheckpoint40Answers}
-        onSubmit={() => submitCheckpoint(40)}
-        onDecline={() => handleDeclineCheckpoint(40)}
-        teamRole={teamRole}
-        currentRole={currentRole}
-        onRoleSwap={handleRoleSwap}
+      <ActivityScreen
+        elapsedMs={elapsedMs}
+        labMode={labMode}
+        spikeTelemetry={spikeTelemetry}
+        onAdvanceToFinalChallenge={handleAdvanceToFinalChallenge}
+        assentAgreed={assentAgreed}
+        onRefreshTelemetry={() => captureSpikeTelemetry("manual_refresh")}
       />
     );
   } else if (screen === "post") {
@@ -1623,14 +1747,9 @@ export default function StudentPage() {
           >
             📍 Região: {context.regional || "Nordeste"}
           </button>
-          <button
-            className={`topbar-btn ${sidebarOpen ? "is-active" : ""}`}
-            onClick={() => setSidebarOpen((v) => !v)}
-            title="Ver etapas da oficina (barra lateral retrátil)"
-            type="button"
-          >
-            🧭 Etapas ({activeStep}/4)
-          </button>
+          <div className="topbar__step-badge" title="Etapa atual da oficina">
+            🧭 Etapa {activeStep}/3 · {FLOW_STEPS.find((s) => s.id === activeStep)?.label}
+          </div>
           <div className="topbar__session">
             <span>Sessão</span>
             <code>{sessionId.slice(0, 8).toUpperCase()}</code>
@@ -1658,29 +1777,26 @@ export default function StudentPage() {
         <div className="instructor-banner">
           <div className="instructor-banner__info">
             <strong>🛠️ Controles de Demonstração & Instrutor</strong>
-            <span>Avance etapas instantaneamente ou teste os alertas sonoros e visuais</span>
+            <span>Avance entre as etapas da oficina ou sincronize com a nuvem</span>
           </div>
           <div className="instructor-banner__actions">
             <button className="inst-btn inst-btn--accent" onClick={() => setShowContextModal(true)} type="button">
               📍 Região ({context.regional || "Nordeste"})
             </button>
-            <button className="inst-btn" onClick={() => forceCheckpoint(20)} type="button">
-              ⏩ Check-in 20m
+            <button className="inst-btn" onClick={() => forceStage(2)} type="button">
+              🤖 2. Oficina Prática
             </button>
-            <button className="inst-btn" onClick={() => forceCheckpoint(40)} type="button">
-              ⏩ Check-in 40m
-            </button>
-            <button className="inst-btn" onClick={forcePost} type="button">
-              🏁 Ir para Finalizar
+            <button className="inst-btn" onClick={() => forceStage(3)} type="button">
+              🏁 3. Desafio da Corrida
             </button>
             <button className="inst-btn" onClick={() => addMinutes(5)} type="button">
               ⏱️ +5 min relógio
             </button>
-            <button className="inst-btn inst-btn--accent" onClick={testSoundAndAlert} type="button">
-              🔔 Testar Som & Pop-up
-            </button>
             <button className="inst-btn" onClick={autoFillCurrentStep} type="button">
               ✨ Preencher teste
+            </button>
+            <button className="inst-btn" onClick={downloadSession} type="button" title="Baixar arquivo JSON desta oficina">
+              💾 Exportar (.json)
             </button>
             <button className="inst-btn inst-btn--accent" onClick={syncNow} type="button">
               ☁️ Sincronizar Nuvem
@@ -1692,13 +1808,6 @@ export default function StudentPage() {
         </div>
       ) : null}
 
-      {checkpointModalMark ? (
-        <CheckpointAlertModal
-          mark={checkpointModalMark}
-          onProceed={handleProceedFromModal}
-        />
-      ) : null}
-
       <RegionMetadataModal
         isOpen={showContextModal}
         onClose={() => setShowContextModal(false)}
@@ -1708,45 +1817,6 @@ export default function StudentPage() {
         computerId={getComputerId(installationId)}
         systemMetadata={getSystemMetadata()}
       />
-
-      {sidebarOpen ? (
-        <div
-          className="sidebar-backdrop"
-          onClick={() => setSidebarOpen(false)}
-          aria-hidden="true"
-        />
-      ) : null}
-
-      <aside className={`flow-sidebar ${sidebarOpen ? "is-open" : ""}`}>
-        <div className="flow-sidebar__header">
-          <div>
-            <span>Progresso da oficina</span>
-            <strong>{activeStep}/4</strong>
-          </div>
-          <button
-            className="sidebar-close-btn"
-            onClick={() => setSidebarOpen(false)}
-            title="Fechar etapas"
-            type="button"
-            aria-label="Fechar etapas"
-          >
-            ✕
-          </button>
-        </div>
-        <nav aria-label="Etapas da atividade">
-          {FLOW_STEPS.map((step) => (
-            <div className={`flow-step ${step.id === activeStep ? "is-active" : ""} ${step.id < activeStep ? "is-complete" : ""}`} key={step.id}>
-              <span>{step.id < activeStep ? "✓" : step.id}</span>
-              <strong>{step.label}</strong>
-            </div>
-          ))}
-        </nav>
-        <div className="sidebar-context">
-          <span>Oficina LEGO SPIKE</span>
-          <strong>Desafio Ativo</strong>
-          <small>Coleta anônima por grupo</small>
-        </div>
-      </aside>
 
       <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
         <section className="simulator-stage">

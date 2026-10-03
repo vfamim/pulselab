@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Parecer — Questionários e arquitetura de coleta | PulseLab</title>
+  <style>
+    :root { color-scheme: light; --ink: #242424; --muted: #646464; --line: #e1e1dc; --accent: #24564d; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+    body { margin: 0; background: #fafaf8; color: var(--ink); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 17px; line-height: 1.75; -webkit-font-smoothing: antialiased; }
+    main { max-width: 1050px; margin: 0 auto; padding: 68px 32px 80px; }
+    header { padding-bottom: 30px; border-bottom: 1px solid var(--line); }
+    .eyebrow { margin: 0 0 12px; font-size: 12px; font-weight: 650; letter-spacing: .13em; text-transform: uppercase; color: var(--muted); }
+    h1 { max-width: 760px; margin: 0 0 16px; font-size: clamp(30px, 4.8vw, 44px); line-height: 1.18; letter-spacing: -.035em; font-weight: 650; }
+    .subtitle { margin: 0; color: var(--muted); font-size: 16px; }
+    nav { display: flex; flex-wrap: wrap; gap: 10px 26px; margin-top: 24px; font-size: 14px; }
+    a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; overflow-wrap: anywhere; }
+    a:hover { color: #152f2a; }
+    a:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; }
+    p { margin: 0 0 20px; }
+    p, ul, ol, blockquote { max-width: 80ch; }
+    .intro { padding-top: 32px; }
+    .lead { font-size: 19px; line-height: 1.65; }
+    section { margin-top: 52px; padding-top: 32px; border-top: 1px solid var(--line); }
+    h2 { margin: 0 0 24px; font-size: 28px; line-height: 1.3; letter-spacing: -.02em; font-weight: 650; }
+    h2 span { display: block; margin-bottom: 8px; font-size: 12px; letter-spacing: .11em; text-transform: uppercase; color: var(--muted); }
+    h3 { max-width: 72ch; margin: 36px 0 16px; font-size: 21px; line-height: 1.4; letter-spacing: -.01em; font-weight: 650; }
+    strong { font-weight: 650; }
+    ul, ol { margin: 0 0 24px; padding-left: 24px; }
+    li { padding-left: 4px; margin-bottom: 12px; }
+    code { padding: 2px 5px; background: #eeefea; border-radius: 3px; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: .86em; overflow-wrap: anywhere; }
+    .table-wrap { overflow-x: auto; margin: 26px 0; border: 1px solid var(--line); border-radius: 5px; background: #fff; }
+    table { width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.6; }
+    th, td { padding: 17px 18px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { background: #f0f1ed; font-size: 13px; font-weight: 650; }
+    tr:last-child td { border-bottom: 0; }
+    .instrument { min-width: 690px; }
+    .instrument th:nth-child(1) { width: 25%; }
+    .instrument th:nth-child(2) { width: 26%; }
+    .instrument th:nth-child(3) { width: 49%; }
+    .comparison { min-width: 580px; }
+    .comparison th:first-child { width: 20%; }
+    .two-col { min-width: 560px; }
+    .two-col th { width: 50%; }
+    blockquote { margin: 26px 0; padding: 18px 24px; border-left: 3px solid #829e94; background: #f0f3ef; }
+    blockquote p:last-child { margin-bottom: 0; }
+    .answer-options { font-size: 16px; }
+    .verdict { padding-top: 24px; margin-top: 32px; border-top: 1px solid var(--line); }
+    footer { margin-top: 52px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+    footer p { margin-bottom: 0; }
+    @media (max-width: 640px) {
+      body { font-size: 16px; }
+      main { padding: 34px 20px 48px; }
+      .lead { font-size: 18px; }
+      h2 { font-size: 24px; }
+      h3 { font-size: 19px; }
+      section { margin-top: 36px; padding-top: 26px; }
+      nav { gap: 8px 18px; }
+      th, td { padding: 13px 14px; }
+    }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+    @media print {
+      @page { margin: 18mm 15mm; }
+      body { background: #fff; color: #000; font-size: 10.5pt; line-height: 1.5; }
+      main { max-width: none; padding: 0; }
+      header { padding-bottom: 16px; }
+      h1 { font-size: 26pt; }
+      h2 { font-size: 18pt; }
+      h3 { font-size: 13pt; }
+      nav, footer { display: none; }
+      p, li { orphans: 3; widows: 3; }
+      h2, h3 { break-after: avoid; }
+      section { margin-top: 28px; padding-top: 20px; }
+      a { color: inherit; }
+      .lead { font-size: 12pt; }
+      .table-wrap { overflow: visible; border-radius: 0; }
+      table { min-width: 0 !important; font-size: 9pt; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; }
+      th, td { padding: 9px; }
+      blockquote { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">PulseLab · Parecer técnico</p>
+      <h1>Questionários e arquitetura de coleta</h1>
+      <p class="subtitle">Auditoria adversarial do instrumento, comparação entre coleta ativa e passiva e proposta de arquitetura.</p>
+      <nav aria-label="Navegação pelo parecer">
+        <a href="#eixo-1">1. Instrumento atual</a>
+        <a href="#eixo-2">2. Ativo e passivo</a>
+        <a href="#eixo-3">3. Arquitetura recomendada</a>
+      </nav>
+    </header>
+
+    <div class="intro">
+      <p class="lead"><strong>O instrumento atual permite descrever respostas dadas à interface, mas não sustenta as interpretações psicológicas sugeridas pelos nomes dos campos. Minha recomendação é manter telemetria comportamental e reduzir a coleta ativa a um construto claramente definido, com amostragem esparsa e validação independente.</strong></p>
+      <p>Analisei a PWA efetivamente carregada por <a href="../web/agent-simulator/src/main.jsx">main.jsx</a>, seu bundle compilado, o Bridge, o parser e as migrações. Há divergência material entre documentação e implementação: os módulos <code>protocol.js</code> e <code>research-session.js</code> descritos na documentação não existem neste checkout; a interface atual contém perguntas próprias e envia registros identificados como protocolo v1.</p>
+      <p>Esta é uma auditoria do instrumento e da arquitetura. Sem dados empíricos de aplicação, <strong>não é possível quantificar satisficing, fadiga ou viés de não resposta</strong>. É possível identificar mecanismos que os favorecem — e falhas técnicas que podem parecer baixa adesão.</p>
+    </div>
+
+    <section id="eixo-1" aria-labelledby="titulo-eixo-1">
+      <h2 id="titulo-eixo-1"><span>Eixo 1</span>Auditoria adversarial do instrumento atual</h2>
+      <p><strong>O problema central do instrumento é a indefinição do que cada resposta representa.</strong></p>
+      <p>O fluxo completo solicita <strong>11 respostas obrigatórias para quem decide responder todos os formulários</strong>: duas iniciais, três em cada checkpoint e três finais, além dos dois controles opcionais de ajuda. Existem dois checkpoints, aos 20 e 40 minutos; não uma sequência indefinida a cada 20 minutos. O fluxo normal encaminha diretamente do segundo checkpoint ao pós-oficina.</p>
+      <p>As perguntas e alternativas estão definidas em <a href="../web/agent-simulator/app/student-page.jsx">student-page.jsx</a>, com sua apresentação nos <a href="../web/agent-simulator/app/student-page.jsx">formulários</a>.</p>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Auditoria das perguntas atuais; tabela com rolagem horizontal em telas pequenas">
+        <table class="instrument">
+          <thead><tr><th scope="col">Item atual</th><th scope="col">O que a resposta realmente representa</th><th scope="col">Fragilidade e decisão</th></tr></thead>
+          <tbody>
+            <tr><td><strong>“Já montou ou programou robôs ou blocos antes?”</strong></td><td>Familiaridade autodeclarada com experiências heterogêneas.</td><td>“Nunca”, “usamos 1 ou 2 vezes” e “já dominamos” misturam exposição e competência. A pergunta está no singular e as alternativas no plural. <strong>Manter apenas como caracterização inicial</strong>, reformulando exposição e composição da bancada; não tratar como conhecimento prévio medido.</td></tr>
+            <tr><td><strong>“Como está a animação e confiança do grupo para o desafio?”</strong></td><td>Escolha entre insegurança, curiosidade, confiança e entusiasmo.</td><td>Essas categorias não constituem níveis crescentes de autoeficácia. Uma pessoa curiosa pode estar muito confiante ou muito insegura. <strong>Eliminar a versão atual.</strong> Se autoeficácia for central, perguntar pela capacidade percebida de executar uma tarefa específica.</td></tr>
+            <tr><td><strong>“Como está o nível de dificuldade do desafio até aqui?”</strong></td><td>Dificuldade percebida, retrospectiva e sem janela temporal delimitada.</td><td>A resposta é gravada como <code>mental_effort</code>. Dificuldade percebida e esforço mental investido são distintos. “Até aqui” também pode incluir toda a oficina. <strong>Não interpretar como esforço mental; reformular ou renomear conforme a hipótese.</strong></td></tr>
+            <tr><td><strong>“Como está o robô e o código agora?”</strong></td><td>Julgamento composto sobre funcionamento, avanço, dúvida e autonomia.</td><td>“Voando” exige funcionamento e independência; “Travamos” mistura ausência de estratégia e necessidade de ajuda. Não há uma dimensão ordinal única. <strong>Preservar apenas uma versão estreita sobre impasse percebido</strong>, se esse for o alvo analítico.</td></tr>
+            <tr><td><strong>“Como a dupla ou grupo está dividindo as tarefas?”</strong></td><td>Avaliação pública da organização do trabalho.</td><td>“Pouca troca”, “desigual”, “boa conversa” e “revezamento” medem aspectos diferentes. Revezamento não é necessariamente superior à divisão especializada. O item aparece até no modo individual. <strong>Eliminar dos checkpoints de rotina.</strong></td></tr>
+            <tr><td><strong>“Precisa de ajuda do professor na bancada?”</strong></td><td>Acionamento de um controle de solicitação de ajuda.</td><td><code>help=false</code> é o valor inicial: ausência de clique não comprova ausência de necessidade. O registro ocorre no envio do formulário, não imediatamente no clique. <strong>Manter como ação operacional disponível durante toda a atividade</strong>, separada do questionário.</td></tr>
+            <tr><td><strong>“O quanto vocês entenderam sobre o que o robô faz?”</strong></td><td>Compreensão percebida, possivelmente influenciada pelo sucesso recente.</td><td>Não mede compreensão demonstrada nem ganho de aprendizagem. <strong>Eliminar do núcleo mínimo</strong>, salvo se a pesquisa estudar calibração entre percepção e desempenho independente.</td></tr>
+            <tr><td><strong>“Gostariam de participar de outra oficina como esta?”</strong></td><td>Intenção declarada de retorno e aceitabilidade da experiência.</td><td>As alternativas misturam intenção, satisfação e intensidade de entusiasmo. Não medem motivação intrínseca nem retorno efetivo. <strong>Retirar do instrumento principal</strong>; usar ocasionalmente em avaliação de aceitabilidade.</td></tr>
+            <tr><td><strong>“Qual emoji melhor resume o sentimento do grupo agora?”</strong></td><td>Escolha nominal de um sentimento entre quatro opções impostas.</td><td>Frustração, cansaço, curiosidade e orgulho podem coexistir. Faltam neutralidade e confusão. “Orgulho” é armazenado como <code>confident</code>, alterando o significado. <strong>Eliminar a versão atual</strong>; medir uma emoção específica apenas quando teoricamente necessária.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>A distinção entre dificuldade e esforço tem respaldo empírico recente: Schuessler, Fischer e Walpuski encontraram evidências de que os dois itens capturam aspectos diferentes, e que avaliações tardias podem ser influenciadas pelas tarefas mais exigentes. Isso não invalida itens únicos; invalida tratá-los como intercambiáveis. <a href="https://link.springer.com/article/10.1007/s11251-024-09692-6">Estudo, 2025</a>.</p>
+      <p><strong>Não existe justificativa para somar esses itens em um “índice de engajamento”, “qualidade da aprendizagem” ou “carga cognitiva”.</strong> Eles cobrem construtos distintos e algumas alternativas sequer são ordinais. Calcular alfa de Cronbach para esse conjunto não corrigiria o problema.</p>
+      <p>Dados descritivos podem ter valor acadêmico. “Proporção de bancadas que relatam impasse em determinado contexto” é um resultado legítimo. O erro seria convertê-lo em “prevalência de confusão cognitiva” ou “déficit de aprendizagem” sem evidência adicional.</p>
+
+      <h3>Unidade de resposta e comparação temporal</h3>
+      <p>Há ainda três ameaças transversais:</p>
+      <ul>
+        <li><strong>Unidade de resposta ambígua.</strong> As perguntas pedem respostas do grupo, mas o evento recebe um <code>participant_id</code> associado ao papel atual. Uma escolha feita por um porta-voz não demonstra consenso coletivo.</li>
+        <li><strong>Respondente confundido com tempo.</strong> Após o checkpoint de 20 minutos, o código troca automaticamente o papel de computador para montagem, ou vice-versa. Assim, diferenças entre 20 e 40 minutos podem refletir pessoa, papel ou passagem do tempo. A interface não confirma quem respondeu nem quem efetivamente mudou de função. <a href="../web/agent-simulator/app/student-page.jsx">Identificação e troca</a>, <a href="../web/agent-simulator/app/student-page.jsx">troca automática</a>.</li>
+        <li><strong>Discordância não representada.</strong> O formulário admite recusa integral, mas não recusa por item nem “não chegamos a uma resposta conjunta”. Isso favorece respostas impostas pelo integrante dominante.</li>
+      </ul>
+
+      <h3>Intervalo de 20 minutos, interrupção e fadiga</h3>
+      <p><strong>Os 20 minutos não são intrinsecamente inadequados; estão metodologicamente injustificados.</strong> Sua adequação depende da duração dos estados investigados e da resolução temporal necessária. Dois retratos podem servir para comparar dois momentos da oficina. Não permitem reconstruir episódios breves de frustração ou estimar uma dinâmica individual confiável.</p>
+      <p>O problema concreto é que o código:</p>
+      <ol>
+        <li>Aciona uma interrupção por relógio, independentemente da atividade em curso.</li>
+        <li>Apresenta um modal inicial com apenas “Responder Check-in Agora”; a recusa exige entrar no formulário.</li>
+        <li>Não expira o checkpoint atrasado na PWA. Se o primeiro for respondido após 40 minutos, o segundo pode aparecer logo depois.</li>
+        <li>Encaminha ao pós-oficina após o checkpoint de 40 minutos, independentemente do término pedagógico real.</li>
+        <li>Promete “30 segundos”, sem evidência apresentada sobre leitura, negociação da resposta e retomada da tarefa. <a href="../web/agent-simulator/app/student-page.jsx">Modal</a>, <a href="../web/agent-simulator/app/student-page.jsx">temporização</a>.</li>
+      </ol>
+      <p>O custo relevante inclui <strong>interromper, reconstruir o contexto mental e renegociar a atividade da bancada</strong>, além do tempo de clique. Estudos de HCI mostram que a posição da interrupção na estrutura da tarefa influencia seu custo; fronteiras entre subtarefas são candidatas melhores que instantes arbitrários. <a href="https://doi.org/10.1145/1314683.1314689">Bailey e Iqbal, 2008</a>.</p>
+      <p>Entretanto, baixa adesão não prova fadiga. Em um estudo experimental com 163 estudantes, questionários mais longos prejudicaram quantidade e qualidade dos dados, enquanto o aumento da frequência não apresentou os mesmos efeitos. Esse resultado não se transfere automaticamente para crianças em robótica, mas impede afirmar que “20 minutos necessariamente produz respostas aleatórias”. <a href="https://pubmed.ncbi.nlm.nih.gov/32909448/">Eisele et al., 2022</a>.</p>
+      <p>No PulseLab, eu distinguiria:</p>
+      <ul>
+        <li><strong>Satisficing:</strong> respostas dadas com esforço insuficiente; precisa de evidências convergentes, não apenas rapidez ou repetição.</li>
+        <li><strong>Seleção entre bancadas:</strong> quem aceita participar pode diferir de quem recusa.</li>
+        <li><strong>Seleção entre momentos:</strong> a mesma bancada pode responder quando está tranquila e ignorar o aviso quando está muito envolvida ou travada.</li>
+        <li><strong>Perda técnica:</strong> resposta produzida, mas não recebida ou reconhecida pelo servidor.</li>
+      </ul>
+      <p>A seleção por contexto é uma ameaça empírica real em ESM: Reiter e Schoedel encontraram previsibilidade da não resposta a partir de comportamento anterior e contexto. <strong>Não resposta potencialmente informativa não deve ser presumida aleatória.</strong> <a href="https://pubmed.ncbi.nlm.nih.gov/37932624/">Estudo, 2024</a>.</p>
+    </section>
+
+    <section id="eixo-2" aria-labelledby="titulo-eixo-2">
+      <h2 id="titulo-eixo-2"><span>Eixo 2</span>Coleta ativa e coleta passiva</h2>
+      <p><strong>Um sistema totalmente passivo pode produzir boa ciência, mas os construtos precisam caber no que ele observa.</strong></p>
+      <p>A primeira correção é factual: <strong>a PWA atual não implementa a telemetria contínua descrita na proposta</strong>.</p>
+
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Implementação da telemetria e consequências metodológicas">
+        <table class="two-col">
+          <thead><tr><th scope="col">Implementação encontrada</th><th scope="col">Consequência metodológica</th></tr></thead>
+          <tbody>
+            <tr><td><code>telemetry_foreground_app</code> recebe o sistema operacional; <code>telemetry_window_title</code> recebe resolução da tela.</td><td>Esses campos não medem aplicativo em foco nem troca de janela. Usá-los dessa forma seria erro de interpretação do dado.</td></tr>
+            <tr><td><code>captureSpikeTelemetry()</code> é chamado no início e em transições dos questionários.</td><td>A cobertura passiva depende do fluxo ativo; não há uma série contínua independente.</td></tr>
+            <tr><td>O parser seleciona o arquivo SPIKE salvo mais recentemente na pasta pesquisada.</td><td>Pode observar arquivo antigo ou de outra atividade. Não captura necessariamente o programa em edição ou em execução.</td></tr>
+            <tr><td><code>Infer-SpikeStage</code> atribui estágios e valores fixos como <code>confidence=0.92</code> pela presença de categorias de blocos.</td><td>São regras heurísticas e números fixados no código, sem calibração demonstrada. Não comprovam funcionamento da missão, compreensão ou aprendizagem.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Evidências: <a href="../web/agent-simulator/app/student-page.jsx">campos e captura na PWA</a>, <a href="../bridge/spike-parser.ps1">seleção do arquivo e inferência</a>.</p>
+
+      <h3>Limites da inferência comportamental</h3>
+      <p>Mesmo com coleta contínua corretamente implementada, persistem ambiguidades fundamentais:</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Sinais passivos e explicações concorrentes">
+        <table class="two-col">
+          <thead><tr><th scope="col">Sinal passivo</th><th scope="col">Explicações concorrentes</th></tr></thead>
+          <tbody>
+            <tr><td>Ausência de teclado/mouse</td><td>Montagem física, discussão produtiva, observação do robô, espera, distração ou falha do coletor.</td></tr>
+            <tr><td>Muitas edições e execuções</td><td>Exploração produtiva, tentativa aleatória, depuração ou dificuldade persistente.</td></tr>
+            <tr><td>Troca de janela</td><td>Busca de ajuda, consulta à tarefa, distração ou consequência do próprio aviso do PulseLab.</td></tr>
+            <tr><td>Poucas ações e sucesso rápido</td><td>Competência prévia, solução copiada ou trabalho realizado por outro integrante.</td></tr>
+            <tr><td>Presença de sensor, condição e loop</td><td>Estrutura potencialmente relevante; não demonstra que o código executa corretamente nem que seus autores o compreendem.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p><strong>Frustração, autoeficácia, confusão e motivação intrínseca não são identificáveis de maneira unívoca nesses sinais.</strong> Um modelo pode aprender associações úteis; isso não transforma automaticamente sua saída em medida válida do construto.</p>
+      <p>Há duas falhas diferentes a evitar:</p>
+      <ul>
+        <li><strong>Inferência reversa:</strong> observar um comportamento compatível com frustração e concluir que houve frustração, embora existam outras causas.</li>
+        <li><strong>Falácia ecológica:</strong> atribuir a cada aluno um estado inferido a partir da bancada ou do computador compartilhado.</li>
+      </ul>
+      <p>Uma relação entre bancadas também não implica a mesma relação dentro da bancada ao longo do tempo. Bancadas experientes podem editar menos e ter melhor desempenho; isso não significa que reduzir edições de uma bancada melhorará seu desempenho.</p>
+
+      <h3>Poder analítico e publicabilidade</h3>
+      <p>A comparação metodológica depende da pergunta:</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Comparação entre coleta passiva, autorrelato e modelo combinado">
+        <table class="comparison">
+          <thead><tr><th scope="col">Modelo</th><th scope="col">Onde é forte</th><th scope="col">Limitação principal</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Passivo</strong></td><td>Sequências de ações, uso de recursos, tempos observáveis, padrões de edição e execução.</td><td>Sub-representação da atividade física/social e ambiguidade psicológica.</td></tr>
+            <tr><td><strong>Autorrelato</strong></td><td>Experiência percebida, intenção e julgamento subjetivo.</td><td>Erro de resposta, influência social, reatividade e cobertura temporal limitada.</td></tr>
+            <tr><td><strong>Combinado</strong></td><td>Relacionar processos observados a experiências relatadas e resultados independentes.</td><td>Só melhora a inferência quando as fontes são válidas, sincronizadas e acrescentam informação.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Não existe uma hierarquia automática em que “multimodal” supera “passivo”. <strong>Ativo/passivo descreve como se coleta; unimodal/multimodal descreve as fontes.</strong> Um sistema multimodal pode ser inteiramente passivo. Combinar questionários e logs tampouco constitui, por si só, pesquisa de métodos mistos qualitativos e quantitativos.</p>
+      <p>A literatura contemporânea oferece exemplos de integração orientada por teoria e por escalas temporais: Nguyen et al. analisaram interações verbais e olhar em aprendizagem colaborativa; Yan et al. avaliaram uma aplicação multimodal em práticas reais de feedback e reflexão. Esses trabalhos sustentam o valor de fontes complementares, não uma superioridade universal de “mais sensores”. <a href="https://learning-analytics.info/index.php/JLA/article/view/8661">Nguyen et al., 2025</a>, <a href="https://bera-journals.onlinelibrary.wiley.com/doi/10.1111/bjet.13498">Yan et al., 2024</a>.</p>
+      <p>Como revisor, eu daria mais peso a <strong>uma pergunta estreita, medidas defensáveis e validação fora da amostra</strong> do que ao volume de registros. Milhões de cliques não corrigem um construto mal operacionalizado; essa crítica é central em Learning Analytics. <a href="https://learning-analytics.info/index.php/JLA/article/view/4677">Wise e Shaffer</a>.</p>
+      <p>Um artigo inteiramente passivo pode ser forte ao investigar padrões de depuração e desempenho posterior. Seria frágil se apresentasse os mesmos padrões como “motivação intrínseca detectada” sem validação correspondente.</p>
+    </section>
+
+    <section id="eixo-3" aria-labelledby="titulo-eixo-3">
+      <h2 id="titulo-eixo-3"><span>Eixo 3</span>Veredito e arquitetura de coleta otimizada</h2>
+      <p><strong>Recomendo uma arquitetura híbrida mínima, começando por um único alvo: impasse percebido da bancada.</strong></p>
+      <p>Esse alvo é compatível com a atividade e com uma decisão pedagógica. Não o chamaria de frustração, carga cognitiva ou aprendizagem.</p>
+      <p>Um candidato de item, ainda sujeito a entrevistas cognitivas e piloto, seria:</p>
+      <blockquote>
+        <p><strong>“Nos dois minutos antes deste aviso, a bancada ficou sem saber o que tentar para avançar?”</strong></p>
+        <p class="answer-options">Não · Sim · Não estávamos trabalhando na tarefa · Sem acordo no grupo<br>Ação separada: Pular</p>
+      </blockquote>
+      <p>Cada escolha salva imediatamente. Sem botão adicional de confirmação, modal bloqueante ou resposta preselecionada. A pergunta mede <strong>impasse percebido naquela janela</strong>, não incapacidade objetiva.</p>
+      <p>“Sem acordo”, “fora da atividade” e “pular” devem permanecer estados distintos. Não são níveis de impasse e não devem virar zeros.</p>
+      <p>Se a hipótese principal for esforço mental, substitua esse item por uma pergunta individual sobre esforço investido, com alternativas de intensidade coerentes. <strong>Não acrescente uma bateria de cinco construtos para aproveitar o mesmo aviso.</strong> Uma adaptação curta precisa de validação própria; não herda a validade de uma escala publicada apenas por mencionar esforço.</p>
+
+      <h3>Fluxo mínimo</h3>
+      <p>Para o fluxo mínimo:</p>
+      <ul>
+        <li><strong>Entrada:</strong> experiência anterior coletada uma vez, com referente explícito; retirar animação/confiança do fluxo obrigatório.</li>
+        <li><strong>Durante:</strong> um item por oportunidade, com um teto inicial de duas ou três microamostras por sessão como hipótese de projeto a testar.</li>
+        <li><strong>Ajuda:</strong> botão permanente, cujo acionamento gera imediatamente um evento independente.</li>
+        <li><strong>Saída:</strong> encerrar no término real da atividade. Remover compreensão percebida, intenção de retorno e emoji do núcleo obrigatório.</li>
+        <li><strong>Resultado:</strong> registrar execução da missão e uma explicação conceitual breve, avaliadas por rubrica. Se a alegação for ganho de aprendizagem, será necessária também uma medida inicial comparável; desempenho final isolado não demonstra ganho.</li>
+      </ul>
+      <p>A redução de atrito não garante validade estatística. O esquema temporal deve corresponder ao processo investigado, e a quantidade de observações precisa ser planejada considerando dependência e não resposta. <a href="https://journals.sagepub.com/doi/full/10.1177/25152459241267912">Fritz et al., 2024</a>.</p>
+
+      <h3>Gatilhos contextuais e amostragem de referência</h3>
+      <p><strong>Os gatilhos contextuais devem ser combinados com uma amostra de referência aleatória.</strong> Perguntar exclusivamente após erros ou longas pausas produzirá uma amostra enriquecida de dificuldades. Ela pode servir para estudar esses episódios, mas não para estimar a frequência de impasse durante toda a oficina.</p>
+      <p>Eu usaria:</p>
+      <ul>
+        <li>Oportunidades contextuais após eventos verificáveis, como término de execução ou sequência de tentativas, desde que a integração realmente observe esses eventos.</li>
+        <li>Uma parcela de janelas sorteadas independentemente dos indicadores de dificuldade.</li>
+        <li>Limite de avisos, intervalo mínimo entre eles e expiração dos atrasados.</li>
+        <li>Registro da regra de seleção, probabilidade de inclusão e motivo de supressão.</li>
+      </ul>
+      <p>Fronteiras de tarefa podem reduzir interrupção, mas também selecionam estados particulares. Se o sistema só observa momentos diante do computador, a inferência deve se limitar a esses momentos. Pesos estatísticos não recuperam estados que nunca tiveram possibilidade de ser amostrados.</p>
+
+      <h3>Correções de integridade científica</h3>
+      <p><strong>Antes de validar modelos, a arquitetura atual exige correções de integridade científica.</strong></p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="Falhas de integridade científica e correções necessárias">
+        <table class="two-col">
+          <thead><tr><th scope="col">Achado verificável</th><th scope="col">Correção necessária</th></tr></thead>
+          <tbody>
+            <tr><td>O hash declarado referencia <code>config.json</code>, mas as perguntas exibidas estão em JSX e diferem das configuradas. O hash também não coincide com o SHA-256 atual do arquivo bruto.</td><td>Manifesto versionado contendo texto, alternativas, referente, janela de recordação e codificação efetivamente exibidos.</td></tr>
+            <tr><td>Identidade é derivada do papel; <code>group_id</code> é regenerado ao reiniciar.</td><td>Separar bancada, sessão, respondente e papel. Definir ligação longitudinal quando necessária, sem tratar papel como identidade.</td></tr>
+            <tr><td>A PWA não preenche latência, instante do aviso e atraso, embora existam campos no esquema. <code>elapsed_ms</code> também usa origens diferentes conforme o evento.</td><td>Registrar separadamente agendamento, exibição, início, resposta e janela de referência; usar relógio monotônico para durações.</td></tr>
+            <tr><td>“Preencher teste” pode ser acessado nos controles e seus resultados seguem o fluxo normal de persistência.</td><td>Identificar e isolar dados sintéticos na origem e na ingestão.</td></tr>
+            <tr><td>A recusa inicial ainda emite eventos, agenda checkpoints e não impede o fluxo posterior de coleta.</td><td>Fazer a participação governar efetivamente coleta, persistência e avisos. Recusa não pode ser interpretada como participação parcial comum.</td></tr>
+            <tr><td>Os eventos de sessão incluem colunas de telemetria ausentes dessa tabela nas migrações versionadas. O sincronizador interrompe a fila no primeiro erro e aceita qualquer HTTP 409 como sucesso.</td><td>Validar contratos por tipo de evento; distinguir rejeição, duplicação e falha transitória; reconciliar eventos locais com recebidos.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Evidências: <a href="../web/agent-simulator/lib/contracts.js">hash</a>, <a href="../web/agent-simulator/app/student-page.jsx">recusa inicial</a>, <a href="../web/agent-simulator/app/student-page.jsx">preenchimento sintético</a>, <a href="../web/agent-simulator/lib/sync-engine.js">sincronizador</a>, <a href="../supabase/migrations/20260815000000_baseline.sql">esquema dos eventos de sessão</a>.</p>
+      <p>Confirmei em execução simulada, sem requisições externas, que o sanitizador mantém essas colunas e que HTTP 409 é tratado indiscriminadamente como sucesso. <strong>Não confirmei o esquema instalado no servidor remoto.</strong> Portanto, há incompatibilidade demonstrável no contrato versionado; sua contribuição para perdas reais ainda precisa ser medida.</p>
+
+      <h3>Fusão entre telemetria e microamostras</h3>
+      <p><strong>A fusão entre telemetria e microamostras deve preservar a incerteza do rótulo.</strong> Autorrelato é uma referência subjetiva, não uma verdade infalível.</p>
+      <p>Para cada aviso, eu manteria:</p>
+      <ul>
+        <li>Identificação da bancada, sessão e respondente, quando aplicável.</li>
+        <li>Versões do instrumento, coletor e política de amostragem.</li>
+        <li>Janela temporal referida pelo item e horários efetivos.</li>
+        <li>Resposta ou motivo de ausência.</li>
+        <li>Cobertura e falhas dos sensores.</li>
+        <li>Identificador do projeto e instante de seu último salvamento, separados do instante de leitura.</li>
+        <li>Eventos de aviso, ajuda e intervenção do professor.</li>
+      </ul>
+      <p>Se o item refere os dois minutos anteriores ao aviso em <em>t</em>, suas características comportamentais devem vir dessa janela. <strong>Não usar eventos posteriores à pergunta para prever a resposta</strong>, pois o próprio aviso pode alterar o comportamento. Tampouco propagar um rótulo pontual pelos 20 minutos inteiros.</p>
+
+      <h3>Condições para a avaliação científica</h3>
+      <p>A avaliação científica deveria cumprir cinco condições:</p>
+      <ol>
+        <li><strong>Validar o item antes do classificador.</strong> Verificar compreensão com alunos, referente individual/coletivo e interpretação das alternativas.</li>
+        <li><strong>Triangular uma subamostra.</strong> Usar observação independente e rubrica de desempenho; discordâncias com autorrelatos devem ser investigadas, não automaticamente “corrigidas”.</li>
+        <li><strong>Modelar a estrutura dos dados.</strong> Janelas estão agrupadas em sessões e bancadas. Separar associações dentro e entre bancadas; respeitar a natureza ordinal ou nominal das respostas.</li>
+        <li><strong>Validar em bancadas e contextos novos.</strong> Evitar dividir aleatoriamente linhas da mesma sessão entre treino e teste. Reportar calibração, erros por contexto e incerteza, além de discriminação.</li>
+        <li><strong>Demonstrar ganho incremental.</strong> Comparar telemetria, autorrelato e combinação contra um critério independente. Se a pergunta só servir de rótulo, ela não pode entrar como preditora de si mesma.</li>
+      </ol>
+      <p>O piloto deve comparar políticas de amostragem mantendo o item constante, medindo cobertura, atrasos, recusa e custo de interrupção. O tamanho necessário depende do número de bancadas independentes, frequência do estado-alvo e precisão pretendida; a contagem bruta de eventos não substitui esse planejamento.</p>
+      <p class="verdict"><strong>Eu aprovaria, como direção de pesquisa, detectar e caracterizar episódios de impasse percebido com telemetria contextual e rótulos esparsos. Não aprovaria, com o instrumento atual, alegações de mensuração de carga cognitiva, motivação intrínseca, autoeficácia ou aprendizagem individual.</strong></p>
+    </section>
+
+    <footer><p>Parecer técnico · PulseLab · Documento preparado para leitura no navegador e impressão.</p></footer>
+  </main>
+</body>
+</html>
