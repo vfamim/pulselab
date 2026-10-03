@@ -18,7 +18,8 @@ import {
   purgeSession,
   removeSession,
   saveEvent,
-  saveSession
+  saveSession,
+  getLocalStoreSummary
 } from "../lib/student-store.js";
 import {
   flushPendingEvents,
@@ -1099,7 +1100,8 @@ function FreeModeFinishedScreen({ onRestart }) {
   );
 }
 
-function FinishedScreen({ pendingCount, quarantinedCount = 0, onDownload, onRestart }) {
+function FinishedScreen({ pendingCount, quarantinedCount = 0, totalSavedCount = 0, onDownload, onRestart }) {
+  const displayCount = totalSavedCount > 0 ? totalSavedCount : pendingCount;
   return (
     <Card
       compact
@@ -1128,7 +1130,7 @@ function FinishedScreen({ pendingCount, quarantinedCount = 0, onDownload, onRest
             </p>
           ) : (
             <p>
-              {pendingCount} registro(s) salvos no computador com segurança (armazenamento offline-first). Os dados serão consolidados pelo pesquisador via pendrive ou importador autorizado.
+              {displayCount} registro(s) salvos no computador com segurança (armazenamento offline-first). Os dados serão consolidados pelo pesquisador via pendrive ou importador autorizado.
             </p>
           )}
         </div>
@@ -1294,13 +1296,14 @@ export default function StudentPage() {
 
   const [dbPendingCount, setDbPendingCount] = useState(0);
   const [dbQuarantinedCount, setDbQuarantinedCount] = useState(0);
+  const [dbTotalStoredCount, setDbTotalStoredCount] = useState(0);
 
   const refreshDeliveryCounts = React.useCallback(async () => {
     try {
-      const pending = await listPendingEvents();
-      setDbPendingCount(pending.length);
-      const quarantined = await listQuarantinedEvents();
-      setDbQuarantinedCount(quarantined.length);
+      const summary = await getLocalStoreSummary();
+      setDbPendingCount(summary.pendingCount);
+      setDbQuarantinedCount(summary.quarantinedCount);
+      setDbTotalStoredCount(summary.totalRecords);
     } catch {
       // IndexedDB indisponível em fallback
     }
@@ -1322,6 +1325,8 @@ export default function StudentPage() {
   const pendingCount = Math.max(memoryPendingCount, dbPendingCount);
   const memoryQuarantinedCount = allEvents.filter((event) => event._delivery_state === "quarantined").length;
   const quarantinedCount = Math.max(memoryQuarantinedCount, dbQuarantinedCount);
+  const memoryStoredCount = allEvents.length + (screen !== "pre" && assentAgreed ? 1 : 0);
+  const totalSavedCount = Math.max(memoryStoredCount, dbTotalStoredCount, pendingCount);
   const activeStep = stepForState(screen, activityStage);
 
   function flash(message) {
@@ -2210,6 +2215,7 @@ export default function StudentPage() {
       <FinishedScreen
         pendingCount={pendingCount}
         quarantinedCount={quarantinedCount}
+        totalSavedCount={totalSavedCount}
         onDownload={downloadSession}
         onRestart={prepareNextWorkshop}
       />
@@ -2225,7 +2231,8 @@ export default function StudentPage() {
           </span>
           <span>
             <strong>PulseLab</strong>
-            <small>oficina de robótica · v2.1.0</small>
+            <small>oficina de robótica · v2.2.0</small>
+
           </span>
         </div>
         <div className="topbar__notice">
@@ -2319,12 +2326,30 @@ export default function StudentPage() {
           <div className="stage-toolbar">
             <div>
               <span className={`connection-dot ${online ? "is-online" : ""}`} />
-              <strong>{quarantinedCount > 0 ? "Atenção · Registros em Quarentena" : (online ? "Dispositivo Pronto · Armazenamento Local Seguro" : "Modo Offline (salvando localmente)")}</strong>
-              <small>
-                {quarantinedCount > 0
-                  ? `${quarantinedCount} registro(s) em quarentena local para análise do pesquisador`
-                  : `${pendingCount} registro(s) salvos no dispositivo (offline-first)`}
-              </small>
+              {isFreeMode ? (
+                <>
+                  <strong>Modo Livre (sem coleta de pesquisa)</strong>
+                  <small>Oficina sem gravação de questionários ou telemetria por escolha inicial da bancada</small>
+                </>
+              ) : screen === "pre" ? (
+                <>
+                  <strong>Dispositivo Pronto · Armazenamento Local Seguro</strong>
+                  <small>
+                    {totalSavedCount > 0
+                      ? `${totalSavedCount} registro(s) salvos no dispositivo (offline-first)`
+                      : "Aguardando início da bancada · Salvamento automático após assentimento"}
+                  </small>
+                </>
+              ) : (
+                <>
+                  <strong>{quarantinedCount > 0 ? "Atenção · Registros em Quarentena" : (online ? "Dispositivo Pronto · Armazenamento Local Seguro" : "Modo Offline (salvando localmente)")}</strong>
+                  <small>
+                    {quarantinedCount > 0
+                      ? `${quarantinedCount} registro(s) em quarentena local para análise do pesquisador`
+                      : `${totalSavedCount} registro(s) salvos no dispositivo (offline-first)`}
+                  </small>
+                </>
+              )}
             </div>
             {labMode ? (
               <>

@@ -1,7 +1,9 @@
 {
   "name": "pulselab",
+  "version": "2.2.0",
   "private": true,
   "scripts": {
+    "check:version": "python3 scripts/check-version-consistency.py",
     "test:unit": "npm --prefix web/agent-simulator run test:unit",
     "build": "npm --prefix web/agent-simulator run build",
     "test:e2e": "npm --prefix web/agent-simulator run test:e2e"

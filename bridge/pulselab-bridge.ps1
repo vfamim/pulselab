@@ -116,7 +116,7 @@ if (Test-Path $candidateConfig) {
     } catch {}
 }
 
-$script:BridgeVersion = "2.1.0"
+$script:BridgeVersion = "2.2.0"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -332,6 +332,29 @@ function Write-BridgeLog([string]$msg, [string]$level = "INFO") {
     } catch {}
 }
 
+function Move-BridgeAtomicFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$SourcePath,
+        [Parameter(Mandatory = $true)][string]$DestinationPath
+    )
+    if (-not (Test-Path -LiteralPath $SourcePath)) { return }
+    try {
+        if (Test-Path -LiteralPath $DestinationPath) {
+            Move-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+        } else {
+            [System.IO.File]::Move($SourcePath, $DestinationPath)
+        }
+    } catch {
+        try {
+            [System.IO.File]::Copy($SourcePath, $DestinationPath, $true)
+            [System.IO.File]::Delete($SourcePath)
+        } catch {
+            Write-BridgeLog "Falha ao mover arquivo atomico de '$SourcePath' para '$DestinationPath': $($_.Exception.Message)" "WARN"
+            throw
+        }
+    }
+}
+
 function Invoke-BridgeRetentionCleanup {
     [CmdletBinding()]
     param([int]$MaxAgeDays = 7)
@@ -445,7 +468,7 @@ function Invoke-BridgeRetentionCleanup {
             $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
             $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
             [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
-            [System.IO.File]::Replace($catTmp, $catFile, $null)
+            Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
         } catch {
             Write-BridgeLog "Aviso ao expurgar catalogo na retencao: $($_.Exception.Message)" "WARN"
         }
@@ -473,7 +496,7 @@ function Invoke-BridgeRetentionCleanup {
             }
             $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
             [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-            [System.IO.File]::Replace($eventsTmp, $eventsFile, $null)
+            Move-BridgeAtomicFile -SourcePath $eventsTmp -DestinationPath $eventsFile
         } catch {
             Write-BridgeLog "Aviso ao expurgar events.jsonl na retencao: $($_.Exception.Message)" "WARN"
         }
@@ -500,7 +523,7 @@ function Invoke-BridgeRetentionCleanup {
             }
             $archTmp = Join-Path $DataDir "events_archive.tmp.$([System.Guid]::NewGuid().ToString('N'))"
             [System.IO.File]::WriteAllLines($archTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-            [System.IO.File]::Replace($archTmp, $archiveFile, $null)
+            Move-BridgeAtomicFile -SourcePath $archTmp -DestinationPath $archiveFile
         } catch {}
     }
 
@@ -526,7 +549,7 @@ function Invoke-BridgeRetentionCleanup {
             }
             $quarantineTmp = Join-Path $DataDir "events_quarantine_payloads.tmp.$([System.Guid]::NewGuid().ToString('N'))"
             [System.IO.File]::WriteAllLines($quarantineTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-            [System.IO.File]::Replace($quarantineTmp, $quarantineJsonlFile, $null)
+            Move-BridgeAtomicFile -SourcePath $quarantineTmp -DestinationPath $quarantineJsonlFile
         } catch {
             Write-BridgeLog "Aviso ao expurgar events_quarantine.jsonl na retencao: $($_.Exception.Message)" "WARN"
         }
@@ -534,22 +557,22 @@ function Invoke-BridgeRetentionCleanup {
 
     # f) Trackers de eventos
     if ($purgedEventIds.Count -gt 0) {
-        foreach ($pid in $purgedEventIds) {
-            [void]$script:SyncedEventIds.Remove($pid)
-            [void]$script:QuarantinedEventIds.Remove($pid)
+        foreach ($purgedId in $purgedEventIds) {
+            [void]$script:SyncedEventIds.Remove($purgedId)
+            [void]$script:QuarantinedEventIds.Remove($purgedId)
         }
         if (Test-Path -LiteralPath $script:SyncedTrackerFile) {
             try {
                 $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                 [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
-                [System.IO.File]::Replace($syncTmp, $script:SyncedTrackerFile, $null)
+                Move-BridgeAtomicFile -SourcePath $syncTmp -DestinationPath $script:SyncedTrackerFile
             } catch {}
         }
         if (Test-Path -LiteralPath $script:QuarantinedTrackerFile) {
             try {
                 $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                 [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
-                [System.IO.File]::Replace($quarTmp, $script:QuarantinedTrackerFile, $null)
+                Move-BridgeAtomicFile -SourcePath $quarTmp -DestinationPath $script:QuarantinedTrackerFile
             } catch {}
         }
     }
@@ -908,7 +931,7 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.1.0"
+                    protocol_version = "2.2.0"
                     group_size = 2
                     site_id = "CONFIGURE_SEDE"
                     activity_id = "atividade-01-spike"
@@ -993,11 +1016,7 @@ try {
                 $schedTmp = Join-Path $DataDir "active_schedule.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                 $schedJson = $script:ActiveSession | ConvertTo-Json
                 [System.IO.File]::WriteAllText($schedTmp, $schedJson, [System.Text.Encoding]::UTF8)
-                if (Test-Path $scheduleFile) {
-                    [System.IO.File]::Replace($schedTmp, $scheduleFile, $null)
-                } else {
-                    [System.IO.File]::Move($schedTmp, $scheduleFile)
-                }
+                Move-BridgeAtomicFile -SourcePath $schedTmp -DestinationPath $scheduleFile
                 $script:LastAlertMark = 0
                 $script:AlertCount = 0
 
@@ -1039,11 +1058,7 @@ try {
                 $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
                 $sessTmp = Join-Path $sessoesDir "sessao_$safeSessId.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                 [System.IO.File]::WriteAllText($sessTmp, $rawBody, [System.Text.Encoding]::UTF8)
-                if (Test-Path $sessFile) {
-                    [System.IO.File]::Replace($sessTmp, $sessFile, $null)
-                } else {
-                    [System.IO.File]::Move($sessTmp, $sessFile)
-                }
+                Move-BridgeAtomicFile -SourcePath $sessTmp -DestinationPath $sessFile
 
                 # Atualiza catalogo local de sessoes (catalogo_sessoes.json)
                 $catFile = Join-Path $DataDir "catalogo_sessoes.json"
@@ -1095,11 +1110,7 @@ try {
                 $catJson = $catalogList | ConvertTo-Json -Depth 5
                 $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                 [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
-                if (Test-Path $catFile) {
-                    [System.IO.File]::Replace($catTmp, $catFile, $null)
-                } else {
-                    [System.IO.File]::Move($catTmp, $catFile)
-                }
+                Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
 
                 # Persiste tambem todos os eventos da sessao no events.jsonl
                 if ($saveObj -and $saveObj.events) {
@@ -1175,11 +1186,7 @@ try {
                         $schedTmp = Join-Path $DataDir "active_schedule.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                         $schedJson = $script:ActiveSession | ConvertTo-Json
                         [System.IO.File]::WriteAllText($schedTmp, $schedJson, [System.Text.Encoding]::UTF8)
-                        if (Test-Path $scheduleFile) {
-                            [System.IO.File]::Replace($schedTmp, $scheduleFile, $null)
-                        } else {
-                            [System.IO.File]::Move($schedTmp, $scheduleFile)
-                        }
+                        Move-BridgeAtomicFile -SourcePath $schedTmp -DestinationPath $scheduleFile
                     }
                 }
 
@@ -1348,11 +1355,7 @@ try {
                         }
                         $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                         [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-                        if (Test-Path $eventsFile) {
-                            [System.IO.File]::Replace($eventsTmp, $eventsFile, $null)
-                        } else {
-                            [System.IO.File]::Move($eventsTmp, $eventsFile)
-                        }
+                        Move-BridgeAtomicFile -SourcePath $eventsTmp -DestinationPath $eventsFile
                     } catch {
                         Write-BridgeLog "Aviso ao purgar eventos de $safeSessId`: $($_.Exception.Message)" "WARN"
                     }
@@ -1387,7 +1390,7 @@ try {
                         }
                         $jsonlTmp = Join-Path $DataDir "$($jsonlSpec.TempPrefix).tmp.$([System.Guid]::NewGuid().ToString('N'))"
                         [System.IO.File]::WriteAllLines($jsonlTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-                        [System.IO.File]::Replace($jsonlTmp, $jsonlSpec.Path, $null)
+                        Move-BridgeAtomicFile -SourcePath $jsonlTmp -DestinationPath $jsonlSpec.Path
                     } catch {
                         Write-BridgeLog "Aviso ao purgar $($jsonlSpec.Path) para $safeSessId`: $($_.Exception.Message)" "WARN"
                     }
@@ -1410,7 +1413,7 @@ try {
                         $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
                         $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                         [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
-                        [System.IO.File]::Replace($catTmp, $catFile, $null)
+                        Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
                     } catch {
                         Write-BridgeLog "Aviso ao purgar catalogo para $safeSessId`: $($_.Exception.Message)" "WARN"
                     }
@@ -1418,22 +1421,22 @@ try {
 
                 # Trackers locais
                 if ($purgedEventIds.Count -gt 0) {
-                    foreach ($pid in $purgedEventIds) {
-                        [void]$script:SyncedEventIds.Remove($pid)
-                        [void]$script:QuarantinedEventIds.Remove($pid)
+                    foreach ($purgedId in $purgedEventIds) {
+                        [void]$script:SyncedEventIds.Remove($purgedId)
+                        [void]$script:QuarantinedEventIds.Remove($purgedId)
                     }
                     if (Test-Path $script:SyncedTrackerFile) {
                         try {
                             $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                             [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
-                            [System.IO.File]::Replace($syncTmp, $script:SyncedTrackerFile, $null)
+                            Move-BridgeAtomicFile -SourcePath $syncTmp -DestinationPath $script:SyncedTrackerFile
                         } catch {}
                     }
                     if (Test-Path $script:QuarantinedTrackerFile) {
                         try {
                             $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
                             [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
-                            [System.IO.File]::Replace($quarTmp, $script:QuarantinedTrackerFile, $null)
+                            Move-BridgeAtomicFile -SourcePath $quarTmp -DestinationPath $script:QuarantinedTrackerFile
                         } catch {}
                     }
                 }

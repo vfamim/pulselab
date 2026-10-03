@@ -609,9 +609,9 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.1.0"
+            payload["config_version"] = event.get("config_version") or "2.2.0"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.1.0"
+            payload["client_version"] = event.get("client_version") or "2.2.0"
         if "response_status" not in payload:
             payload["response_status"] = event.get("response_status") or "completed"
 
@@ -639,13 +639,14 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "protocol_version" not in payload:
-            payload["protocol_version"] = event.get("protocol_version") or "v2.1"
+            payload["protocol_version"] = event.get("protocol_version") or "v2.2"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.1.0"
+            payload["config_version"] = event.get("config_version") or "2.2.0"
         if "config_hash" not in payload or not payload["config_hash"]:
             payload["config_hash"] = "3c3662c7306d64236b0f7f26da183cc59a36c00061a2077d93fb0272876b2468"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.1.0"
+            payload["client_version"] = event.get("client_version") or "2.2.0"
+
 
         # Invariante metodológica: NUNCA converter silenciosamente tipo desconhecido em phase_completed
         if original_type not in ALLOWED_SESSION_EVENTS:
@@ -1117,7 +1118,8 @@ def main() -> int:
                     "workshop_code": sdata.get("workshop_code") or "oficina-spike",
                     "class_code": sdata.get("class_code") or "turma-geral",
                     "environment": "test" if sdata.get("is_synthetic") else "production",
-                    "protocol_version": sdata.get("protocol_version") or "v2.1",
+                    "protocol_version": sdata.get("protocol_version") or "v2.2",
+
                     "instrument_version": sdata.get("instrument_version") or "bancada-2.0.0",
                     "group_size": sdata.get("group_size") or 2,
                     "phase": sdata.get("phase") or "completed",

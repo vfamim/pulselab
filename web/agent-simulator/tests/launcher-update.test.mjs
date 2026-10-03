@@ -68,13 +68,14 @@ test("Launcher: regex de extração de checksum SHA-256 hexadecimal estrito", ()
   assert.equal(match1[1].toLowerCase(), validHash);
 
   // Formato sha256sum padrão com nome do arquivo
-  const shaFileContent = `${validHash}  PulseLab-2.1.0-Windows.zip\n`;
+  const shaFileContent = `${validHash}  PulseLab-2.2.0-Windows.zip\n`;
   const match2 = shaFileContent.match(shaRegex);
   assert.ok(match2);
   assert.equal(match2[1].toLowerCase(), validHash);
 
   // Formato sha256sum com asterisco (binário)
-  const shaFileContentBinary = `${validHash.toUpperCase()} *PulseLab-2.1.0-Windows.zip\r\n`;
+  const shaFileContentBinary = `${validHash.toUpperCase()} *PulseLab-2.2.0-Windows.zip\r\n`;
+
   const match3 = shaFileContentBinary.match(shaRegex);
   assert.ok(match3);
   assert.equal(match3[1].toLowerCase(), validHash);

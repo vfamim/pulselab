@@ -875,3 +875,76 @@ test("absolute 7-day retention purges expired sessions along with pending, deliv
     "ev-val3-queued"
   ]);
 });
+
+test("local offline persistence: truthful status messages, full offline saves in IndexedDB and offline reload resilience", async ({ page, context }) => {
+  await page.goto("/alunos/");
+
+  // 1. Tela inicial antes de qualquer assentimento: mensagem acolhedora sem alarme falso de '0 salvos'
+  await expect(page.getByText(/Aguardando início da bancada · Salvamento automático após assentimento/i)).toBeVisible();
+  let sessions = await getStoredRecords(page, "sessions");
+  let events = await getStoredRecords(page, "events");
+  expect(sessions.length).toBe(0);
+  expect(events.length).toBe(0);
+
+  // 2. Modo livre (recusa ética): rodapé indica claramente modo livre e persiste ZERO dados
+  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
+  await expect(page.getByText(/Modo Livre \(sem coleta de pesquisa\)/i)).toBeVisible();
+  sessions = await getStoredRecords(page, "sessions");
+  events = await getStoredRecords(page, "events");
+  expect(sessions.length).toBe(0);
+  expect(events.length).toBe(0);
+
+  // Reinicia para oficina oficial com assentimento
+  await page.getByRole("button", { name: /Reiniciar/i }).click();
+  // Aguarda confirmação se houver ou retorno à tela inicial
+  await page.goto("/alunos/");
+
+  // 3. Assentimento unânime de dupla + início da atividade
+  await page.getByRole("button", { name: /2 Alunos/i }).click();
+  await page.locator("#ethical-assent-checkbox").check();
+  await page.locator("#ethical-assent-member-2").check();
+  await page.getByRole("button", { name: /Primeira vez/i }).click();
+  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+
+  // 4. Bloqueia internet simulando instituição sem conectividade
+  await context.setOffline(true);
+
+  // Status deve indicar modo offline e contabilizar os registros salvos
+  await expect(page.getByText(/Modo Offline \(salvando localmente\)/i)).toBeVisible();
+  await expect(page.getByText(/registro\(s\) salvos no dispositivo \(offline-first\)/i)).toBeVisible();
+
+  sessions = await getStoredRecords(page, "sessions");
+  events = await getStoredRecords(page, "events");
+  expect(sessions.length).toBe(1);
+  expect(events.length).toBeGreaterThanOrEqual(5);
+
+  // 5. Conclui oficina 100% offline
+  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Muito boa/i }).first().click();
+  await page.getByRole("button", { name: "Prefiro não responder" }).last().click();
+  await page.getByText(/Concluiu com sucesso/i).click();
+  await page.getByText(/Concluída conforme o roteiro/i).click();
+  await page.getByText(/Autônomo/i).click();
+  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+
+  // 6. Tela final offline exibe confirmação e contagem honesta
+  await expect(page.getByRole("heading", { name: "Oficina concluída com sucesso!" })).toBeVisible();
+  await expect(page.getByText(/registro\(s\) salvos no computador com segurança \(armazenamento offline-first\)/i)).toBeVisible();
+
+  // Garante que o snapshot da sessão no IndexedDB está completo com todos os eventos
+  sessions = await getStoredRecords(page, "sessions");
+  events = await getStoredRecords(page, "events");
+  expect(sessions.length).toBe(1);
+  expect(sessions[0].status).toBe("completed");
+  expect(sessions[0].events.length).toBeGreaterThanOrEqual(12);
+  expect(events.length).toBeGreaterThanOrEqual(12);
+
+  // 7. Recarrega a página offline: os dados continuam intactos no IndexedDB
+  await page.reload();
+  await page.waitForTimeout(500);
+
+  const reloadedSessions = await getStoredRecords(page, "sessions");
+  const reloadedEvents = await getStoredRecords(page, "events");
+  expect(reloadedSessions.length).toBe(1);
+  expect(reloadedEvents.length).toBeGreaterThanOrEqual(12);
+});

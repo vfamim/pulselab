@@ -320,3 +320,53 @@ export async function pruneDeliveredEvents(maxAgeDays = 7) {
   const result = await enforceAbsoluteRetention(maxAgeDays);
   return result.purgedEvents;
 }
+
+export async function countStoredEvents() {
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(EVENTS_STORE, "readonly");
+      const store = transaction.objectStore(EVENTS_STORE);
+      const request = store.count();
+      request.onsuccess = () => resolve(request.result || 0);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function countStoredSessions() {
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction(SESSIONS_STORE, "readonly");
+      const store = transaction.objectStore(SESSIONS_STORE);
+      const request = store.count();
+      request.onsuccess = () => resolve(request.result || 0);
+      request.onerror = () => reject(request.error);
+    });
+  } finally {
+    database.close();
+  }
+}
+
+export async function getLocalStoreSummary() {
+  try {
+    const [eventsCount, sessionsCount, pendingEvents, quarantinedEvents] = await Promise.all([
+      countStoredEvents().catch(() => 0),
+      countStoredSessions().catch(() => 0),
+      listPendingEvents().catch(() => []),
+      listQuarantinedEvents().catch(() => [])
+    ]);
+    return {
+      eventsCount,
+      sessionsCount,
+      totalRecords: eventsCount + sessionsCount,
+      pendingCount: pendingEvents.length,
+      quarantinedCount: quarantinedEvents.length
+    };
+  } catch {
+    return { eventsCount: 0, sessionsCount: 0, totalRecords: 0, pendingCount: 0, quarantinedCount: 0 };
+  }
+}

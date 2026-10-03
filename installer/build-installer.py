@@ -12,7 +12,8 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "2.1.0"
+VERSION = "2.2.0"
+
 
 INSTRUCTIONS = """====================================================================
 PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
