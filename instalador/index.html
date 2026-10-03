@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="PulseLab - Download e Instruções de Execução Simplificada para Windows">
-  <title>PulseLab | Download e Execução Simplificada (v1.9.0)</title>
+  <title>PulseLab | Download e Execução Simplificada (v2.1.0)</title>
   <link rel="icon" href="/alunos/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -207,24 +207,24 @@
   <div class="container">
     <header>
       <div class="brand-mark">
-        <span class="dot"></span> PulseLab Protocol v1.9.0
+        <span class="dot"></span> PulseLab Protocol v2.1.0
       </div>
       <h1>Download e Instalação Offline</h1>
-      <p class="subtitle">Arquitetura Web-First com Sincronização Automática: Interface no navegador padrão, Bridge HTTP local e envio transparente para a nuvem.</p>
+      <p class="subtitle">Arquitetura Web-First com Persistência Local: Interface no navegador padrão, Bridge HTTP local, banco de dados em disco e envio opcional para a nuvem.</p>
     </header>
 
     <!-- CARD: DOWNLOAD PRINCIPAL DO PACOTE WINDOWS -->
     <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
       <div class="card-title" style="color: #5eead4;">
-        <span>📦</span> Pacote PulseLab v1.9.0 para Windows (Com Sincronização Automática)
+        <span>📦</span> Pacote PulseLab v2.1.0 para Windows (Oficinas Rotativas)
       </div>
       <div class="card-subtitle">
-        Pacote autônomo com envio automático (Store-and-Forward). Funciona 100% offline durante a oficina e sincroniza com o banco da pesquisa assim que o computador conectar à internet.
+        Pacote autônomo com persistência local em <code>dados_locais/</code> e sincronização opcional. Funciona 100% offline durante a oficina, exporta para pendrive com 1 clique e consolida no Supabase quando houver internet.
       </div>
 
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-        <a href="/instalador/downloads/PulseLab-1.9.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>⬇️</span> Baixar PulseLab-1.9.0-Windows.zip
+        <a href="/instalador/downloads/PulseLab-2.1.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>⬇️</span> Baixar PulseLab-2.1.0-Windows.zip
         </a>
         <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
           <span>🎨</span> Ver Guia Ilustrado / Slides
@@ -237,16 +237,16 @@
       <div style="margin-bottom: 16px;">
         <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
           Checksum SHA-256 Oficial:
-          <a href="/instalador/downloads/PulseLab-1.9.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
+          <a href="/instalador/downloads/PulseLab-2.1.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
         </label>
         <div class="code-box">
-          <span style="font-size: 0.8rem;">0f412e8fef99b1db44de2df4924616aaa54bf309d0d995f11442e8f729939557  PulseLab-1.9.0-Windows.zip</span>
+          <span style="font-size: 0.8rem;">da0da962bda2ba1f5f25a271d447550d5518712062ffbca11a9077193a741493  PulseLab-2.1.0-Windows.zip</span>
           <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
         </div>
       </div>
 
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
-        ✨ <strong>Novidades da v1.9.0:</strong> Fontes e botões ampliados para fácil leitura, identidade visual nas cores do projeto (azul com amarelo do robozinho), barra lateral retrátil e remoção de avanço acidental do checkpoint na tela dos estudantes.
+        ✨ <strong>Novidades da v2.1.0 (Oficinas Rotativas):</strong> Protocolo simplificado em 3 etapas reais (Início, Oficina Prática com Robô e Desafio da Corrida), telemetria 100% silenciosa do LEGO SPIKE Prime sem botões manuais ou interrupções, banco de dados local permanente em <code>dados_locais/</code>, ferramenta de 1 clique para exportação em pendrive USB e importador idempotente para o Supabase.
       </div>
     </div>
 
@@ -264,7 +264,7 @@
           <div class="step-num">1</div>
           <div class="step-title">Baixar e Extrair</div>
           <div class="step-text">
-            Baixe o arquivo <code>PulseLab-1.8.0-Windows.zip</code> acima e extraia todo o conteúdo em uma pasta (ex: Área de Trabalho ou Pendrive).
+            Baixe o arquivo <code>PulseLab-2.1.0-Windows.zip</code> acima e extraia todo o conteúdo em uma pasta (ex: Área de Trabalho ou Pendrive).
           </div>
         </div>
 
@@ -280,7 +280,7 @@
           <div class="step-num">3</div>
           <div class="step-title">Navegador Abre Sozinho</div>
           <div class="step-text">
-            O navegador abre em <code>http://127.0.0.1:43127/alunos/</code>. Vocês respondem o início em 15s, o cronômetro inicia e os alertas tocam aos 20 e 40 min.
+            O navegador abre em <code>http://127.0.0.1:43127/alunos/</code>. Vocês respondem o início em 15s, o cronômetro inicia e a oficina segue com foco total no robô.
           </div>
         </div>
       </div>
@@ -289,7 +289,7 @@
     <!-- CARD: GUIA DE BOTÕES E CONTROLES DISPONÍVEIS -->
     <div class="card" style="border-color: rgba(124, 58, 237, 0.4); background: rgba(124, 58, 237, 0.05);">
       <div class="card-title" style="color: #c4b5fd;">
-        <span>🎮</span> Guia dos Botões e Controles da Aplicação (v1.9.0)
+        <span>🎮</span> Guia dos Botões e Controles da Aplicação (v2.1.0)
       </div>
       <div class="card-subtitle">
         Controles operacionais disponíveis na tela para instrutores, pesquisadores e alunos:
@@ -302,24 +302,24 @@
           </strong>
           <ul style="list-style: none; padding: 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
             <li><strong style="color:#fff;">[⚙️ Controles]</strong>: Abre o menu suspenso de ações administrativas discretas.</li>
-            <li><strong style="color:#fff;">[🔄 Reiniciar]</strong>: Zera a contagem e retorna à tela inicial (ótimo para iniciar uma nova turma ou resetar testes).</li>
-            <li><strong style="color:#fff;">[⏩ Check-in 20m]</strong>: Força o salto temporal imediato para o marco de 20 min sem esperar 20 min reais.</li>
-            <li><strong style="color:#fff;">[⏩ Fechamento 40m]</strong>: Força o avanço para a autoavaliação final de encerramento da oficina.</li>
+            <li><strong style="color:#fff;">[🔄 Reiniciar]</strong>: Zera a contagem e retorna à tela inicial para iniciar uma nova turma limpa.</li>
+            <li><strong style="color:#fff;">[🤖 2. Oficina Prática]</strong>: Salta diretamente para a tela de atividade prática com o robô.</li>
+            <li><strong style="color:#fff;">[🏁 3. Desafio da Corrida]</strong>: Avança para o encerramento com a corrida e a avaliação em dois eixos.</li>
             <li><strong style="color:#fff;">[✨ Preencher teste]</strong>: Preenche respostas de exemplo para validar o fluxo em poucos segundos.</li>
+            <li><strong style="color:#fff;">[💾 Exportar (.json)]</strong>: Baixa o arquivo JSON estruturado da bancada atual.</li>
           </ul>
         </div>
 
         <div style="background: rgba(15, 11, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px;">
           <strong style="color: #5eead4; font-family: 'Outfit', sans-serif; font-size: 0.95rem; display: block; margin-bottom: 10px;">
-            👥 Botões Operacionais dos Alunos (Grupo):
+            👥 Rotinas Offline e Coleta da Escola:
           </strong>
           <ul style="list-style: none; padding: 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
-            <li><strong style="color:#fff;">[☁️ Sincronizar]</strong>: Força o envio imediato da fila local offline para o Supabase (ocorre de forma 100% automática a cada finalização).</li>
-            <li><strong style="color:#fff;">[📥 Exportar Dados]</strong>: Na barra superior, baixa o arquivo <code>.json</code> completo da oficina para pen-drive caso o laboratório não tenha nenhuma internet.</li>
-            <li><strong style="color:#fff;">[Responder agora]</strong>: No pop-up nativo do Windows, restaura e foca a janela aberta do navegador (sem abrir novas abas).</li>
-            <li><strong style="color:#fff;">[Pedir Ajuda]</strong>: Registra na timeline da pesquisa que o grupo solicitou apoio docente.</li>
-            <li><strong style="color:#fff;">[Abrir checkpoint]</strong>: Abre o questionário de progresso aos 20 min.</li>
-            <li><strong style="color:#fff;">[Salvar e Continuar]</strong>: Confirma as respostas e retorna à tela de atividade.</li>
+            <li><strong style="color:#fff;">[dados_locais/]</strong>: Pasta em disco onde todas as sessões e eventos são gravados automaticamente.</li>
+            <li><strong style="color:#fff;">[Exportar-Dados-Pendrive.bat]</strong>: Cópia das sessões para qualquer pendrive USB conectado com hash SHA-256.</li>
+            <li><strong style="color:#fff;">[Importar-Para-Supabase.bat]</strong>: Consolida em base SQLite local e envia para a nuvem quando houver internet.</li>
+            <li><strong style="color:#fff;">[Foco no Robô]</strong>: Estudantes usam o app oficial LEGO SPIKE em tela cheia sem pop-ups.</li>
+            <li><strong style="color:#fff;">[Telemetria Silenciosa]</strong>: Leitura contínua dos blocos (.llsp3) sem pedir confirmação das crianças.</li>
           </ul>
         </div>
       </div>

@@ -153,10 +153,15 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
             manifest_lines.append(f"{sha256(file_path)}  {relative}")
         (stage / "SHA256SUMS.txt").write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
 
-        # 9. Compactar ZIP
+        # 9. Compactar ZIP (reprodutível / determinístico)
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
             for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
-                archive.write(file_path, file_path.relative_to(stage.parent).as_posix())
+                arcname = file_path.relative_to(stage.parent).as_posix()
+                zinfo = zipfile.ZipInfo(arcname, date_time=(2026, 10, 2, 0, 0, 0))
+                zinfo.compress_type = zipfile.ZIP_DEFLATED
+                zinfo.external_attr = 0o644 << 16
+                with file_path.open("rb") as f:
+                    archive.writestr(zinfo, f.read(), compresslevel=9)
 
     # 10. Checksum do arquivo ZIP
     checksum_path = output.with_suffix(output.suffix + ".sha256")

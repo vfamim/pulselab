@@ -10,9 +10,9 @@ cd web\agent-simulator
 call npm run build
 cd ..\..
 echo.
-echo [2/3] Gerando pacotes ZIP e checksums...
-python installer\build-installer.py --output instalador\downloads\PulseLab-1.9.0-Windows.zip
-echo.
+python installer\build-installer.py --output instalador\downloads\PulseLab-2.1.0-Windows.zip
+copy /Y instalador\downloads\PulseLab-2.1.0-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.1.0.zip >nul 2>&1
+copy /Y instalador\downloads\PulseLab-2.1.0-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.1.0.zip.sha256 >nul 2>&1
 echo [3/3] Publicando site e PWA no Firebase Hosting...
 call npx firebase-tools deploy --only hosting
 echo.
