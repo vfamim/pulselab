@@ -427,8 +427,21 @@ def send_to_supabase(
         return 0, 0, 0, None
 
     endpoint = f"{supabase_url.rstrip('/')}/rest/v1/{table}?on_conflict={id_col}"
-    resolution = "merge-duplicates" if is_snapshot else "ignore-duplicates"
-    prefer_header = f"resolution={resolution},return=representation"
+    is_service_role = False
+    try:
+        parts = supabase_key.split(".")
+        if len(parts) == 3:
+            padding = "=" * ((4 - len(parts[1]) % 4) % 4)
+            payload_bytes = base64.urlsafe_b64decode(parts[1] + padding)
+            payload_data = json.loads(payload_bytes.decode("utf-8"))
+            if payload_data.get("role") == "service_role":
+                is_service_role = True
+    except Exception:
+        pass
+
+    resolution = "merge-duplicates" if (is_snapshot and is_service_role) else "ignore-duplicates"
+    prefer_header = f"resolution={resolution},return=representation" if is_service_role else f"resolution={resolution},return=minimal"
+    api_key_header = supabase_key if is_service_role else DEFAULT_SUPABASE_ANON_KEY
 
     inserted = 0
     duplicates = 0
@@ -446,7 +459,7 @@ def send_to_supabase(
             data=payload,
             headers={
                 "Content-Type": "application/json",
-                "apikey": supabase_key,
+                "apikey": api_key_header,
                 "Authorization": f"Bearer {supabase_key}",
                 "Prefer": prefer_header,
             },
@@ -609,9 +622,9 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.2.0"
+            payload["config_version"] = event.get("config_version") or "2.2.1"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.2.0"
+            payload["client_version"] = event.get("client_version") or "2.2.1"
         if "response_status" not in payload:
             payload["response_status"] = event.get("response_status") or "completed"
 
@@ -641,11 +654,11 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "protocol_version" not in payload:
             payload["protocol_version"] = event.get("protocol_version") or "v2.2"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.2.0"
+            payload["config_version"] = event.get("config_version") or "2.2.1"
         if "config_hash" not in payload or not payload["config_hash"]:
             payload["config_hash"] = "3c3662c7306d64236b0f7f26da183cc59a36c00061a2077d93fb0272876b2468"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.2.0"
+            payload["client_version"] = event.get("client_version") or "2.2.1"
 
 
         # Invariante metodológica: NUNCA converter silenciosamente tipo desconhecido em phase_completed
@@ -1113,6 +1126,7 @@ def main() -> int:
                 bancada_sessions_records.append({
                     "session_id": ensure_uuid(sid),
                     "group_id": ensure_uuid(sdata.get("group_id")),
+                    "installation_id": ensure_uuid(sdata.get("installation_id") or sdata.get("computer_id") or "10000000-0000-4000-8000-000000000001"),
                     "site_id": sdata.get("site_id") or "Polo-Nordeste",
                     "school_code": sdata.get("school_code") or "geral",
                     "workshop_code": sdata.get("workshop_code") or "oficina-spike",

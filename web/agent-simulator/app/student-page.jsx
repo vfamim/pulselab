@@ -38,7 +38,7 @@ const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.2.0";
+const CLIENT_VERSION = "student-pwa/2.2.1";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -2231,7 +2231,7 @@ export default function StudentPage() {
           </span>
           <span>
             <strong>PulseLab</strong>
-            <small>oficina de robótica · v2.2.0</small>
+            <small>oficina de robótica · v2.2.1</small>
 
           </span>
         </div>

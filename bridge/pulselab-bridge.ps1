@@ -97,8 +97,10 @@ if (Test-Path $scheduleFile) {
 
 # 3.1 Supabase Sync Configuration & Tracker (Store-and-forward)
 $script:SupabaseUrl = "https://cylsqbmtglvdfubbarqe.supabase.co"
-$script:SupabaseAnonKey = ""
+$script:SupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU"
 $script:SupabaseOperationalJwt = ""
+$script:InstallationId = ""
+$script:SiteId = "Polo-Nordeste"
 
 if ($env:PULSELAB_OPERATIONAL_JWT) {
     $script:SupabaseOperationalJwt = $env:PULSELAB_OPERATIONAL_JWT
@@ -113,10 +115,70 @@ if (Test-Path $candidateConfig) {
         $cfgJson = Get-Content -Path $candidateConfig -Raw | ConvertFrom-Json
         if ($cfgJson.supabase_url) { $script:SupabaseUrl = $cfgJson.supabase_url }
         if ($cfgJson.supabase_anon_key) { $script:SupabaseAnonKey = $cfgJson.supabase_anon_key }
+        if ($cfgJson.site_id -and $cfgJson.site_id -ne "CONFIGURE_SEDE") { $script:SiteId = $cfgJson.site_id }
     } catch {}
 }
 
-$script:BridgeVersion = "2.2.0"
+# Tenta carregar credencial operacional de dispositivo e perfil de instalacao
+$localDataRoot = [Environment]::GetFolderPath("LocalApplicationData")
+if ([string]::IsNullOrWhiteSpace($localDataRoot)) { $localDataRoot = $env:TEMP }
+
+$instCandidates = @(
+    (Join-Path $DataDir "installation.json"),
+    (Join-Path $PSScriptRoot "..\config\installation.json"),
+    (Join-Path $localDataRoot "PulseLab\installation.json")
+)
+foreach ($c in $instCandidates) {
+    if (Test-Path $c) {
+        try {
+            $ij = Get-Content $c -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($ij.installation_id) { $script:InstallationId = [string]$ij.installation_id }
+            if ($ij.site_id) { $script:SiteId = [string]$ij.site_id }
+            if ($script:InstallationId) { break }
+        } catch {}
+    }
+}
+
+if (-not $script:SupabaseOperationalJwt) {
+    $sessionCandidates = @(
+        (Join-Path $DataDir "device_session.json"),
+        (Join-Path $DataDir "device_session.dat"),
+        (Join-Path $localDataRoot "PulseLab\device_session.dat")
+    )
+    foreach ($cand in $sessionCandidates) {
+        if (Test-Path $cand) {
+            try {
+                if ($cand.EndsWith(".json")) {
+                    $devSess = Get-Content $cand -Raw -Encoding UTF8 | ConvertFrom-Json
+                    if ($devSess.access_token) {
+                        $script:SupabaseOperationalJwt = [string]$devSess.access_token
+                        if ($devSess.installation_id) { $script:InstallationId = [string]$devSess.installation_id }
+                        if ($devSess.site_id) { $script:SiteId = [string]$devSess.site_id }
+                        break
+                    }
+                } else {
+                    Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue
+                    $encBytes = [System.IO.File]::ReadAllBytes($cand)
+                    if ($encBytes -and $encBytes.Length -gt 0) {
+                        $decBytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encBytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+                        if ($decBytes) {
+                            $decStr = [System.Text.Encoding]::UTF8.GetString($decBytes)
+                            $devSess = $decStr | ConvertFrom-Json
+                            if ($devSess.access_token) {
+                                $script:SupabaseOperationalJwt = [string]$devSess.access_token
+                                if ($devSess.installation_id) { $script:InstallationId = [string]$devSess.installation_id }
+                                if ($devSess.site_id) { $script:SiteId = [string]$devSess.site_id }
+                                break
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+    }
+}
+
+$script:BridgeVersion = "2.2.1"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -144,6 +206,30 @@ if (Test-Path $script:QuarantinedTrackerFile) {
         Get-Content $script:QuarantinedTrackerFile | ForEach-Object {
             $tracked = $_.Trim()
             if ($tracked) { [void]$script:QuarantinedEventIds.Add($tracked) }
+        }
+    } catch {}
+}
+
+$script:SyncedSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+$script:SyncedSessionsTrackerFile = Join-Path $DataDir "sessions_synced.txt"
+
+if (Test-Path $script:SyncedSessionsTrackerFile) {
+    try {
+        Get-Content $script:SyncedSessionsTrackerFile | ForEach-Object {
+            $tracked = $_.Trim()
+            if ($tracked) { [void]$script:SyncedSessionIds.Add($tracked) }
+        }
+    } catch {}
+}
+
+$script:QuarantinedSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+$script:QuarantinedSessionsTrackerFile = Join-Path $DataDir "sessions_quarantine.txt"
+
+if (Test-Path $script:QuarantinedSessionsTrackerFile) {
+    try {
+        Get-Content $script:QuarantinedSessionsTrackerFile | ForEach-Object {
+            $tracked = $_.Trim()
+            if ($tracked) { [void]$script:QuarantinedSessionIds.Add($tracked) }
         }
     } catch {}
 }
@@ -295,6 +381,114 @@ function Sync-EventsToSupabase {
             } catch {}
         }
     } catch {}
+}
+
+function Sync-SessionSnapshotsToSupabase {
+    if (-not $script:SupabaseOperationalJwt) { return }
+
+    $sessoesDir = Join-Path $DataDir "sessoes"
+    if (-not (Test-Path $sessoesDir)) { return }
+
+    $sessionFiles = Get-ChildItem -Path $sessoesDir -Filter "sessao_*.json" -ErrorAction SilentlyContinue
+    if (-not $sessionFiles) { return }
+
+    $nowIso = [DateTime]::UtcNow.ToString("o")
+    $syncedSessCount = 0
+
+    foreach ($sfile in $sessionFiles) {
+        try {
+            $rawContent = [System.IO.File]::ReadAllText($sfile.FullName, [System.Text.Encoding]::UTF8)
+            if ([string]::IsNullOrWhiteSpace($rawContent)) { continue }
+            $sdata = $rawContent | ConvertFrom-Json
+            if (-not $sdata -or -not $sdata.session_id) { continue }
+
+            $sid = [string]$sdata.session_id
+            if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid)) {
+                continue
+            }
+
+            $instId = if ($sdata.installation_id) { [string]$sdata.installation_id } elseif ($script:InstallationId) { $script:InstallationId } else { "10000000-0000-4000-8000-000000000001" }
+            $siteVal = if ($sdata.site_id) { [string]$sdata.site_id } elseif ($script:SiteId) { $script:SiteId } else { "Polo-Nordeste" }
+
+            $sessRecord = [System.Collections.Specialized.OrderedDictionary]::new()
+            $sessRecord["session_id"] = $sid
+            $sessRecord["group_id"] = if ($sdata.group_id) { [string]$sdata.group_id } else { [Guid]::Empty.ToString() }
+            $sessRecord["installation_id"] = $instId
+            $sessRecord["site_id"] = $siteVal
+            $sessRecord["school_code"] = if ($sdata.school_code) { [string]$sdata.school_code } else { "geral" }
+            $sessRecord["workshop_code"] = if ($sdata.workshop_code) { [string]$sdata.workshop_code } else { "oficina-spike" }
+            $sessRecord["class_code"] = if ($sdata.class_code) { [string]$sdata.class_code } else { "turma-geral" }
+            $sessRecord["environment"] = if ($sdata.is_synthetic) { "test" } else { "production" }
+            $sessRecord["protocol_version"] = if ($sdata.protocol_version) { [string]$sdata.protocol_version } else { $script:BridgeVersion }
+            $sessRecord["instrument_version"] = if ($sdata.instrument_version) { [string]$sdata.instrument_version } else { "bancada-$($script:BridgeVersion)" }
+            $sessRecord["group_size"] = if ($sdata.group_size) { [int]$sdata.group_size } else { 2 }
+            $sessRecord["phase"] = if ($sdata.phase) { [string]$sdata.phase } else { "completed" }
+            $sessRecord["session_payload"] = $sdata
+            $sessRecord["created_at"] = if ($sdata.started_at) { [string]$sdata.started_at } else { $nowIso }
+            $sessRecord["updated_at"] = if ($sdata.completed_at) { [string]$sdata.completed_at } else { $nowIso }
+
+            $bodyJson = $sessRecord | ConvertTo-Json -Depth 10 -Compress
+            $headers = @{
+                apikey = $script:SupabaseAnonKey
+                Authorization = "Bearer $($script:SupabaseOperationalJwt)"
+                "Content-Type" = "application/json"
+                Prefer = "resolution=ignore-duplicates,return=minimal"
+            }
+
+            $uri = "$($script:SupabaseUrl)/rest/v1/research_bancada_sessions?on_conflict=session_id"
+            Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $bodyJson -TimeoutSec 8 -ErrorAction Stop | Out-Null
+
+            [void]$script:SyncedSessionIds.Add($sid)
+            [System.IO.File]::AppendAllText($script:SyncedSessionsTrackerFile, "$sid`r`n", [System.Text.Encoding]::UTF8)
+            $syncedSessCount++
+        } catch {
+            $statusCode = 0
+            $errBody = ""
+            try {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+                $respStream = $_.Exception.Response.GetResponseStream()
+                if ($respStream) {
+                    $sReader = New-Object System.IO.StreamReader($respStream)
+                    $errBody = $sReader.ReadToEnd()
+                    $sReader.Close()
+                }
+            } catch {}
+
+            if ($statusCode -eq 409) {
+                $errLower = "$errBody".ToLower()
+                if ($errLower -match "23505" -or $errLower -match "duplicate key" -or $errLower -match "research_bancada_sessions_pkey" -or $errLower -match "already exists") {
+                    [void]$script:SyncedSessionIds.Add($sid)
+                    [System.IO.File]::AppendAllText($script:SyncedSessionsTrackerFile, "$sid`r`n", [System.Text.Encoding]::UTF8)
+                    $syncedSessCount++
+                    continue
+                }
+            }
+
+            if ($statusCode -ge 400 -and $statusCode -lt 500) {
+                try {
+                    $quarantineFile = Join-Path $DataDir "sessions_quarantine.jsonl"
+                    $qObj = [PSCustomObject]@{
+                        session_id = $sid
+                        status_code = $statusCode
+                        error = $errBody
+                        quarantined_at = [DateTime]::UtcNow.ToString("o")
+                    }
+                    $qJson = $qObj | ConvertTo-Json -Compress -Depth 5
+                    [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
+                    [void]$script:QuarantinedSessionIds.Add($sid)
+                    [System.IO.File]::AppendAllText($script:QuarantinedSessionsTrackerFile, "$sid`r`n", [System.Text.Encoding]::UTF8)
+                    Write-BridgeLog "[QUARENTENA] Sessao $sid rejeitada com HTTP $statusCode: $errBody" "WARN"
+                } catch {}
+                continue
+            }
+
+            break
+        }
+    }
+
+    if ($syncedSessCount -gt 0) {
+        Write-BridgeLog "Sincronizados $syncedSessCount snapshot(s) de sessao de bancada com o Supabase com sucesso." "INFO"
+    }
 }
 
 function Test-PulseLabAllowedOrigin {
@@ -771,6 +965,7 @@ try {
             if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
                 $script:LastSyncAttempt = [DateTime]::UtcNow
                 Sync-EventsToSupabase
+                Sync-SessionSnapshotsToSupabase
             }
         }
 
@@ -931,7 +1126,7 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.2.0"
+                    protocol_version = "2.2.1"
                     group_size = 2
                     site_id = "CONFIGURE_SEDE"
                     activity_id = "atividade-01-spike"
@@ -1128,6 +1323,7 @@ try {
                         Sync-EventsToSupabase
                     }
                 }
+                Sync-SessionSnapshotsToSupabase
 
                 Write-BridgeLog "Sessao $safeSessId salva com sucesso na base local ($sessFile)." "INFO"
 
@@ -1439,6 +1635,23 @@ try {
                             Move-BridgeAtomicFile -SourcePath $quarTmp -DestinationPath $script:QuarantinedTrackerFile
                         } catch {}
                     }
+                }
+
+                [void]$script:SyncedSessionIds.Remove($reqSessId)
+                [void]$script:QuarantinedSessionIds.Remove($reqSessId)
+                if (Test-Path $script:SyncedSessionsTrackerFile) {
+                    try {
+                        $sessSyncTmp = Join-Path $DataDir "sessions_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                        [System.IO.File]::WriteAllLines($sessSyncTmp, [string[]]$script:SyncedSessionIds, [System.Text.Encoding]::UTF8)
+                        Move-BridgeAtomicFile -SourcePath $sessSyncTmp -DestinationPath $script:SyncedSessionsTrackerFile
+                    } catch {}
+                }
+                if (Test-Path $script:QuarantinedSessionsTrackerFile) {
+                    try {
+                        $sessQuarTmp = Join-Path $DataDir "sessions_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                        [System.IO.File]::WriteAllLines($sessQuarTmp, [string[]]$script:QuarantinedSessionIds, [System.Text.Encoding]::UTF8)
+                        Move-BridgeAtomicFile -SourcePath $sessQuarTmp -DestinationPath $script:QuarantinedSessionsTrackerFile
+                    } catch {}
                 }
 
                 Write-BridgeLog "Sessao $safeSessId expurgada com sucesso (motivo: $reason). Nenhum payload mantido." "INFO"

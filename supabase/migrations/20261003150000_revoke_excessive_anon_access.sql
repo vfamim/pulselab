@@ -53,12 +53,25 @@ DROP POLICY IF EXISTS authenticated_select_bancada_sessions ON public.research_b
 CREATE POLICY authenticated_select_bancada_sessions ON public.research_bancada_sessions
 FOR SELECT TO authenticated
 USING (
-    research_bancada_sessions.site_id IS NOT NULL
-    AND EXISTS (
-        SELECT 1 FROM public.research_site_memberships m
-        WHERE m.user_id = (SELECT auth.uid())
-        AND m.site_id = research_bancada_sessions.site_id
-        AND m.is_active
+    (
+        research_bancada_sessions.site_id IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM public.research_site_memberships m
+            WHERE m.user_id = (SELECT auth.uid())
+            AND m.site_id = research_bancada_sessions.site_id
+            AND m.is_active
+        )
+    )
+    OR (
+        research_bancada_sessions.site_id IS NOT NULL
+        AND research_bancada_sessions.installation_id IS NOT NULL
+        AND EXISTS (
+            SELECT 1 FROM public.device_installations d
+            WHERE d.device_user_id = (SELECT auth.uid())
+            AND d.installation_id = research_bancada_sessions.installation_id
+            AND d.site_id = research_bancada_sessions.site_id
+            AND d.is_active
+        )
     )
 );
 
