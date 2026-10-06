@@ -25,7 +25,12 @@ async function getStoredRecords(page, storeName) {
   );
 }
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, context }) => {
+  await context.route("**/*", (route) => {
+    const url = new URL(route.request().url());
+    if (url.origin === "http://127.0.0.1:4173") return route.continue();
+    return route.abort();
+  });
   await page.goto("/alunos/");
   await page.evaluate(async () => {
     localStorage.clear();
@@ -49,13 +54,13 @@ test("initial screen loads with assent unchecked and team size selection", async
   await expect(assentCheckbox).not.toBeChecked();
 
   // Sem assentimento, botão indica modo livre sem coleta
-  await expect(page.getByRole("button", { name: "Começar sem Pesquisa" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Começar sem pesquisa" })).toBeVisible();
 
   // Botões de equipe de 1 a 4 integrantes
-  await expect(page.getByRole("button", { name: /1 Aluno/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /2 Alunos/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /3 Alunos/i })).toBeVisible();
-  await expect(page.getByRole("button", { name: /4 Alunos/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /1 pessoa/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /2 pessoas/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /3 pessoas/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /4 pessoas/i })).toBeVisible();
 });
 
 test("ethical refusal (free mode) produces ZERO stored sessions and events and ZERO localStorage persistence", async ({ page }) => {
@@ -76,7 +81,7 @@ test("ethical refusal (free mode) produces ZERO stored sessions and events and Z
 
   // Deixa o assentimento desmarcado e inicia modo livre
   await expect(page.locator("#ethical-assent-checkbox")).not.toBeChecked();
-  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
+  await page.getByRole("button", { name: "Começar sem pesquisa" }).click();
 
   // Após recusa: NENHUMA persistência em localStorage
   const storageAfterDecline = await getRelevantLocalStorage();
@@ -86,22 +91,22 @@ test("ethical refusal (free mode) produces ZERO stored sessions and events and Z
 
   // Entra na Etapa 2 de oficina livre
   await expect(
-    page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
-  await expect(page.getByText(/Oficina livre sem coleta de dados/i)).toBeVisible();
+  await expect(page.getByText(/Modo Livre: a aula continua sem guardar dados da pesquisa/i)).toBeVisible();
 
   // Avança para a Etapa 3
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
 
   // Na Etapa 3, pula a avaliação
   await expect(
-    page.getByRole("heading", { name: "Desafio da Corrida & Avaliação Final" })
+    page.getByRole("heading", { name: "Testem o carrinho na pista" })
   ).toBeVisible();
-  await page.getByRole("button", { name: "Pular avaliação e finalizar" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   // Chega na tela final
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   // No final do modo livre: localStorage continua totalmente limpo de installation_id e sessão
@@ -130,7 +135,7 @@ test("full 3-stage journey saves session snapshot and emits all final events", a
 
   // 1. Etapa 1: Assentimento e caracterização
   // Seleciona dupla (2 alunos)
-  await page.getByRole("button", { name: /2 Alunos/i }).click();
+  await page.getByRole("button", { name: /2 pessoas/i }).click();
 
   const assentCheckbox1 = page.locator("#ethical-assent-checkbox");
   await assentCheckbox1.check();
@@ -144,7 +149,7 @@ test("full 3-stage journey saves session snapshot and emits all final events", a
   await page.getByRole("button", { name: /Primeira vez/i }).click();
 
   // Inicia atividade com pesquisa habilitada
-  const startBtn = page.getByRole("button", { name: "Começar Atividade!" });
+  const startBtn = page.getByRole("button", { name: "Começar atividade" });
   await expect(startBtn).toBeEnabled();
   await startBtn.click();
 
@@ -156,16 +161,16 @@ test("full 3-stage journey saves session snapshot and emits all final events", a
 
   // 2. Etapa 2: Oficina prática com cronômetro
   await expect(
-    page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
-  await expect(page.locator(".activity-timer")).toBeVisible();
+  await expect(page.locator(".activity-timer")).toHaveCount(0);
 
   // Avança para Desafio Final / Avaliação
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
 
   // 3. Etapa 3: Eixo 1 (individual) e Eixo 2 (bancada)
   await expect(
-    page.getByRole("heading", { name: "Desafio da Corrida & Avaliação Final" })
+    page.getByRole("heading", { name: "Testem o carrinho na pista" })
   ).toBeVisible();
 
   // Eixo 1: Avaliação dos 2 estudantes
@@ -177,16 +182,17 @@ test("full 3-stage journey saves session snapshot and emits all final events", a
   await skipStudent2.click();
 
   // Eixo 2: Resultados da bancada
+  await page.locator(".educator-rubric summary").click();
   await page.getByText(/Concluiu com sucesso/i).click();
   await page.getByText(/Concluída conforme o roteiro/i).click();
   await page.getByText(/Autônomo/i).click();
 
   // Concluir e salvar
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   // 4. Tela final
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   // Verifica persistência durável no IndexedDB
@@ -222,29 +228,29 @@ test("consecutive workshop restart cleans state without setHelpActive ReferenceE
 
   await page.goto("/alunos/");
 
-  // Seleciona 1 Aluno para ciclo rápido
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  // Seleciona 1 pessoa para ciclo rápido
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
   // Avança para post
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
 
   // Preenche rápido e conclui
   await page.getByRole("button", { name: /Muito boa/i }).first().click();
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   // Clica para reiniciar nova oficina consecutiva
-  await page.getByRole("button", { name: "Preparar Nova Oficina" }).click();
+  await page.getByRole("button", { name: "Preparar nova oficina" }).click();
 
   // Volta limpa para a Etapa 1
   await expect(
-    page.getByRole("heading", { name: "Como vocês chegam para esta oficina?" })
+    page.getByRole("heading", { name: "Vamos montar e programar?" })
   ).toBeVisible();
 
   // Assentimento deve ter voltado para desmarcado
@@ -259,25 +265,25 @@ test("consecutive workshop restart cleans state without setHelpActive ReferenceE
 test("individual student mode presents 1 member evaluation without group consensus", async ({ page }) => {
   await page.goto("/alunos/");
 
-  // Seleciona 1 Aluno
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  // Seleciona 1 pessoa
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
   // Avança para post
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
 
   // Confirma rótulo individual e apenas 1 bloco de avaliação de estudante
-  await expect(page.getByText("Avaliação do Estudante")).toBeVisible();
-  await expect(page.getByText("Estudante 2 de")).toHaveCount(0);
+  await expect(page.getByText("Pessoa 1: como foi a oficina de robótica hoje?")).toBeVisible();
+  await expect(page.getByText(/Pessoa 2:/)).toHaveCount(0);
 
   // Seleciona nota
   await page.getByRole("button", { name: /Muito boa/i }).click();
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   const sessions = await getStoredRecords(page, "sessions");
@@ -287,18 +293,18 @@ test("individual student mode presents 1 member evaluation without group consens
 
 test("reload during activity retains active session state", async ({ page }) => {
   await page.goto("/alunos/");
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
 
   await page.reload();
 
-  const activityHeading = page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" });
+  const activityHeading = page.getByRole("heading", { name: "Montem, programem e testem o robô" });
   const resumeBtn = page.getByRole("button", { name: /Continuar sessão salva/i });
 
   if (await resumeBtn.isVisible()) {
@@ -307,24 +313,25 @@ test("reload during activity retains active session state", async ({ page }) => 
   await expect(activityHeading).toBeVisible();
 });
 
-test("resetToPre definitively purges IndexedDB and localStorage session data", async ({ page }) => {
+test("withdrawal definitively purges IndexedDB and localStorage session data", async ({ page }) => {
   await page.goto("/alunos/");
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
   await page.waitForTimeout(500);
   let events = await getStoredRecords(page, "events");
   expect(events.length).toBeGreaterThan(0);
 
   page.on("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: /Reiniciar/i }).first().click();
+  await page.getByRole("button", { name: "Parar de participar e apagar meus dados" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Como vocês chegam para esta oficina?" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
 
+  await expect.poll(async () => (await getStoredRecords(page, "events")).length).toBe(0);
   events = await getStoredRecords(page, "events");
   const sessions = await getStoredRecords(page, "sessions");
   expect(events.length).toBe(0);
@@ -334,20 +341,20 @@ test("resetToPre definitively purges IndexedDB and localStorage session data", a
 test("two tabs observe the same active session in storage", async ({ context }) => {
   const page1 = await context.newPage();
   await page1.goto("/alunos/");
-  await page1.getByRole("button", { name: /1 Aluno/i }).click();
+  await page1.getByRole("button", { name: /1 pessoa/i }).click();
   await page1.locator("#ethical-assent-checkbox").check();
   await page1.getByRole("button", { name: /Primeira vez/i }).click();
-  await page1.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page1.getByRole("button", { name: "Começar atividade" }).click();
 
   await expect(
-    page1.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page1.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
 
   const page2 = await context.newPage();
   await page2.goto("/alunos/");
 
   const resumeVisible = await page2.getByRole("button", { name: /Continuar sessão salva/i }).isVisible();
-  const activityVisible = await page2.getByRole("heading", { name: "Construção, Programação & Testes do Robô" }).isVisible();
+  const activityVisible = await page2.getByRole("heading", { name: "Montem, programem e testem o robô" }).isVisible();
   expect(resumeVisible || activityVisible).toBe(true);
 
   await page1.close();
@@ -364,17 +371,17 @@ test("ethical refusal makes NO external network calls to cloud", async ({ page }
   });
 
   await page.goto("/alunos/");
-  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
+  await page.getByRole("button", { name: "Começar sem pesquisa" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
 
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
-  await page.getByRole("button", { name: "Pular avaliação e finalizar" }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   expect(externalRequests).toEqual([]);
@@ -382,25 +389,27 @@ test("ethical refusal makes NO external network calls to cloud", async ({ page }
 
 test("rubric answers are included in exported artifact", async ({ page }) => {
   await page.goto("/alunos/");
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
 
   await page.getByRole("button", { name: /Muito boa/i }).click();
+  await page.locator(".educator-rubric summary").click();
   await page.getByText(/Concluiu com sucesso/i).click();
   await page.getByText(/Concluída conforme o roteiro/i).click();
   await page.getByText(/Autônomo/i).click();
 
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   const downloadPromise = page.waitForEvent("download");
+  await page.locator(".educator-area summary").click();
   await page.getByRole("button", { name: "Baixar cópia local (.json)" }).click();
   const download = await downloadPromise;
 
@@ -420,7 +429,7 @@ test("reload for bench 2-4 members preserves exact memberAssents in active sessi
   await page.goto("/alunos/");
 
   // Seleciona Trio (3 alunos)
-  await page.getByRole("button", { name: /3 Alunos/i }).click();
+  await page.getByRole("button", { name: /3 pessoas/i }).click();
 
   // Marca os 3 assentimentos explicitamente
   const assent1 = page.locator("#ethical-assent-checkbox");
@@ -436,10 +445,10 @@ test("reload for bench 2-4 members preserves exact memberAssents in active sessi
   await expect(assent3).toBeChecked();
 
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
 
   // Recarrega a página
@@ -467,20 +476,21 @@ test("preparar nova oficina does NOT purge completed session from IndexedDB", as
   await page.goto("/alunos/");
 
   // Conclui uma oficina completa de 1 aluno
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
   await page.getByRole("button", { name: /Muito boa/i }).click();
+  await page.locator(".educator-rubric summary").click();
   await page.getByText(/Concluiu com sucesso/i).click();
   await page.getByText(/Concluída conforme o roteiro/i).click();
   await page.getByText(/Autônomo/i).click();
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   const sessionsBefore = await getStoredRecords(page, "sessions");
@@ -489,12 +499,12 @@ test("preparar nova oficina does NOT purge completed session from IndexedDB", as
   expect(eventsBefore.length).toBeGreaterThan(0);
   const firstSessionId = sessionsBefore[0].session_id;
 
-  // Clica em "Preparar Nova Oficina"
-  await page.getByRole("button", { name: "Preparar Nova Oficina" }).click();
+  // Clica em "Preparar nova oficina"
+  await page.getByRole("button", { name: "Preparar nova oficina" }).click();
 
   // Confirma retorno para Etapa 1
   await expect(
-    page.getByRole("heading", { name: "Como vocês chegam para esta oficina?" })
+    page.getByRole("heading", { name: "Vamos montar e programar?" })
   ).toBeVisible();
 
   // Sessão anterior DEVE continuar preservada no IndexedDB (sem purge)
@@ -522,10 +532,10 @@ test("free mode makes ZERO calls to /v1/spike/metrics and keeps zero telemetry i
   await page.goto("/alunos/");
 
   // Não assente e entra em modo livre
-  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
+  await page.getByRole("button", { name: "Começar sem pesquisa" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Construção, Programação & Testes do Robô" })
+    page.getByRole("heading", { name: "Montem, programem e testem o robô" })
   ).toBeVisible();
 
   // Aguarda 3 segundos na tela de atividade
@@ -535,11 +545,11 @@ test("free mode makes ZERO calls to /v1/spike/metrics and keeps zero telemetry i
   expect(spikeCalls.length).toBe(0);
 
   // Conclui modo livre
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
-  await page.getByRole("button", { name: "Pular avaliação e finalizar" }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   expect(spikeCalls.length).toBe(0);
@@ -553,18 +563,19 @@ test("free mode makes ZERO calls to /v1/spike/metrics and keeps zero telemetry i
 test("accessibility: rubric radios and quiz buttons expose accessible tree and keyboard focus", async ({ page }) => {
   await page.goto("/alunos/");
 
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Desafio da Corrida & Avaliação Final" })
+    page.getByRole("heading", { name: "Testem o carrinho na pista" })
   ).toBeVisible();
 
   // Verifica que os inputs radio estão acessíveis no DOM (não display: none)
+  await page.locator(".educator-rubric summary").click();
   const raceRadio = page.locator('input[name="race-result"]').first();
   await raceRadio.focus();
   await expect(raceRadio).toBeFocused();
@@ -575,7 +586,7 @@ test("accessibility: rubric radios and quiz buttons expose accessible tree and k
 
   // Verifica botões do Quiz A/B com role e aria-pressed
   const participatedBtn = page.getByRole("button", { name: /Realizada com botões/i }).first();
-  await expect(participatedBtn).toHaveAttribute("aria-pressed", "true");
+  await expect(participatedBtn).toHaveAttribute("aria-pressed", "false");
 
   const skippedBtn = page.getByRole("button", { name: /Dinâmica não realizada/i }).first();
   await expect(skippedBtn).toHaveAttribute("aria-pressed", "false");
@@ -588,12 +599,13 @@ test("accessibility: rubric radios and quiz buttons expose accessible tree and k
 test("accessibility: RegionMetadataModal supports keyboard focus trap, escape key, and aria-labelledby", async ({ page }) => {
   await page.goto("/alunos/");
 
-  const openModalBtn = page.getByRole("button", { name: /Região:/i });
+  await page.locator(".educator-area summary").click();
+  const openModalBtn = page.getByRole("button", { name: "Configurar oficina" });
   await openModalBtn.click();
 
-  const dialog = page.locator('.alert-modal-backdrop[role="dialog"]');
+  const dialog = page.getByRole('dialog');
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveAttribute("aria-modal", "true");
+  await expect(dialog).toHaveJSProperty("open", true);
   await expect(dialog).toHaveAttribute("aria-labelledby", "region-modal-title");
 
   const title = page.locator("#region-modal-title");
@@ -628,7 +640,7 @@ test("fail-closed: malformed snapshot in localStorage is completely rejected and
 
   // Deve falhar fechado: voltar à tela inicial sem restaurar como atividade ou assentida
   await expect(
-    page.getByRole("heading", { name: "Como vocês chegam para esta oficina?" })
+    page.getByRole("heading", { name: "Vamos montar e programar?" })
   ).toBeVisible();
 
   const assentCheckbox = page.locator("#ethical-assent-checkbox");
@@ -645,14 +657,14 @@ test("ethical reset vs completed preserve: Bridge contract and UI button preserv
   let lastResetBody = null;
   await page.route("**/v1/sessions/reset", async (route) => {
     lastResetBody = route.request().postDataJSON();
-    await route.fulfill({ status: 200, json: { status: "ok" } });
+    await route.fulfill({ status: 200, json: { status: "purged", purged: true, remote_pending: false } });
   });
 
   await page.goto("/alunos/");
 
   // 1. Recusa ética: deve purgar no Bridge com purge=true
   const resetReqPromise1 = page.waitForRequest("**/v1/sessions/reset");
-  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
+  await page.getByRole("button", { name: "Começar sem pesquisa" }).click();
   const resetReq1 = await resetReqPromise1;
   lastResetBody = resetReq1.postDataJSON();
   expect(lastResetBody).not.toBeNull();
@@ -662,17 +674,17 @@ test("ethical reset vs completed preserve: Bridge contract and UI button preserv
 
   // 2. Conclui uma sessão completa para testar botão de reiniciar na tela final
   await page.goto("/alunos/");
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
   await page.getByRole("button", { name: /Muito boa/i }).click();
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   const sessionsBefore = await getStoredRecords(page, "sessions");
@@ -681,7 +693,7 @@ test("ethical reset vs completed preserve: Bridge contract and UI button preserv
 
   // Clica no botão global "🔄 Reiniciar" na topbar após conclusão
   const resetReqPromise2 = page.waitForRequest("**/v1/sessions/reset");
-  await page.getByRole("button", { name: "🔄 Reiniciar" }).click();
+  await page.getByRole("button", { name: "Preparar nova oficina" }).click();
   const resetReq2 = await resetReqPromise2;
   lastResetBody = resetReq2.postDataJSON();
 
@@ -697,16 +709,16 @@ test("ethical reset vs completed preserve: Bridge contract and UI button preserv
 
   // A tela deve ter voltado limpa para a Etapa 1
   await expect(
-    page.getByRole("heading", { name: "Como vocês chegam para esta oficina?" })
+    page.getByRole("heading", { name: "Vamos montar e programar?" })
   ).toBeVisible();
 });
 
 test("free mode zero-collection: zero memory events, export button hidden, and download blocked", async ({ page }) => {
   await page.goto("/alunos/");
-  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
+  await page.getByRole("button", { name: "Começar sem pesquisa" }).click();
 
   // Abre os Controles do Instrutor
-  await page.getByRole("button", { name: "⚙️ Controles" }).click();
+  await page.locator(".educator-area summary").click();
 
   // Botão Exportar (.json) deve estar oculto / ausente no Modo Livre
   await expect(page.getByRole("button", { name: /Exportar \(\.json\)/i })).toHaveCount(0);
@@ -718,17 +730,17 @@ test("free mode zero-collection: zero memory events, export button hidden, and d
 
 test("terminal telemetry order: session_completed is definitively the last persisted event", async ({ page }) => {
   await page.goto("/alunos/");
-  await page.getByRole("button", { name: /1 Aluno/i }).click();
+  await page.getByRole("button", { name: /1 pessoa/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
   await page.getByRole("button", { name: /Muito boa/i }).click();
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "Oficina concluída com sucesso!" })
+    page.getByRole("heading", { name: "Oficina concluída!" })
   ).toBeVisible();
 
   const sessions = await getStoredRecords(page, "sessions");
@@ -880,38 +892,39 @@ test("local offline persistence: truthful status messages, full offline saves in
   await page.goto("/alunos/");
 
   // 1. Tela inicial antes de qualquer assentimento: mensagem acolhedora sem alarme falso de '0 salvos'
-  await expect(page.getByText(/Aguardando início da bancada · Salvamento automático após assentimento/i)).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Aguardando a escolha de cada pessoa.");
   let sessions = await getStoredRecords(page, "sessions");
   let events = await getStoredRecords(page, "events");
   expect(sessions.length).toBe(0);
   expect(events.length).toBe(0);
 
   // 2. Modo livre (recusa ética): rodapé indica claramente modo livre e persiste ZERO dados
-  await page.getByRole("button", { name: "Começar sem Pesquisa" }).click();
-  await expect(page.getByText(/Modo Livre \(sem coleta de pesquisa\)/i)).toBeVisible();
+  await page.getByRole("button", { name: "Começar sem pesquisa" }).click();
+  await expect(page.getByText(/Modo Livre: a aula continua/)).toBeVisible();
   sessions = await getStoredRecords(page, "sessions");
   events = await getStoredRecords(page, "events");
   expect(sessions.length).toBe(0);
   expect(events.length).toBe(0);
 
   // Reinicia para oficina oficial com assentimento
-  await page.getByRole("button", { name: /Reiniciar/i }).click();
+  await page.locator(".educator-area summary").click();
+  await page.getByRole("button", { name: "Preparar nova oficina" }).click();
   // Aguarda confirmação se houver ou retorno à tela inicial
   await page.goto("/alunos/");
 
   // 3. Assentimento unânime de dupla + início da atividade
-  await page.getByRole("button", { name: /2 Alunos/i }).click();
+  await page.getByRole("button", { name: /2 pessoas/i }).click();
   await page.locator("#ethical-assent-checkbox").check();
   await page.locator("#ethical-assent-member-2").check();
   await page.getByRole("button", { name: /Primeira vez/i }).click();
-  await page.getByRole("button", { name: "Começar Atividade!" }).click();
+  await page.getByRole("button", { name: "Começar atividade" }).click();
 
   // 4. Bloqueia internet simulando instituição sem conectividade
   await context.setOffline(true);
 
   // Status deve indicar modo offline e contabilizar os registros salvos
-  await expect(page.getByText(/Modo Offline \(salvando localmente\)/i)).toBeVisible();
-  await expect(page.getByText(/registro\(s\) salvos no dispositivo \(offline-first\)/i)).toBeVisible();
+  await expect(page.locator(".stage-toolbar")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Montem, programem e testem o robô" })).toBeVisible();
 
   sessions = await getStoredRecords(page, "sessions");
   events = await getStoredRecords(page, "events");
@@ -919,17 +932,18 @@ test("local offline persistence: truthful status messages, full offline saves in
   expect(events.length).toBeGreaterThanOrEqual(5);
 
   // 5. Conclui oficina 100% offline
-  await page.getByRole("button", { name: /Finalizar Oficina & Ir para Corrida/i }).click();
+  await page.getByRole("button", { name: /Ir para o desafio final/i }).click();
   await page.getByRole("button", { name: /Muito boa/i }).first().click();
   await page.getByRole("button", { name: "Prefiro não responder" }).last().click();
+  await page.locator(".educator-rubric summary").click();
   await page.getByText(/Concluiu com sucesso/i).click();
   await page.getByText(/Concluída conforme o roteiro/i).click();
   await page.getByText(/Autônomo/i).click();
-  await page.getByRole("button", { name: "Concluir e Salvar Oficina" }).click();
+  await page.getByRole("button", { name: "Concluir oficina" }).click();
 
   // 6. Tela final offline exibe confirmação e contagem honesta
-  await expect(page.getByRole("heading", { name: "Oficina concluída com sucesso!" })).toBeVisible();
-  await expect(page.getByText(/registro\(s\) salvos no computador com segurança \(armazenamento offline-first\)/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Oficina concluída!" })).toBeVisible();
+  await expect(page.locator(".educator-area details")).not.toHaveAttribute("open", "");
 
   // Garante que o snapshot da sessão no IndexedDB está completo com todos os eventos
   sessions = await getStoredRecords(page, "sessions");

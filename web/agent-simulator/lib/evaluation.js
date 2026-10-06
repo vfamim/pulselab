@@ -51,6 +51,10 @@ export function validateRestoredSession(savedSession) {
   }
 
   const allAssented = isAllAssented(rawTeamSize, assents);
+  const startedAt = savedSession.startedAt;
+  if (!allAssented || savedSession.isFreeMode || !Number.isFinite(startedAt) || startedAt <= 0 ||
+      startedAt > Date.now() || Date.now() - startedAt >= 7 * 24 * 60 * 60 * 1000) return null;
+  if (!["activity", "post"].includes(savedSession.screen) || typeof savedSession.sessionId !== "string") return null;
   return {
     ...savedSession,
     teamSize: rawTeamSize,
@@ -135,4 +139,18 @@ export function validateFinalTelemetry(finalMetrics, previousTelemetry) {
     effectiveTelemetry: previousTelemetry || null,
     technicalStatus: finalMetrics?.project_saved === false ? "project_not_saved" : "invalid_or_unavailable"
   };
+}
+
+
+/** Only structural counts/flags enter the PWA; discard names, code and inferred stages. */
+export function structuralSpikeMetrics(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const metrics = {};
+  for (const key of ["executable_blocks", "top_level_stacks"]) {
+    if (Number.isFinite(raw[key]) && raw[key] >= 0) metrics[key] = raw[key];
+  }
+  for (const key of ["project_saved", "uses_motor", "uses_sensor", "uses_loop", "uses_condition"]) {
+    if (typeof raw[key] === "boolean") metrics[key] = raw[key];
+  }
+  return metrics;
 }

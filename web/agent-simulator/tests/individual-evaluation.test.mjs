@@ -6,7 +6,8 @@ import {
   isPostScreenReady,
   resolveMemberExperiences,
   validateFinalTelemetry,
-  validateRestoredSession
+  validateRestoredSession,
+  structuralSpikeMetrics
 } from "../lib/evaluation.js";
 
 test("Assentimento ético: todos os integrantes 1..teamSize precisam assentir individualmente", () => {
@@ -49,6 +50,8 @@ test("Validação fail-closed de snapshot restaurado: teamSize estrito e descart
   // Snapshot válido
   const validSnap = {
     sessionId: "sess-1",
+    startedAt: Date.now(),
+    screen: "activity",
     teamSize: 2,
     memberAssents: { 1: true, 2: true }
   };
@@ -73,8 +76,7 @@ test("Validação fail-closed de snapshot restaurado: teamSize estrito e descart
     ...validSnap,
     memberAssents: { 1: true, 2: false }
   });
-  assert.ok(refusedSnap);
-  assert.equal(refusedSnap.allAssented, false);
+  assert.equal(refusedSnap, null);
 });
 
 test("downloadSessionData recusa estritamente exportação no modo livre ou sem assentimento", () => {
@@ -205,4 +207,23 @@ test("Telemetria final inválida: preserva última válida e registra estado té
   const resNull = validateFinalTelemetry(null, previous);
   assert.equal(resNull.technicalStatus, "invalid_or_unavailable");
   assert.deepEqual(resNull.effectiveTelemetry, previous);
+});
+
+
+test("Snapshot: retenção absoluta rejeita sete dias, futuro, ausência de idade e modo livre", () => {
+  const valid = { sessionId: "synthetic-session", screen: "activity", startedAt: Date.now() - 1000, teamSize: 1, memberAssents: { 1: true } };
+  assert.ok(validateRestoredSession(valid));
+  for (const patch of [
+    { startedAt: Date.now() - 7 * 24 * 60 * 60 * 1000 },
+    { startedAt: Date.now() + 60_000 }, { startedAt: undefined },
+    { isFreeMode: true }, { screen: "finished" }, { memberAssents: { 1: false } }
+  ]) assert.equal(validateRestoredSession({ ...valid, ...patch }), null);
+});
+
+
+test("SPIKE: apenas contagens estruturais, sem nomes ou inferência", () => {
+  assert.deepEqual(structuralSpikeMetrics({ executable_blocks: 7, project_saved: true,
+    inferred_stage: "synthetic-inference", file_name: "synthetic-name.llsp3", code: "synthetic-code", uses_motor: true }),
+    { executable_blocks: 7, project_saved: true, uses_motor: true });
+  assert.equal(structuralSpikeMetrics(null), null);
 });

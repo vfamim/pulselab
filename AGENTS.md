@@ -51,7 +51,7 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
 
 3. **Retenção Estrita de 7 Dias e Retirada Imediata**:
    - Dados locais no IndexedDB e no Bridge expiram em no máximo 7 dias (`enforceAbsoluteRetention` e `Invoke-BridgeRetentionCleanup`).
-   - O botão "Parar registros e apagar sessão" executa o expurgo definitivo e imediato dos dados locais.
+   - O botão "Parar de participar e apagar meus dados" executa o expurgo definitivo e imediato dos dados locais, registra tombstone contra reenvio e executa exclusão remota autenticada com retry.
 
 4. **Proibição de Telemetria Invasiva**:
    - Captura de tela (screenshots) e interceptação global de teclas (`GetAsyncKeyState`) são terminantemente proibidas e abolidas.

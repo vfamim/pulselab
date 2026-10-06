@@ -111,6 +111,7 @@ test("Bridge Security: endpoint /v1/sessions/reset exige session_id e purga atom
   assert.match(resetBlock, /\$script:SyncedEventIds\.Remove/, "Deve remover IDs expurgados do tracker de sincronizados");
   assert.match(resetBlock, /\$script:QuarantinedEventIds\.Remove/, "Deve remover IDs expurgados do tracker de quarentena");
 
-  // Não vazar payload da criança recusante
-  assert.match(resetBlock, /Nenhum payload mantido/, "Deve registrar expurgo sem registrar payload do estudante recusante");
+  // Não vazar payload da criança recusante e registrar retirada antes da limpeza.
+  assert.match(resetBlock, /Register-SessionWithdrawal/, "Deve registrar tombstone durável antes do expurgo");
+  assert.match(resetBlock, /expurgada localmente/, "Deve registrar expurgo sem registrar payload do estudante recusante");
 });

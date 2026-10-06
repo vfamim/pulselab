@@ -1,22 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CONFIG_HASH,
-  INSTRUMENT_MANIFEST,
-  INSTRUMENT_VERSION,
   PROTOCOL_VERSION,
   createUuid,
   formatEventName
 } from "../lib/contracts.js";
 import {
-  deleteSessionEvents,
-  listPendingEvents,
-  listQuarantinedEvents,
-  markEventDelivered,
-  markSessionEvents,
-  pruneDeliveredEvents,
   enforceAbsoluteRetention,
   purgeSession,
-  removeSession,
   saveEvent,
   saveSession,
   getLocalStoreSummary
@@ -31,6 +22,7 @@ import {
   isPostScreenReady,
   resolveMemberExperiences,
   validateFinalTelemetry,
+  structuralSpikeMetrics,
   validateRestoredSession
 } from "../lib/evaluation.js";
 
@@ -38,7 +30,7 @@ const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.2.1";
+const CLIENT_VERSION = "student-pwa/2.2.2";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -57,15 +49,9 @@ const POST_DEFAULT = {
   raceResult: null,
   raceTimeSeconds: "",
   assemblyResult: null,
-  quizCompleted: "participated",
+  quizCompleted: null,
   supportLevel: null
 };
-
-const FLOW_STEPS = [
-  { id: 1, label: "Início" },
-  { id: 2, label: "Oficina com Robô" },
-  { id: 3, label: "Desafio & Avaliação" }
-];
 
 const EXPERIENCE_OPTIONS = [
   [1, "🐣 Primeira vez", "Ninguém na bancada mexeu com robôs"],
@@ -116,6 +102,7 @@ async function notifyBridgeSession(sessionId, startedAt, marks = [], allowed = t
   if (!allowed) return;
   try {
     await fetch(`${BRIDGE_URL}/v1/sessions`, {
+      signal: AbortSignal.timeout(1500),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ session_id: sessionId, started_at: startedAt, marks })
@@ -127,9 +114,9 @@ async function notifyBridgeSession(sessionId, startedAt, marks = [], allowed = t
 
 async function fetchBridgeSpikeMetrics() {
   try {
-    const res = await fetch(`${BRIDGE_URL}/v1/spike/metrics`);
+    const res = await fetch(`${BRIDGE_URL}/v1/spike/metrics`, { signal: AbortSignal.timeout(1500) });
     if (res.ok) {
-      return await res.json();
+      return structuralSpikeMetrics(await res.json());
     }
   } catch {
     // Bridge offline ou inacessível
@@ -139,7 +126,7 @@ async function fetchBridgeSpikeMetrics() {
 
 async function fetchBridgeConfig() {
   try {
-    const res = await fetch(`${BRIDGE_URL}/v1/config`);
+    const res = await fetch(`${BRIDGE_URL}/v1/config`, { signal: AbortSignal.timeout(1500) });
     if (res.ok) {
       return await res.json();
     }
@@ -153,6 +140,7 @@ async function notifyBridgeEvent(event, allowed = true) {
   if (!allowed) return;
   try {
     await fetch(`${BRIDGE_URL}/v1/events`, {
+      signal: AbortSignal.timeout(1500),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(event)
@@ -166,6 +154,7 @@ async function notifyBridgeSessionSave(sessionPayload, allowed = true) {
   if (!allowed) return;
   try {
     await fetch(`${BRIDGE_URL}/v1/sessions/save`, {
+      signal: AbortSignal.timeout(1500),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(sessionPayload)
@@ -175,49 +164,9 @@ async function notifyBridgeSessionSave(sessionPayload, allowed = true) {
   }
 }
 
-function playChimeSound() {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-    const now = ctx.currentTime;
-    const notes = [523.25, 659.25, 783.99, 1046.5]; // C5, E5, G5, C6 (harmonia agradável e nítida)
-    notes.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(freq, now + idx * 0.12);
-      gain.gain.setValueAtTime(0.001, now + idx * 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.28, now + idx * 0.12 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.12 + 0.45);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now + idx * 0.12);
-      osc.stop(now + idx * 0.12 + 0.45);
-    });
-  } catch {
-    // Silencioso se navegador restringir autoplay
-  }
-}
-
-async function triggerBridgeAlert(mark = 20) {
-  try {
-    await fetch(`${BRIDGE_URL}/v1/alert`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mark })
-    });
-  } catch {
-    // Operação normal mesmo sem o Bridge
-  }
-}
-
 async function resetBridgeSession(sessionId = null, options = {}) {
-  try {
-    await fetch(`${BRIDGE_URL}/v1/sessions/reset`, {
+  const response = await fetch(`${BRIDGE_URL}/v1/sessions/reset`, {
+      signal: AbortSignal.timeout(1500),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -227,32 +176,11 @@ async function resetBridgeSession(sessionId = null, options = {}) {
         completed: Boolean(options.completed)
       })
     });
-  } catch {
-    // Operação normal mesmo sem o Bridge
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || (options.purge && (payload.purged !== true || payload.remote_pending === true))) {
+    throw new Error(payload.error || payload.status || `Bridge reset failed (${response.status})`);
   }
-}
-
-function requestNotificationPermission() {
-  if (typeof Notification !== "undefined" && Notification.permission === "default") {
-    Notification.requestPermission().catch(() => {});
-  }
-}
-
-function showWebNotification(mark) {
-  if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-    try {
-      new Notification(`PulseLab: Check-in de ${mark} min!`, {
-        body: "Pausa rápida de 30 segundos no robô para o grupo registrar o progresso.",
-        icon: "/alunos/icon.svg"
-      });
-    } catch {}
-  }
-}
-
-function stepForState(screen) {
-  if (screen === "pre") return 1;
-  if (screen === "activity") return 2;
-  return 3;
+  return payload;
 }
 
 function readJson(key, fallback) {
@@ -297,13 +225,6 @@ function getSystemMetadata() {
   };
 }
 
-function formatClock(milliseconds) {
-  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
 function ScaleQuestion({ legend, hint, options, value, onChange }) {
   return (
     <fieldset className="question-block">
@@ -323,41 +244,9 @@ function ScaleQuestion({ legend, hint, options, value, onChange }) {
               type="button"
               aria-pressed={isSelected}
             >
-              <span className="scale-option__icon">{icon}</span>
+              <span className="scale-option__icon" aria-hidden="true">{icon}</span>
               <strong className="scale-option__title">{title}</strong>
               {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
-
-function OptionQuestion({ legend, options, value, onChange }) {
-  return (
-    <fieldset className="question-block">
-      <legend>{legend}</legend>
-      <div className="option-list">
-        {options.map(([optionValue, label, hint]) => {
-          const parts = String(label).match(/^(\S+)\s+(.+)$/);
-          const icon = parts ? parts[1] : "•";
-          const title = parts ? parts[2] : label;
-          const isSelected = value === optionValue;
-          return (
-            <button
-              className={`option-row ${isSelected ? "is-selected" : ""}`}
-              key={optionValue}
-              onClick={() => onChange(optionValue)}
-              type="button"
-              aria-pressed={isSelected}
-            >
-              <span className="option-row__icon">{icon}</span>
-              <span className="option-row__body">
-                <strong>{title}</strong>
-                {hint ? <small>{hint}</small> : null}
-              </span>
-              <span className="option-row__radio" />
             </button>
           );
         })}
@@ -371,7 +260,7 @@ function Card({ eyebrow, title, description, children, footer, compact = false }
     <section className={`flow-card ${compact ? "flow-card--compact" : ""}`}>
       <header className="flow-card__heading">
         <span className="eyebrow">{eyebrow}</span>
-        <h1>{title}</h1>
+        <h1 tabIndex={-1} data-stage-heading>{title}</h1>
         <p>{description}</p>
       </header>
       <div className="flow-card__body">{children}</div>
@@ -388,755 +277,180 @@ const REGIONS = [
   { id: "Centro-Oeste", label: "🌾 Centro-Oeste", desc: "Polo Regional Centro-Oeste" }
 ];
 
-function RegionMetadataModal({ isOpen, onClose, context, onSave, configHash, computerId, systemMetadata }) {
+function RegionMetadataModal({ isOpen, onClose, context, onSave, computerId, systemMetadata }) {
   const [selectedRegion, setSelectedRegion] = useState(context.regional || "Nordeste");
-  const modalRef = useRef(null);
-  const previouslyFocusedElementRef = useRef(null);
-
-  useEffect(() => {
-    setSelectedRegion(context.regional || "Nordeste");
-  }, [context, isOpen]);
-
+  const dialogRef = useRef(null);
   useEffect(() => {
     if (!isOpen) return;
-
-    previouslyFocusedElementRef.current = document.activeElement;
-
-    const focusTimer = setTimeout(() => {
-      if (modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        if (focusable.length > 0) {
-          focusable[0].focus();
-        }
-      }
-    }, 30);
-
-    function handleKeyDown(e) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key === "Tab") {
-        if (!modalRef.current) return;
-        const focusables = Array.from(
-          modalRef.current.querySelectorAll(
-            'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-          )
-        );
-        if (focusables.length === 0) return;
-        const first = focusables[0];
-        const last = focusables[focusables.length - 1];
-
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault();
-            last.focus();
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault();
-            first.focus();
-          }
-        }
-      }
-    }
-
-    window.addEventListener("keydown", handleKeyDown);
+    const previous = document.activeElement;
+    const dialog = dialogRef.current;
+    setSelectedRegion(context.regional || "Nordeste");
+    dialog.showModal();
     return () => {
-      clearTimeout(focusTimer);
-      window.removeEventListener("keydown", handleKeyDown);
-      if (previouslyFocusedElementRef.current && typeof previouslyFocusedElementRef.current.focus === "function") {
-        previouslyFocusedElementRef.current.focus();
-      }
+      dialog.close();
+      previous?.focus();
     };
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
-
+  }, [isOpen, context.regional]);
   return (
-    <div className="alert-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="region-modal-title">
-      <div className="alert-modal" ref={modalRef} style={{ maxWidth: "520px", textAlign: "left" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-          <h2 id="region-modal-title" style={{ margin: 0, fontSize: "1.25rem", color: "#f8fafc" }}>📍 Região & Metadados do Computador</h2>
-          <button className="topbar-btn" onClick={onClose} type="button" aria-label="Fechar" style={{ padding: "4px 10px" }}>✕</button>
-        </div>
-        <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "16px" }}>
-          Selecione apenas a região de onde os dados estão vindo. Os metadados da máquina são detectados automaticamente para o comparativo.
-        </p>
-
-        <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#e2e8f0", display: "block", marginBottom: "8px" }}>
-          Região de origem dos dados:
-        </label>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "8px", marginBottom: "18px" }}>
-          {REGIONS.map((r) => {
-            const isSel = selectedRegion === r.id;
-            return (
-              <button
-                key={r.id}
-                type="button"
-                className={`scale-option ${isSel ? "is-selected" : ""}`}
-                onClick={() => setSelectedRegion(r.id)}
-                style={{ padding: "10px 12px", minHeight: "auto", textAlign: "left" }}
-              >
-                <strong style={{ fontSize: "0.92rem" }}>{r.label}</strong>
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ padding: "12px 14px", background: "#0f172a", border: "1px solid #1e293b", borderRadius: "10px", fontSize: "0.8rem", color: "#94a3b8" }}>
-          <div style={{ color: "#38bdf8", fontWeight: 700, marginBottom: "6px" }}>💻 Metadados do Computador (automáticos):</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-            <div>ID Dispositivo: <strong style={{ color: "#f1f5f9" }}>{computerId}</strong></div>
-            <div>Sistema: <strong style={{ color: "#f1f5f9" }}>{systemMetadata.os}</strong></div>
-            <div>Resolução Tela: <strong style={{ color: "#f1f5f9" }}>{systemMetadata.screen_resolution}</strong></div>
-            <div>Instrumento: <strong style={{ color: "#34d399" }}>SHA-256 ✓</strong></div>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "18px", gap: "10px" }}>
-          <button
-            type="button"
-            className="inst-btn"
-            onClick={onClose}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className="inst-btn inst-btn--accent"
-            onClick={() => {
-              onSave({
-                ...context,
-                regional: selectedRegion,
-                site_id: `Polo-${selectedRegion}`
-              });
-              onClose();
-            }}
-          >
-            💾 Salvar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function PreScreen({
-  answers,
-  setAnswers,
-  onSubmit,
-  onDecline,
-  resumable,
-  onResume,
-  teamSize,
-  setTeamSize,
-  assentAgreed,
-  memberAssents = { 1: false, 2: false, 3: false, 4: false },
-  setMemberAssents
-}) {
-  const allAssented = isAllAssented(teamSize, memberAssents);
-  const ready = !allAssented || answers.experience !== null;
-
-  function toggleMemberAssent(memberIndex, checked) {
-    if (typeof setMemberAssents === "function") {
-      setMemberAssents((prev) => ({
-        ...prev,
-        [memberIndex]: checked
-      }));
-    }
-  }
-
-  return (
-    <Card
-      eyebrow="Etapa 1 de 3 · Início da Bancada"
-      title="Como vocês chegam para esta oficina?"
-      description="Respondam rapidamente para caracterizar a bancada antes de começar a montar e programar o robô LEGO SPIKE."
-      footer={
-        <div className="action-row">
-          <span className="footer-hint">Sua resposta fica salva assim que você clica em começar.</span>
-          {!allAssented ? (
-            <button className="button button--ghost" onClick={onDecline} type="button">
-              Usar apenas o robô (sem pesquisa)
-            </button>
-          ) : (
-            <button className="button button--ghost" onClick={onDecline} type="button">
-              Prefiro não responder a pesquisa
-            </button>
-          )}
-          <button
-            className="button button--primary"
-            disabled={!ready}
-            onClick={allAssented ? onSubmit : onDecline}
-            type="button"
-          >
-            {allAssented ? "Começar Atividade!" : "Começar sem Pesquisa"}
-          </button>
-        </div>
-      }
-    >
-      {resumable ? (
-        <div className="resume-banner">
-          <div>
-            <strong>Há uma atividade em andamento neste dispositivo.</strong>
-            <small>Continue do ponto salvo, mesmo que a página tenha sido fechada.</small>
-          </div>
-          <button className="button button--ghost" onClick={onResume} type="button">
-            Continuar sessão salva
-          </button>
-        </div>
-      ) : null}
-
-      {/* Composição da Bancada com Acessibilidade Semântica */}
-      <div style={{ margin: "0 0 20px", padding: "14px 16px", background: "rgba(99, 102, 241, 0.06)", borderRadius: "12px", border: "1px solid rgba(99, 102, 241, 0.2)" }}>
-        <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#4f46e5", textTransform: "uppercase", letterSpacing: "0.06em", display: "block", marginBottom: "8px" }}>
-          👥 Composição da Equipe na Bancada
-        </span>
-        <div
-          role="group"
-          aria-label="Composição da Equipe na Bancada"
-          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}
-        >
-          {[
-            [1, "👤 1 Aluno", "Individual"],
-            [2, "👫 2 Alunos", "Dupla"],
-            [3, "👥 3 Alunos", "Trio"],
-            [4, "👥 4 Alunos", "Quarteto"]
-          ].map(([val, label, sub]) => {
-            const isSel = teamSize === val;
-            return (
-              <button
-                key={val}
-                type="button"
-                aria-pressed={isSel}
-                className={`scale-option ${isSel ? "is-selected" : ""}`}
-                onClick={() => setTeamSize(val)}
-                style={{ textAlign: "left", padding: "10px 12px", minHeight: "auto" }}
-              >
-                <strong style={{ fontSize: "0.92rem" }}>{label}</strong>
-                <small style={{ fontSize: "0.76rem", color: isSel ? "inherit" : "var(--muted)", marginTop: "2px" }}>{sub}</small>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Assentimento Ético Obrigatório Individual por Participante */}
-      <div style={{ margin: "0 0 18px", padding: "14px 18px", background: allAssented ? "rgba(34, 197, 94, 0.08)" : "rgba(239, 68, 68, 0.08)", border: `1px solid ${allAssented ? "rgba(34, 197, 94, 0.3)" : "rgba(239, 68, 68, 0.3)"}`, borderRadius: "12px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
-          <strong style={{ fontSize: "0.95rem", color: allAssented ? "#15803d" : "#b91c1c" }}>
-            📋 Assentimento Voluntário por Participante
-          </strong>
-        </div>
-
-        <p style={{ fontSize: "0.82rem", color: allAssented ? "#166534" : "#991b1b", margin: "0 0 12px", lineHeight: "1.4" }}>
-          {allAssented
-            ? "✓ Participação voluntária e anônima: Todos os integrantes da bancada concordaram individualmente em participar da pesquisa anônima."
-            : "✋ Modo Livre: Como a bancada compartilha a montagem, o projeto e a telemetria do robô, se qualquer integrante não concordar, a bancada inteira usará o robô LEGO SPIKE livremente, com zero gravação de pesquisa e zero telemetria."}
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-          {Array.from({ length: teamSize }, (_, idx) => {
-            const memberIdx = idx + 1;
-            const isAssented = Boolean(memberAssents[memberIdx]);
-            const memberLabel = teamSize === 1 ? "Estudante da Bancada" : `Estudante ${memberIdx} de ${teamSize}`;
-
-            return (
-              <label
-                key={memberIdx}
-                htmlFor={memberIdx === 1 ? "ethical-assent-checkbox" : `ethical-assent-member-${memberIdx}`}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  padding: "8px 12px",
-                  borderRadius: "8px",
-                  background: isAssented ? "rgba(34, 197, 94, 0.12)" : "rgba(255, 255, 255, 0.03)",
-                  border: `1px solid ${isAssented ? "rgba(34, 197, 94, 0.4)" : "rgba(255, 255, 255, 0.08)"}`,
-                  cursor: "pointer"
-                }}
-              >
-                <input
-                  id={memberIdx === 1 ? "ethical-assent-checkbox" : `ethical-assent-member-${memberIdx}`}
-                  type="checkbox"
-                  checked={isAssented}
-                  onChange={(e) => toggleMemberAssent(memberIdx, e.target.checked)}
-                  style={{ width: "18px", height: "18px", accentColor: "#16a34a", cursor: "pointer" }}
-                />
-                <span style={{ fontSize: "0.86rem", color: isAssented ? "#15803d" : "inherit" }}>
-                  <strong>{memberLabel}</strong>: {isAssented ? "Concorda em participar da pesquisa anônima" : "Prefere não responder questionários"}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      {allAssented ? (
-        <ScaleQuestion
-          legend="Vocês na bancada já montaram ou programaram robôs ou blocos antes?"
-          onChange={(experience) => setAnswers({ ...answers, experience })}
-          options={EXPERIENCE_OPTIONS}
-          value={answers.experience}
-        />
-      ) : null}
-    </Card>
-  );
-}
-
-function ActivityScreen({
-  elapsedMs,
-  labMode,
-  spikeTelemetry,
-  onAdvanceToFinalChallenge,
-  assentAgreed,
-  isFreeMode,
-  onRefreshTelemetry
-}) {
-  const isFree = Boolean(isFreeMode || !assentAgreed);
-  const hasSpikeCode = Boolean(spikeTelemetry && (spikeTelemetry.executable_blocks > 0 || spikeTelemetry.project_saved));
-
-  return (
-    <Card
-      eyebrow="Etapa 2 de 3 · Oficina Prática com Robô"
-      title="Construção, Programação & Testes do Robô"
-      description="Usem o kit LEGO SPIKE Prime e o aplicativo oficial em tela cheia para montar, programar e testar o carrinho no circuito."
-      footer={
-        <div className="action-row" style={{ justifyContent: "space-between", width: "100%", alignItems: "center" }}>
-          <span className="footer-hint" style={{ fontSize: "0.88rem", color: "var(--muted)" }}>
-            {isFree ? "Oficina livre sem coleta de dados (Modo Livre · Zero gravação)." : "⏱️ Coleta contínua e silenciosa em segundo plano."}
-          </span>
-          <button
-            className="button button--primary"
-            onClick={onAdvanceToFinalChallenge}
-            type="button"
-          >
-            🏁 Finalizar Oficina & Ir para Corrida ➔
-          </button>
-        </div>
-      }
-    >
-      <div className="activity-timer" aria-live="polite">
-        <span>Tempo total de oficina</span>
-        <strong>{formatClock(elapsedMs)}</strong>
-        <small>{isFree ? "Modo Livre pedagógico · Zero coleta de dados" : "Coleta silenciosa em segundo plano · Sem interrupções"}</small>
-      </div>
-
-      {isFree ? (
-        <div style={{ background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.3)", borderRadius: "12px", padding: "14px 18px", margin: "16px 0" }}>
-          <span style={{ fontSize: "0.88rem", color: "#7dd3fc" }}>
-            🤖 <strong>Modo Livre Pedagógico:</strong> O robô LEGO SPIKE funciona livremente. Nenhuma telemetria, código ou evento é gravado nesta oficina.
-          </span>
-        </div>
-      ) : (
-        <div style={{ background: hasSpikeCode ? "rgba(16, 185, 129, 0.08)" : "rgba(56, 189, 248, 0.08)", border: `1px solid ${hasSpikeCode ? "rgba(16, 185, 129, 0.3)" : "rgba(56, 189, 248, 0.3)"}`, borderRadius: "12px", padding: "14px 18px", margin: "16px 0", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "10px" }}>
-          <div>
-            <span style={{ fontSize: "0.88rem", color: hasSpikeCode ? "#6ee7b7" : "#7dd3fc" }}>
-              🤖 <strong>Telemetria LEGO SPIKE:</strong>{" "}
-              {hasSpikeCode
-                ? `${spikeTelemetry.executable_blocks || 0} blocos detectados · Estrutura: ${spikeTelemetry.inferred_stage || "em edição"} · ${spikeTelemetry.file_name || "projeto .llsp3"}`
-                : "Aguardando projeto salvo no app LEGO SPIKE (.llsp3)"}
-            </span>
-            {hasSpikeCode && (
-              <small style={{ display: "block", color: "rgba(255, 255, 255, 0.6)", marginTop: "4px", fontSize: "0.78rem" }}>
-                Início da programação detectado automaticamente · Coletando deltas de código em silêncio
-              </small>
-            )}
-          </div>
-          <button
-            type="button"
-            className="inst-btn"
-            onClick={onRefreshTelemetry}
-            style={{ fontSize: "0.78rem", padding: "4px 10px", background: "rgba(255, 255, 255, 0.08)", color: "#e2e8f0", borderColor: "rgba(255, 255, 255, 0.2)" }}
-          >
-            🔄 Atualizar telemetria
-          </button>
-        </div>
-      )}
-
-      <div className="activity-instructions">
-        <article>
-          <span>1</span>
-          <strong>Foco Total no Robô LEGO</strong>
-          <p>Trabalhem na montagem física e abram o app oficial LEGO SPIKE em tela cheia para programar e testar.</p>
-        </article>
-        <article>
-          <span>2</span>
-          <strong>{isFree ? "Uso Livre do Robô" : "Telemetria 100% Silenciosa"}</strong>
-          <p>
-            {isFree
-              ? "Montem e programem livremente. Nesta bancada, nenhuma telemetria ou código é coletado ou gravado."
-              : "O PulseLab acompanha o tempo e detecta os blocos de código em segundo plano, sem travar nem pedir confirmações."}
-          </p>
-        </article>
-        <article>
-          <span>3</span>
-          <strong>Desafio Final & Corrida</strong>
-          <p>Ao terminar a montagem e os testes, cliquem no botão abaixo para registrar a corrida na pista e a avaliação final.</p>
-        </article>
-      </div>
-    </Card>
-  );
-}
-
-function PostScreen({
-  answers,
-  setAnswers,
-  onSubmit,
-  onDecline,
-  teamSize = 2,
-  memberAssents = { 1: false, 2: false, 3: false, 4: false }
-}) {
-  const experiences = useMemo(() => {
-    return resolveMemberExperiences(teamSize, memberAssents, answers.memberExperiences);
-  }, [answers.memberExperiences, teamSize, memberAssents]);
-
-  const ready = isPostScreenReady(teamSize, experiences);
-
-  function handleMemberRating(memberIndex, rating) {
-    const updated = experiences.map((m) =>
-      m.memberIndex === memberIndex ? { ...m, rating, skipped: false } : m
-    );
-    setAnswers({ ...answers, memberExperiences: updated });
-  }
-
-  function handleToggleMemberSkip(memberIndex) {
-    const updated = experiences.map((m) =>
-      m.memberIndex === memberIndex ? { ...m, rating: null, skipped: !m.skipped } : m
-    );
-    setAnswers({ ...answers, memberExperiences: updated });
-  }
-
-  return (
-    <Card
-      eyebrow="Etapa 3 de 3 · Desafio da Corrida & Avaliação Final"
-      title="Desafio da Corrida & Avaliação Final"
-      description="Avaliação estruturada em dois eixos independentes: a experiência subjetiva dos alunos e os resultados objetivos da bancada na pista."
-      footer={
-        <div className="action-row">
-          <button
-            className="button button--ghost"
-            onClick={onDecline}
-            type="button"
-            style={{ marginRight: "auto" }}
-          >
-            Pular avaliação e finalizar
-          </button>
-          <button
-            className="button button--primary"
-            disabled={!ready}
-            onClick={() => onSubmit()}
-            type="button"
-          >
-            Concluir e Salvar Oficina
-          </button>
-        </div>
-      }
-    >
-      {/* Eixo 1: Experiência Subjetiva Individual de Cada Integrante */}
-      <fieldset className="question-block" style={{ marginBottom: "26px" }}>
-        <legend className="question-legend" style={{ fontSize: "1.1rem", color: "#f8fafc", fontWeight: 700, marginBottom: "4px" }}>
-          ✨ Eixo 1: Como foi participar da oficina de robótica de hoje?
-        </legend>
-        <p style={{ color: "#94a3b8", fontSize: "0.85rem", marginTop: 0, marginBottom: "16px" }}>
-          Avaliação individual da experiência da oficina. Cada integrante responde de forma independente, sem exigir consenso na bancada.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-          {experiences.map((member) => {
-            const memberLabel =
-              teamSize === 1
-                ? "Avaliação do Estudante"
-                : `Estudante ${member.memberIndex} de ${teamSize}`;
-
-            return (
-              <div
-                key={member.memberIndex}
-                style={{
-                  padding: "14px 16px",
-                  background: "rgba(255, 255, 255, 0.03)",
-                  border: "1px solid rgba(255, 255, 255, 0.1)",
-                  borderRadius: "12px"
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
-                  <strong style={{ fontSize: "0.95rem", color: "#e2e8f0" }}>
-                    👤 {memberLabel}:
-                  </strong>
-                  {!member.declinedAssent ? (
-                    <button
-                      type="button"
-                      className="button button--ghost"
-                      onClick={() => handleToggleMemberSkip(member.memberIndex)}
-                      style={{
-                        fontSize: "0.78rem",
-                        padding: "3px 10px",
-                        borderColor: member.skipped ? "#38bdf8" : "rgba(255, 255, 255, 0.2)",
-                        color: member.skipped ? "#38bdf8" : "#94a3b8"
-                      }}
-                    >
-                      {member.skipped ? "✓ Optou por não responder" : "Prefiro não responder"}
-                    </button>
-                  ) : null}
-                </div>
-
-                {member.declinedAssent ? (
-                  <div style={{ padding: "8px 12px", background: "rgba(239, 68, 68, 0.08)", border: "1px dashed rgba(239, 68, 68, 0.3)", borderRadius: "8px", color: "#f87171", fontSize: "0.82rem" }}>
-                    Estudante optou por não participar da pesquisa no início da oficina. Nenhuma resposta é coletada para esta posição.
-                  </div>
-                ) : !member.skipped ? (
-                  <div className="scale-grid">
-                    {POST_EXPERIENCE_OPTIONS.map(([optionValue, label, sublabel]) => {
-                      const parts = String(label).match(/^(\S+)\s+(.+)$/);
-                      const icon = parts ? parts[1] : optionValue;
-                      const title = parts ? parts[2] : label;
-                      const isSelected = member.rating === optionValue;
-                      return (
-                        <button
-                          className={`scale-option ${isSelected ? "is-selected" : ""}`}
-                          key={optionValue}
-                          onClick={() => handleMemberRating(member.memberIndex, optionValue)}
-                          type="button"
-                          aria-pressed={isSelected}
-                        >
-                          <span className="scale-option__icon">{icon}</span>
-                          <strong className="scale-option__title">{title}</strong>
-                          {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div style={{ padding: "8px 12px", background: "rgba(56, 189, 248, 0.08)", border: "1px dashed rgba(56, 189, 248, 0.3)", borderRadius: "8px", color: "#38bdf8", fontSize: "0.82rem" }}>
-                    Estudante optou por não responder a avaliação de experiência.
-                  </div>
-                )}
-              </div>
-            );
-          })}
+    <dialog ref={dialogRef} className="settings-dialog" aria-labelledby="region-modal-title"
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const buttons = dialogRef.current.querySelectorAll("button:not(:disabled)");
+        const first = buttons[0], last = buttons[buttons.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }}
+      onCancel={(event) => { event.preventDefault(); onClose(); }}>
+      <h2 id="region-modal-title">Configuração da oficina</h2>
+      <fieldset className="question-block">
+        <legend>Região</legend>
+        <div className="region-options">
+          {REGIONS.map((region) => (
+            <button key={region.id} type="button" className={`scale-option ${selectedRegion === region.id ? "is-selected" : ""}`}
+              aria-pressed={selectedRegion === region.id} onClick={() => setSelectedRegion(region.id)}>{region.id}</button>
+          ))}
         </div>
       </fieldset>
-
-      {/* Eixo 2: Resultados Práticos Imediatos & Apoio do Instrutor */}
-      <div style={{ padding: "18px 20px", background: "rgba(36, 86, 77, 0.15)", border: "1px solid rgba(73, 217, 206, 0.3)", borderRadius: "16px", marginTop: "10px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-          <span style={{ fontSize: "1.2rem" }}>🏁</span>
-          <strong style={{ fontSize: "1.05rem", color: "#49d9ce" }}>
-            Eixo 2: Resultados Práticos da Bancada & Observação do Instrutor
-          </strong>
-        </div>
-
-        {/* 1. Corrida / Desafio da Pista */}
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
-            1. Desfecho do Desafio da Pista / Corrida do Robô:
-          </label>
-          <div className="option-list">
-            {RACE_RESULT_OPTIONS.map(([val, title, desc]) => {
-              const isSelected = answers.raceResult === val;
-              return (
-                <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer" }}>
-                  <input
-                    type="radio"
-                    name="race-result"
-                    value={val}
-                    checked={isSelected}
-                    onChange={() => setAnswers({ ...answers, raceResult: val })}
-                    style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0, opacity: 0.001 }}
-                  />
-                  <span className="option-row__body">
-                    <strong style={{ fontSize: "0.95rem", color: "#f1f5f9" }}>{title}</strong>
-                    <small style={{ color: "#94a3b8" }}>{desc}</small>
-                  </span>
-                  <span className="option-row__radio" />
-                </label>
-              );
-            })}
-          </div>
-
-          <div style={{ marginTop: "10px", display: "flex", alignItems: "center", gap: "10px" }}>
-            <label htmlFor="race-time-input" style={{ fontSize: "0.82rem", color: "#cbd5e1" }}>
-              ⏱️ Tempo da corrida (segundos, opcional):
-            </label>
-            <input
-              id="race-time-input"
-              type="number"
-              step="0.1"
-              min="0"
-              placeholder="Ex: 12.5"
-              value={answers.raceTimeSeconds || ""}
-              onChange={(e) => setAnswers({ ...answers, raceTimeSeconds: e.target.value })}
-              style={{
-                width: "110px",
-                padding: "6px 10px",
-                background: "#0f172a",
-                border: "1px solid rgba(255, 255, 255, 0.15)",
-                borderRadius: "8px",
-                color: "#f8fafc",
-                fontSize: "0.88rem"
-              }}
-            />
-          </div>
-        </div>
-
-        {/* 2. Montagem Física */}
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
-            2. Critérios de Montagem do Carrinho (tutorial com peças LEGO):
-          </label>
-          <div className="option-list">
-            {ASSEMBLY_OPTIONS.map(([val, title, desc]) => {
-              const isSelected = answers.assemblyResult === val;
-              return (
-                <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer", padding: "8px 12px" }}>
-                  <input
-                    type="radio"
-                    name="assembly-result"
-                    value={val}
-                    checked={isSelected}
-                    onChange={() => setAnswers({ ...answers, assemblyResult: val })}
-                    style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0, opacity: 0.001 }}
-                  />
-                  <span className="option-row__body">
-                    <strong style={{ fontSize: "0.9rem", color: "#f1f5f9" }}>{title}</strong>
-                    <small style={{ color: "#94a3b8", fontSize: "0.78rem" }}>{desc}</small>
-                  </span>
-                  <span className="option-row__radio" />
-                </label>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 3. Dinâmica Lúdica do Quiz A/B */}
-        <div style={{ marginBottom: "20px" }}>
-          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "4px" }}>
-            3. Dinâmica Lúdica do Quiz A/B pelos Botões do Robô:
-          </label>
-          <span style={{ fontSize: "0.78rem", color: "#94a3b8", display: "block", marginBottom: "8px" }}>
-            Brincadeira de entretenimento de encerramento (não utilizada como avaliação de aprendizagem).
-          </span>
-          <div role="group" aria-label="Dinâmica Lúdica do Quiz A/B pelos Botões do Robô" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-            {QUIZ_OPTIONS.map(([val, label]) => {
-              const isSelected = answers.quizCompleted === val;
-              return (
-                <button
-                  key={val}
-                  type="button"
-                  aria-pressed={isSelected}
-                  className={`scale-option ${isSelected ? "is-selected" : ""}`}
-                  style={{ padding: "8px 12px", minHeight: "auto", textAlign: "left", fontSize: "0.82rem" }}
-                  onClick={() => setAnswers({ ...answers, quizCompleted: val })}
-                >
-                  <strong style={{ fontSize: "0.84rem" }}>{label}</strong>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 4. Nível de Apoio do Instrutor */}
-        <div>
-          <label style={{ display: "block", fontSize: "0.9rem", fontWeight: 700, color: "#e2e8f0", marginBottom: "8px" }}>
-            4. Nível de Apoio Pedagógico Recebido pela Bancada:
-          </label>
-          <div className="option-list">
-            {SUPPORT_OPTIONS.map(([val, title, desc]) => {
-              const isSelected = answers.supportLevel === val;
-              return (
-                <label key={val} className={`option-row ${isSelected ? "is-selected" : ""}`} style={{ cursor: "pointer", padding: "8px 12px" }}>
-                  <input
-                    type="radio"
-                    name="support-level"
-                    value={val}
-                    checked={isSelected}
-                    onChange={() => setAnswers({ ...answers, supportLevel: val })}
-                    style={{ position: "absolute", width: "1px", height: "1px", padding: 0, margin: "-1px", overflow: "hidden", clip: "rect(0, 0, 0, 0)", whiteSpace: "nowrap", border: 0, opacity: 0.001 }}
-                  />
-                  <span className="option-row__body">
-                    <strong style={{ fontSize: "0.9rem", color: "#f1f5f9" }}>{title}</strong>
-                    <small style={{ color: "#94a3b8", fontSize: "0.78rem" }}>{desc}</small>
-                  </span>
-                  <span className="option-row__radio" />
-                </label>
-              );
-            })}
-          </div>
-        </div>
+      <p>Computador: {computerId} · {systemMetadata.os} · {systemMetadata.screen_resolution}</p>
+      <div className="action-row">
+        <button className="button button--ghost" onClick={onClose} type="button">Cancelar</button>
+        <button className="button button--primary" type="button" onClick={() => {
+          onSave({ ...context, regional: selectedRegion, site_id: `Polo-${selectedRegion}` });
+          onClose();
+        }}>Salvar</button>
       </div>
+    </dialog>
+  );
+}
+
+function PreScreen({ answers, setAnswers, onSubmit, onDecline, teamSize, setTeamSize, memberAssents, setMemberAssents }) {
+  const allAssented = isAllAssented(teamSize, memberAssents);
+  const ready = !allAssented || answers.experience !== null;
+  return (
+    <Card eyebrow="1 de 3 · Antes de começar" title="Vamos montar e programar?"
+      description="Robótica para todos. A pesquisa é opcional."
+      footer={<div className="action-row">
+        {allAssented && <button className="button button--ghost" onClick={onDecline} type="button">Começar sem pesquisa</button>}
+        <button className="button button--primary" disabled={!ready} onClick={allAssented ? onSubmit : onDecline} type="button"
+          aria-describedby={allAssented && !ready ? "experience-hint" : undefined}>
+          {allAssented ? "Começar atividade" : "Começar sem pesquisa"}
+        </button>
+      </div>}>
+      <fieldset className="question-block team-choice">
+        <legend>Quantas pessoas na bancada?</legend>
+        <div className="team-options">
+          {[1, 2, 3, 4].map((size) => <button key={size} type="button"
+            className={`scale-option ${teamSize === size ? "is-selected" : ""}`} aria-pressed={teamSize === size}
+            aria-label={`${size} ${size === 1 ? "pessoa" : "pessoas"}`}
+            onClick={() => setTeamSize(size)}><span>{size}</span><span className="team-option__unit">{size === 1 ? "pessoa" : "pessoas"}</span></button>)}
+        </div>
+      </fieldset>
+      <fieldset className={`assent-panel ${allAssented ? "assent-panel--accepted" : "assent-panel--pending"}`} aria-describedby="assent-explanation">
+        <legend>Vocês querem participar da pesquisa?</legend>
+        <p id="assent-explanation">Cada pessoa decide e não usamos nomes. Se alguém não quiser, todos usam o LEGO SPIKE em <strong>Modo Livre: sem gravação nem envio de dados</strong>. Podem desistir e apagar os dados a qualquer momento.</p>
+        <div className="assent-members">
+          {Array.from({ length: teamSize }, (_, index) => {
+            const member = index + 1;
+            const accepted = memberAssents[member] === true;
+            const id = member === 1 ? "ethical-assent-checkbox" : `ethical-assent-member-${member}`;
+            return <label key={member} htmlFor={id} className={`assent-member ${accepted ? "assent-member--accepted" : ""}`}>
+              <input id={id} type="checkbox" checked={accepted}
+                onChange={(event) => setMemberAssents((prev) => ({ ...prev, [member]: event.target.checked }))} />
+              <span><strong>Pessoa {member}:</strong> aceito</span>
+            </label>;
+          })}
+        </div>
+        <p className="assent-status" role="status">{allAssented ? "Todos aceitaram participar." : "Aguardando a escolha de cada pessoa."}</p>
+        <details className="research-details">
+          <summary>Sobre os dados da pesquisa</summary>
+          <p>Os registros descrevem a bancada, sem identificar estudantes. Os dados locais são apagados em até 7 dias.
+            Durante a oficina, use “Parar de participar e apagar meus dados” para sair da pesquisa.</p>
+        </details>
+      </fieldset>
+      {allAssented && <>
+        <ScaleQuestion legend="Já montaram ou programaram robôs ou blocos?"
+          options={EXPERIENCE_OPTIONS} value={answers.experience} onChange={(experience) => setAnswers({ ...answers, experience })} />
+        {answers.experience === null && <p id="experience-hint" className="choice-hint">Escolham uma opção ou comecem sem pesquisa.</p>}
+      </>}
     </Card>
   );
 }
 
-function FreeModeFinishedScreen({ onRestart }) {
-  return (
-    <Card
-      compact
-      eyebrow="Oficina Livre"
-      title="Oficina concluída com sucesso!"
-      description="A atividade prática foi realizada livremente sem questionários ou telemetria de pesquisa."
-      footer={
-        <div className="action-row">
-          <button className="button button--primary" onClick={onRestart} type="button">
-            Preparar Nova Oficina
-          </button>
-        </div>
-      }
-    >
-      <div className="summary-status summary-status--success">
-        <span className="summary-status__mark">✓</span>
-        <div>
-          <span>Modo Livre Pedagógico</span>
-          <h2>Parabéns pelo trabalho na oficina!</h2>
-          <p>
-            Esta atividade ocorreu em modo pedagógico livre. Nenhuma informação pessoal, resposta ou telemetria foi salva ou transmitida.
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
+function ActivityScreen({ onAdvanceToFinalChallenge, isFreeMode }) {
+  return <Card eyebrow="2 de 3 · Mãos à obra" title="Montem, programem e testem o robô"
+    description="Usem o kit e o aplicativo LEGO SPIKE para criar e testar o carrinho."
+    footer={<div className="action-row"><button className="button button--primary" type="button" onClick={onAdvanceToFinalChallenge}>Ir para o desafio final</button></div>}>
+    <div className="activity-guide">
+      <p>Sigam a atividade e peçam ajuda ao educador quando precisarem.</p>
+      <p>Voltem aqui para testar o carrinho na pista.</p>
+    </div>
+    {isFreeMode && <p className="free-mode-note">Modo Livre: a aula continua sem guardar dados da pesquisa.</p>}
+  </Card>;
 }
 
-function FinishedScreen({ pendingCount, quarantinedCount = 0, totalSavedCount = 0, onDownload, onRestart }) {
-  const displayCount = totalSavedCount > 0 ? totalSavedCount : pendingCount;
-  return (
-    <Card
-      compact
-      eyebrow="Tudo pronto"
-      title="Oficina concluída com sucesso!"
-      description="Todas as respostas e a telemetria do grupo foram salvas com segurança no dispositivo."
-      footer={
-        <div className="action-row">
-          <button className="button button--ghost" onClick={onDownload} type="button">
-            Baixar cópia local (.json)
-          </button>
-          <button className="button button--primary" onClick={onRestart} type="button">
-            Preparar Nova Oficina
-          </button>
-        </div>
-      }
-    >
-      <div className="summary-status summary-status--success">
-        <span className="summary-status__mark">✓</span>
-        <div>
-          <span>Sessão concluída</span>
-          <h2>Parabéns pelo trabalho!</h2>
-          {quarantinedCount > 0 ? (
-            <p style={{ color: "#f87171" }}>
-              ⚠️ {quarantinedCount} registro(s) em quarentena local para análise do pesquisador. Os demais registros estão salvos no computador.
-            </p>
-          ) : (
-            <p>
-              {displayCount} registro(s) salvos no computador com segurança (armazenamento offline-first). Os dados serão consolidados pelo pesquisador via pendrive ou importador autorizado.
-            </p>
-          )}
-        </div>
+function RubricQuestion({ legend, name, options, value, onChange }) {
+  return <fieldset className="question-block rubric-question"><legend>{legend}</legend>
+    <div className="option-list">{options.map(([optionValue, label, hint]) => (
+      <label key={optionValue} className={`option-row ${value === optionValue ? "is-selected" : ""}`}>
+        <input type="radio" name={name} value={optionValue} checked={value === optionValue} onChange={() => onChange(optionValue)} />
+        <span className="option-row__body"><strong>{label}</strong><small>{hint}</small></span>
+      </label>
+    ))}</div>
+  </fieldset>;
+}
+
+function PostScreen({ answers, setAnswers, onSubmit, onDecline, teamSize, memberAssents, isFreeMode, submitting }) {
+  const experiences = useMemo(() => resolveMemberExperiences(teamSize, memberAssents, answers.memberExperiences), [teamSize, memberAssents, answers.memberExperiences]);
+  const ready = isPostScreenReady(teamSize, experiences);
+  function updateMember(memberIndex, patch) {
+    setAnswers({ ...answers, memberExperiences: experiences.map((member) => member.memberIndex === memberIndex ? { ...member, ...patch } : member) });
+  }
+  return <Card eyebrow="3 de 3 · Desafio final" title="Testem o carrinho na pista"
+    description={isFreeMode ? "Façam o desafio com o educador e concluam a oficina." : "Façam o desafio com o educador. Depois, cada pessoa escolhe se quer avaliar a oficina."}
+    footer={<div className="action-row">
+      {!isFreeMode && <button className="button button--ghost" onClick={onDecline} disabled={submitting} type="button">Pular avaliação e concluir</button>}
+      <button className="button button--primary" onClick={() => onSubmit()} disabled={submitting || (!isFreeMode && !ready)} type="button">{submitting ? "Concluindo…" : "Concluir oficina"}</button>
+    </div>}>
+    {!isFreeMode && <>
+      <div className="member-evaluations">
+        {experiences.map((member) => <fieldset className="question-block member-evaluation" key={member.memberIndex}>
+          <legend>Pessoa {member.memberIndex}: como foi a oficina de robótica hoje?</legend>
+          <div className="member-evaluation__actions"><button type="button" className="button button--ghost" aria-pressed={member.skipped}
+            onClick={() => updateMember(member.memberIndex, { rating: null, skipped: !member.skipped })}>
+            {member.skipped ? "Responder à avaliação" : "Prefiro não responder"}
+          </button></div>
+          {member.skipped ? <p>Você escolheu não responder. Tudo bem.</p> : <div className="scale-grid experience-grid">
+            {POST_EXPERIENCE_OPTIONS.map(([value, label, hint]) => <button key={value} className={`scale-option ${member.rating === value ? "is-selected" : ""}`}
+              type="button" aria-pressed={member.rating === value} onClick={() => updateMember(member.memberIndex, { rating: value, skipped: false })}>
+              <span className="scale-option__icon" aria-hidden="true">{label.split(" ")[0]}</span>
+              <strong className="scale-option__title">{label.slice(label.indexOf(" ") + 1)}</strong>
+              <small className="scale-option__sub">{hint}</small>
+            </button>)}
+          </div>}
+        </fieldset>)}
       </div>
-    </Card>
-  );
+      <details className="educator-rubric"><summary>Educador: observações do desafio</summary>
+        <p>Registre o que observou. Todos os campos são opcionais.</p>
+        <RubricQuestion legend="Desfecho do desafio da pista" name="race-result" options={RACE_RESULT_OPTIONS} value={answers.raceResult} onChange={(raceResult) => setAnswers({ ...answers, raceResult })} />
+        <label className="race-time" htmlFor="race-time-input">Tempo da corrida em segundos (opcional)
+          <input id="race-time-input" type="number" step="0.1" min="0" value={answers.raceTimeSeconds || ""}
+            onChange={(event) => setAnswers({ ...answers, raceTimeSeconds: event.target.value })} />
+        </label>
+        <RubricQuestion legend="Montagem do carrinho" name="assembly-result" options={ASSEMBLY_OPTIONS} value={answers.assemblyResult} onChange={(assemblyResult) => setAnswers({ ...answers, assemblyResult })} />
+        <ScaleQuestion legend="Dinâmica com os botões do robô" options={QUIZ_OPTIONS} value={answers.quizCompleted} onChange={(quizCompleted) => setAnswers({ ...answers, quizCompleted })} />
+        <RubricQuestion legend="Apoio do educador" name="support-level" options={SUPPORT_OPTIONS} value={answers.supportLevel} onChange={(supportLevel) => setAnswers({ ...answers, supportLevel })} />
+      </details>
+    </>}
+    {isFreeMode && <p className="free-mode-note">Modo Livre: a aula continua sem guardar dados da pesquisa.</p>}
+  </Card>;
+}
+
+function FinishedScreen({ onRestart, isFreeMode }) {
+  return <Card compact eyebrow="Tudo pronto" title="Oficina concluída!"
+    description="Obrigado por participar da aula de robótica."
+    footer={<div className="action-row"><button className="button button--primary" onClick={onRestart} type="button">Preparar nova oficina</button></div>}>
+    {isFreeMode && <p className="free-mode-note">Modo Livre: nenhum dado da pesquisa foi guardado.</p>}
+  </Card>;
 }
 
 function EvidencePanel({ events }) {
@@ -1158,9 +472,7 @@ function EvidencePanel({ events }) {
               <strong>{formatEventName(event.event_type)}</strong>
               <small>{event.activity_stage || "sessão"}</small>
             </span>
-            <span className={`delivery delivery--${event._delivery_state}`}>
-              {event._delivery_state === "delivered" || event._delivery_state === "synced" ? "nuvem ✓" : "pendente ⏳"}
-            </span>
+            <span className={`delivery delivery--${event._delivery_state}`}>{event._delivery_state}</span>
           </article>
         )) : (
           <div className="empty-events">
@@ -1181,6 +493,7 @@ export default function StudentPage() {
     if (!rawSavedSession) return null;
     const validated = validateRestoredSession(rawSavedSession);
     if (!validated) {
+      if (typeof rawSavedSession.sessionId === "string") void purgeSession(rawSavedSession.sessionId);
       try {
         localStorage.removeItem(ACTIVE_SESSION_KEY);
       } catch {}
@@ -1190,7 +503,6 @@ export default function StudentPage() {
   }, [rawSavedSession]);
 
   const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
-  const [resumable, setResumable] = useState(savedSession);
   const VALID_SCREENS = ["pre", "activity", "post", "finished"];
   const [screen, setScreen] = useState(() => {
     if (savedSession?.screen && VALID_SCREENS.includes(savedSession.screen)) {
@@ -1207,17 +519,17 @@ export default function StudentPage() {
     }
     return createUuid();
   });
-  const [startedAt, setStartedAt] = useState(() => savedSession?.startedAt || Date.now());
+  const [startedAt, setStartedAt] = useState(() => savedSession?.startedAt || null);
   const [activityStartedAt, setActivityStartedAt] = useState(() => savedSession?.activityStartedAt || null);
   const [elapsedMs, setElapsedMs] = useState(() => {
-    if (savedSession?.activityStartedAt) {
+    if (savedSession?.screen === "activity" && savedSession?.activityStartedAt) {
       return Math.max(0, Date.now() - savedSession.activityStartedAt);
     }
     return savedSession?.elapsedMs || 0;
   });
   const [timeline, setTimeline] = useState(() => savedSession?.timeline || []);
   const [responses, setResponses] = useState(() => savedSession?.responses || []);
-  const [spikeTelemetry, setSpikeTelemetry] = useState(() => savedSession?.spikeTelemetry || null);
+  const [spikeTelemetry, setSpikeTelemetry] = useState(() => structuralSpikeMetrics(savedSession?.spikeTelemetry));
   const [preAnswers, setPreAnswers] = useState(() => ({
     ...PRE_DEFAULT,
     ...(savedSession?.preAnswers && typeof savedSession.preAnswers === "object" ? savedSession.preAnswers : {})
@@ -1227,7 +539,7 @@ export default function StudentPage() {
     ...(savedSession?.postAnswers && typeof savedSession.postAnswers === "object" ? savedSession.postAnswers : {})
   }));
   const [teamSize, setTeamSize] = useState(() => savedSession?.teamSize || 2);
-  const [currentRole, setCurrentRole] = useState(() => savedSession?.currentRole || "computer");
+  const [currentRole] = useState(() => savedSession?.currentRole || "computer");
   const [memberAssents, setMemberAssentsState] = useState(() => savedSession?.memberAssents || { 1: false, 2: false, 3: false, 4: false });
   const memberAssentsRef = useRef(savedSession?.memberAssents || { 1: false, 2: false, 3: false, 4: false });
   const [assentAgreed, setAssentAgreedState] = useState(() => {
@@ -1240,30 +552,108 @@ export default function StudentPage() {
   const [isFreeMode, setIsFreeMode] = useState(() => savedSession?.isFreeMode || false);
 
   function setMemberAssents(valOrFn) {
-    setMemberAssentsState((prev) => {
-      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn;
-      memberAssentsRef.current = next;
-      const allAssented = isAllAssented(teamSize, next);
-      assentAgreedRef.current = allAssented;
-      setAssentAgreedState(allAssented);
-      return next;
-    });
-  }
-
-  function handleTeamSizeChange(newSize) {
-    setTeamSize(newSize);
-    const allAssented = isAllAssented(newSize, memberAssentsRef.current);
+    const next = typeof valOrFn === "function" ? valOrFn(memberAssentsRef.current) : valOrFn;
+    memberAssentsRef.current = next;
+    setMemberAssentsState(next);
+    const allAssented = isAllAssented(teamSize, next);
     assentAgreedRef.current = allAssented;
     setAssentAgreedState(allAssented);
   }
-  const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || false);
+
+  function handleTeamSizeChange(newSize) {
+    if (newSize === teamSize) return;
+    setTeamSize(newSize);
+    const empty = { 1: false, 2: false, 3: false, 4: false };
+    memberAssentsRef.current = empty;
+    setMemberAssentsState(empty);
+    assentAgreedRef.current = false;
+    setAssentAgreedState(false);
+    setPreAnswers(PRE_DEFAULT);
+  }
+  const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || labMode);
   const [showContextModal, setShowContextModal] = useState(false);
-  const [online, setOnline] = useState(() => navigator.onLine);
   const [toast, setToast] = useState("");
-  const [showInstructorTools, setShowInstructorTools] = useState(labMode);
+  const [submitting, setSubmitting] = useState(false);
+  const [storageError, setStorageError] = useState("");
   const sequenceRef = useRef(savedSession?.sequence || 0);
-  const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || false);
+  const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || labMode);
   const isSubmittingRef = useRef(false);
+  const writesRef = useRef(new Set());
+  const bridgeWritesRef = useRef(new Set());
+  const generationRef = useRef(0);
+  const withdrawalChannelRef = useRef(null);
+  const telemetryRef = useRef(savedSession?.spikeTelemetry || null);
+  const startedAtRef = useRef(savedSession?.startedAt || null);
+
+  function trackWrite(promise) {
+    writesRef.current.add(promise);
+    promise.then(() => writesRef.current.delete(promise), () => writesRef.current.delete(promise));
+    return promise;
+  }
+
+  function trackBridgeWrite(promise) {
+    bridgeWritesRef.current.add(promise);
+    promise.then(() => bridgeWritesRef.current.delete(promise), () => bridgeWritesRef.current.delete(promise));
+    return promise;
+  }
+
+  function reportStorageError() {
+    setStorageError("Não foi possível guardar todas as respostas neste computador. Chamem o educador; vocês podem continuar a aula.");
+  }
+
+  async function withdrawSession(broadcast = true) {
+    // Revoke permission synchronously, before any await, including late requests.
+    assentAgreedRef.current = false;
+    generationRef.current += 1;
+    isSubmittingRef.current = true;
+    setAssentAgreedState(false);
+    setIsFreeMode(true);
+    setSubmitting(false);
+    setTimeline([]);
+    setResponses([]);
+    setSpikeTelemetry(null);
+    telemetryRef.current = null;
+    setPreAnswers(PRE_DEFAULT);
+    setPostAnswers(POST_DEFAULT);
+    startedAtRef.current = null;
+    const empty = { 1: false, 2: false, 3: false, 4: false };
+    memberAssentsRef.current = empty;
+    setMemberAssentsState(empty);
+    try {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      localStorage.removeItem(INSTALLATION_KEY);
+      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+    } catch { reportStorageError(); }
+    if (broadcast) withdrawalChannelRef.current?.postMessage({ type: "withdraw", sessionId });
+    isSubmittingRef.current = false;
+    setScreen("activity");
+    // Drain writes already in flight so that deletion is terminal.
+    await Promise.allSettled([...writesRef.current]);
+    await purgeSession(sessionId).catch(reportStorageError);
+    void refreshDeliveryCounts();
+    await Promise.allSettled([...bridgeWritesRef.current]);
+    try {
+      await resetBridgeSession(sessionId, { reason: "ethical_withdrawal", purge: true });
+    } catch {
+      setStorageError("Os dados deste navegador foram apagados, mas o computador ainda precisa confirmar a exclusão completa. Chamem o educador e mantenham o PulseLab aberto para tentar novamente.");
+    }
+  }
+
+  useEffect(() => {
+    const channel = new BroadcastChannel("pulselab-session-control");
+    withdrawalChannelRef.current = channel;
+    channel.onmessage = ({ data }) => {
+      if (data?.type === "withdraw" && data.sessionId === sessionId) void withdrawSession(false);
+    };
+    return () => { channel.close(); withdrawalChannelRef.current = null; };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (screen === "pre" || isFreeMode || !assentAgreed) return;
+    const remaining = startedAt + 7 * 24 * 60 * 60 * 1000 - Date.now();
+    const expiry = window.setTimeout(() => void withdrawSession(), Math.max(0, remaining));
+    return () => window.clearTimeout(expiry);
+  }, [startedAt, screen, isFreeMode, assentAgreed]);
 
 
   useEffect(() => {
@@ -1321,14 +711,6 @@ export default function StudentPage() {
   }, [refreshDeliveryCounts]);
 
   const allEvents = [...timeline, ...responses];
-  const memoryPendingCount = allEvents.filter((event) => event._delivery_state === "queued").length;
-  const pendingCount = Math.max(memoryPendingCount, dbPendingCount);
-  const memoryQuarantinedCount = allEvents.filter((event) => event._delivery_state === "quarantined").length;
-  const quarantinedCount = Math.max(memoryQuarantinedCount, dbQuarantinedCount);
-  const memoryStoredCount = allEvents.length + (screen !== "pre" && assentAgreed ? 1 : 0);
-  const totalSavedCount = Math.max(memoryStoredCount, dbTotalStoredCount, pendingCount);
-  const activeStep = stepForState(screen, activityStage);
-
   function flash(message) {
     setToast(message);
     window.setTimeout(() => setToast(""), 3200);
@@ -1353,7 +735,7 @@ export default function StudentPage() {
       computer_id: getComputerId(installationId),
       protocol_version: PROTOCOL_VERSION,
       occurred_at: new Date(now).toISOString(),
-      elapsed_ms: Math.max(0, now - startedAt),
+      elapsed_ms: startedAtRef.current ? Math.max(0, now - startedAtRef.current) : 0,
       client_version: CLIENT_VERSION,
       config_version: "student-pwa-v2",
       config_hash: CONFIG_HASH,
@@ -1378,12 +760,10 @@ export default function StudentPage() {
 
   function persist(event) {
     if (!assentAgreedRef.current || isFreeMode) return;
-    void saveEvent(event).then(() => {
+    void trackWrite(saveEvent(event)).then(() => {
       void refreshDeliveryCounts();
-    }).catch(() =>
-      flash("Não foi possível salvar no armazenamento local deste navegador.")
-    );
-    void notifyBridgeEvent(event);
+    }).catch(reportStorageError);
+    void trackBridgeWrite(notifyBridgeEvent(event));
     if (typeof navigator !== "undefined" && navigator.onLine) {
       void syncSingleEvent(event).then((result) => {
         if (result && result.success === true) {
@@ -1449,8 +829,11 @@ export default function StudentPage() {
   async function captureSpikeTelemetry(stageLabel) {
     if (isFreeMode || !assentAgreedRef.current) return { metrics: null, event: null };
     try {
+      const generation = generationRef.current;
       const metrics = await fetchBridgeSpikeMetrics();
+      if (generation !== generationRef.current || !assentAgreedRef.current || (isSubmittingRef.current && stageLabel !== "session_completed")) return { metrics: null, event: null };
       if (metrics && metrics.project_saved !== false) {
+        telemetryRef.current = metrics;
         setSpikeTelemetry(metrics);
         const event = emitTimeline("spike_telemetry", {
           activity_stage: stageLabel,
@@ -1460,8 +843,7 @@ export default function StudentPage() {
             uses_motor: metrics.uses_motor,
             uses_sensor: metrics.uses_sensor,
             uses_loop: metrics.uses_loop,
-            uses_condition: metrics.uses_condition,
-            file_name: metrics.file_name
+            uses_condition: metrics.uses_condition
           }
         });
         return { metrics, event };
@@ -1472,97 +854,18 @@ export default function StudentPage() {
     }
   }
 
-  function resumeSession() {
-    if (!resumable) return;
-    const valid = validateRestoredSession(resumable);
-    if (!valid) {
-      localStorage.removeItem(ACTIVE_SESSION_KEY);
-      setResumable(null);
-      flash("Sessão salva corrompida ou inválida descartada por segurança.");
-      return;
-    }
-    setContext(valid.context || DEFAULT_CONTEXT);
-    setSessionId(valid.sessionId);
-    setGroupId(valid.groupId);
-    setStartedAt(valid.startedAt);
-    setActivityStartedAt(valid.activityStartedAt);
-    setElapsedMs(valid.activityStartedAt ? Math.max(0, Date.now() - valid.activityStartedAt) : (valid.elapsedMs || 0));
-    setActivityStage(valid.activityStage || 2);
-    setTimeline(valid.timeline || []);
-    setResponses(valid.responses || []);
-    setSpikeTelemetry(valid.spikeTelemetry || null);
-    setPreAnswers(valid.preAnswers || PRE_DEFAULT);
-    setPostAnswers(valid.postAnswers || POST_DEFAULT);
-    const restoredTeamSize = valid.teamSize;
-    setTeamSize(restoredTeamSize);
-    setCurrentRole(valid.currentRole || "computer");
-    const restoredAssents = valid.memberAssents || { 1: false, 2: false, 3: false, 4: false };
-    setMemberAssentsState(restoredAssents);
-    memberAssentsRef.current = restoredAssents;
-    const allAssented = isAllAssented(restoredTeamSize, restoredAssents);
-    assentAgreedRef.current = allAssented;
-    setAssentAgreedState(allAssented);
-    if (allAssented) {
-      const validInstId = valid.installation_id || getPersistedInstallationId() || installationId;
-      setInstallationId(validInstId);
-      try {
-        localStorage.setItem(INSTALLATION_KEY, validInstId);
-      } catch {}
-    } else {
-      try {
-        localStorage.removeItem(INSTALLATION_KEY);
-        localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-      } catch {}
-    }
-    setIsSyntheticSession(valid.isSyntheticSession || false);
-    sequenceRef.current = valid.sequence || 0;
-    setScreen(valid.screen);
-    flash("Sessão retomada do armazenamento local.");
-  }
-
-  function handleRoleSwap() {
-    const nextRole = currentRole === "computer" ? "assembly" : "computer";
-    setCurrentRole(nextRole);
-    emitTimeline("role_swapped", {
-      activity_stage: screen,
-      details: {
-        from_role: currentRole,
-        to_role: nextRole,
-        scheduled_swap: false
-      }
-    });
-    flash(`Papéis trocados! Agora: ${nextRole === "computer" ? "💻 Computador / Código" : "🛠️ Montagem / Testes"}.`);
-  }
-
   function handleSaveContext(newContext) {
     setContext(newContext);
-    localStorage.setItem(CONTEXT_KEY, JSON.stringify(newContext));
+    try { localStorage.setItem(CONTEXT_KEY, JSON.stringify(newContext)); } catch { reportStorageError(); }
     flash(`Região salva com sucesso: ${newContext.regional}!`);
   }
 
-  async function handleAutoLoadConfig() {
-    flash("Consultando config.json do bridge...");
-    const cfg = await fetchBridgeConfig();
-    if (cfg && (cfg.site_id || cfg.school_code)) {
-      const merged = {
-        ...context,
-        site_id: cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE" ? cfg.site_id : context.site_id,
-        regional: cfg.regional_hub || context.regional,
-        school: cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA" ? cfg.school_code : context.school,
-        workshop: cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA" ? cfg.workshop_code : context.workshop,
-        class: cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA" ? cfg.class_code : context.class,
-        activity: cfg.activity_id || context.activity
-      };
-      setContext(merged);
-      localStorage.setItem(CONTEXT_KEY, JSON.stringify(merged));
-      flash("Configurações importadas do config.json com sucesso!");
-    } else {
-      flash("Não foi possível carregar do config.json (Bridge offline ou arquivo padrão).");
-    }
-  }
-
   function submitPre() {
-    requestNotificationPermission();
+    if (!assentAgreedRef.current || isFreeMode || preAnswers.experience === null) return;
+
+    const activityStart = Date.now();
+    startedAtRef.current = activityStart;
+    setStartedAt(activityStart);
 
     if (assentAgreedRef.current) {
       try {
@@ -1587,11 +890,10 @@ export default function StudentPage() {
       response_status: "completed"
     });
 
-    const activityStart = Date.now();
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
     setActivityStage(2);
-    void notifyBridgeSession(sessionId, activityStart, [], assentAgreedRef.current);
+    void trackBridgeWrite(notifyBridgeSession(sessionId, activityStart, [], assentAgreedRef.current));
     emitTimeline("phase_completed", { activity_stage: "1. Início" });
     emitTimeline("phase_transition", {
       activity_stage: "2. Oficina Prática",
@@ -1602,11 +904,13 @@ export default function StudentPage() {
       details: { runtime: "browser_pwa", stage: "pratica" }
     });
     void captureSpikeTelemetry("pratica_start");
-    setResumable(null);
     setScreen("activity");
   }
 
   async function handleDeclinePre() {
+    assentAgreedRef.current = false;
+    setAssentAgreedState(false);
+    setIsFreeMode(true);
     try {
       await purgeSession(sessionId);
     } catch (e) {
@@ -1617,27 +921,32 @@ export default function StudentPage() {
       localStorage.removeItem(LEGACY_INSTALLATION_KEY);
     } catch {}
     localStorage.removeItem(ACTIVE_SESSION_KEY);
-    await resetBridgeSession(sessionId, { reason: "ethical_refusal", purge: true });
+    try {
+      await resetBridgeSession(sessionId, { reason: "ethical_refusal", purge: true });
+    } catch {
+      setStorageError("Nenhum dado novo será guardado. O computador ainda precisa confirmar a limpeza local; chamem o educador e mantenham o PulseLab aberto.");
+    }
     setIsFreeMode(true);
     assentAgreedRef.current = false;
     setAssentAgreedState(false);
     setTimeline([]);
     setResponses([]);
     setSpikeTelemetry(null);
-    setResumable(null);
     const activityStart = Date.now();
     setActivityStartedAt(activityStart);
     setElapsedMs(0);
     setActivityStage(2);
     setScreen("activity");
-    flash("Oficina liberada em modo livre (sem questionários e sem coleta de dados).");
+
   }
 
   function handleAdvanceToFinalChallenge() {
+    const activityElapsed = activityStartedAt ? Math.max(0, Date.now() - activityStartedAt) : 0;
+    setElapsedMs(activityElapsed);
     if (!isFreeMode && assentAgreedRef.current) {
       emitTimeline("phase_completed", {
         activity_stage: "2. Oficina Prática",
-        details: { elapsed_ms: elapsedMs }
+        details: { elapsed_ms: activityElapsed }
       });
       emitTimeline("phase_transition", {
         activity_stage: "3. Desafio da Corrida",
@@ -1645,17 +954,20 @@ export default function StudentPage() {
           runtime: "browser_pwa",
           from_stage: "2. Oficina Prática",
           to_stage: "3. Desafio da Corrida",
-          elapsed_ms: elapsedMs
+          elapsed_ms: activityElapsed
         }
       });
       void captureSpikeTelemetry("final_challenge_start");
     }
     setScreen("post");
-    flash("Avançado para o Desafio da Corrida & Avaliação Final.");
+
   }
 
   async function submitPost(answersOverride = null) {
+    if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
+    setSubmitting(true);
+    const generation = generationRef.current;
     const isSyntheticEvent = answersOverride && (
       answersOverride.nativeEvent ||
       typeof answersOverride.preventDefault === "function" ||
@@ -1698,7 +1010,7 @@ export default function StudentPage() {
       if (member.rating !== null || member.skipped) {
         finalEvents.push(emitTimeline("experience_recorded", {
           activity_stage: "3. Desafio da Corrida",
-          participant_id: `${groupId.slice(0, 8).toUpperCase()}-MEMBER-${member.memberIndex}`,
+          participant_id: null,
           details: {
             runtime: "browser_pwa",
             member_index: member.memberIndex,
@@ -1734,6 +1046,7 @@ export default function StudentPage() {
 
     // Ordem estrita: a telemetria terminal entra ANTES do encerramento final da sessão
     const { metrics: rawFinalMetrics, event: finalTelemetryEvent } = await captureSpikeTelemetry("session_completed");
+    if (generation !== generationRef.current || !assentAgreedRef.current) return;
     if (finalTelemetryEvent) {
       finalEvents.push(finalTelemetryEvent);
     }
@@ -1758,6 +1071,7 @@ export default function StudentPage() {
       started_at: new Date(startedAt).toISOString(),
       completed_at: new Date().toISOString(),
       duration_seconds: Math.round(elapsedMs / 1000),
+      is_synthetic: isSyntheticSessionRef.current,
       group_size: teamSize,
       team_size: teamSize,
       team_role: teamSize === 1 ? "individual" : "group",
@@ -1769,16 +1083,22 @@ export default function StudentPage() {
       telemetry_status: technicalStatus
     };
 
-    await notifyBridgeSessionSave(fullSession, assentAgreedRef.current);
-    await saveSession(fullSession).catch(() => {});
+    await Promise.allSettled([...writesRef.current]);
+    if (generation !== generationRef.current || !assentAgreedRef.current) return;
+    await trackWrite(saveSession(fullSession)).catch(reportStorageError);
+    if (generation !== generationRef.current || !assentAgreedRef.current) return;
+    void trackBridgeWrite(notifyBridgeSessionSave(fullSession, assentAgreedRef.current));
 
     localStorage.removeItem(ACTIVE_SESSION_KEY);
-    void runSync(true);
+    void runSync(false);
     setScreen("finished");
   }
 
   async function handleDeclinePost() {
+    if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
+    setSubmitting(true);
+    const generation = generationRef.current;
     if (!assentAgreedRef.current || isFreeMode) {
       try {
         localStorage.removeItem(INSTALLATION_KEY);
@@ -1789,6 +1109,7 @@ export default function StudentPage() {
       return;
     }
 
+    setPostAnswers(POST_DEFAULT);
     const finalEvents = [];
     finalEvents.push(emitResponse("post", {
       activity_stage: "3. Desafio da Corrida",
@@ -1798,6 +1119,7 @@ export default function StudentPage() {
 
     // Ordem estrita: a telemetria terminal entra ANTES do encerramento final da sessão
     const { metrics: rawFinalMetrics, event: finalTelemetryEvent } = await captureSpikeTelemetry("session_completed");
+    if (generation !== generationRef.current || !assentAgreedRef.current) return;
     if (finalTelemetryEvent) {
       finalEvents.push(finalTelemetryEvent);
     }
@@ -1822,33 +1144,40 @@ export default function StudentPage() {
       started_at: new Date(startedAt).toISOString(),
       completed_at: new Date().toISOString(),
       duration_seconds: Math.round(elapsedMs / 1000),
+      is_synthetic: isSyntheticSessionRef.current,
       group_size: teamSize,
       team_size: teamSize,
       team_role: teamSize === 1 ? "individual" : "group",
       status: "declined",
       pre_answers: preAnswers,
-      post_answers: postAnswers,
+      post_answers: POST_DEFAULT,
       events: [...timeline, ...responses, ...finalEvents],
       spike_telemetry: effectiveTelemetry,
       telemetry_status: technicalStatus
     };
 
-    await notifyBridgeSessionSave(fullSession, assentAgreedRef.current);
-    await saveSession(fullSession).catch(() => {});
+    await Promise.allSettled([...writesRef.current]);
+    if (generation !== generationRef.current || !assentAgreedRef.current) return;
+    await trackWrite(saveSession(fullSession)).catch(reportStorageError);
+    if (generation !== generationRef.current || !assentAgreedRef.current) return;
+    void trackBridgeWrite(notifyBridgeSessionSave(fullSession, assentAgreedRef.current));
 
     localStorage.removeItem(ACTIVE_SESSION_KEY);
-    void runSync(true);
+    void runSync(false);
     setScreen("finished");
   }
 
   async function prepareNextWorkshop() {
     isSubmittingRef.current = false;
+    setSubmitting(false);
+    setStorageError("");
+    generationRef.current += 1;
     try {
       localStorage.removeItem(INSTALLATION_KEY);
       localStorage.removeItem(LEGACY_INSTALLATION_KEY);
     } catch {}
     localStorage.removeItem(ACTIVE_SESSION_KEY);
-    await resetBridgeSession(sessionId, { reason: "prepare_next", purge: false, completed: true });
+    void resetBridgeSession(sessionId, { reason: "prepare_next", purge: false, completed: true });
     const nextSessionId = createUuid();
     const nextGroupId = createUuid();
     setSessionId(nextSessionId);
@@ -1861,8 +1190,9 @@ export default function StudentPage() {
     setTimeline([]);
     setResponses([]);
     setSpikeTelemetry(null);
-    isSyntheticSessionRef.current = false;
-    setIsSyntheticSession(false);
+    telemetryRef.current = null;
+    isSyntheticSessionRef.current = labMode;
+    setIsSyntheticSession(labMode);
     setIsFreeMode(false);
     setPreAnswers(PRE_DEFAULT);
     setPostAnswers(POST_DEFAULT);
@@ -1873,100 +1203,17 @@ export default function StudentPage() {
     setMemberAssentsState(initialAssents);
     setTeamSize(2);
     sequenceRef.current = 0;
-    setResumable(null);
     setScreen("pre");
-    flash("Nova oficina preparada! Pronto para a próxima bancada.");
-  }
 
-  async function resetToPre() {
-    isSubmittingRef.current = false;
-    try {
-      await purgeSession(sessionId);
-    } catch (e) {
-      console.warn("Erro ao expurgar sessão no IndexedDB:", e);
-    }
-    try {
-      localStorage.removeItem(INSTALLATION_KEY);
-      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-    } catch {}
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-    await resetBridgeSession(sessionId, { reason: "abandonment", purge: true });
-    const nextSessionId = createUuid();
-    const nextGroupId = createUuid();
-    setSessionId(nextSessionId);
-    setGroupId(nextGroupId);
-    setInstallationId(createUuid());
-    setStartedAt(Date.now());
-    setActivityStartedAt(null);
-    setElapsedMs(0);
-    setActivityStage(1);
-    setTimeline([]);
-    setResponses([]);
-    setSpikeTelemetry(null);
-    isSyntheticSessionRef.current = false;
-    setIsSyntheticSession(false);
-    setIsFreeMode(false);
-    setPreAnswers(PRE_DEFAULT);
-    setPostAnswers(POST_DEFAULT);
-    assentAgreedRef.current = false;
-    setAssentAgreedState(false);
-    const initialAssents = { 1: false, 2: false, 3: false, 4: false };
-    memberAssentsRef.current = initialAssents;
-    setMemberAssentsState(initialAssents);
-    setTeamSize(2);
-    sequenceRef.current = 0;
-    setResumable(null);
-    setScreen("pre");
-    flash("Oficina reiniciada do zero com sucesso.");
-  }
-
-  function handleConfirmReset() {
-    if (screen === "finished") {
-      prepareNextWorkshop();
-      return;
-    }
-    const confirmed = window.confirm(
-      "Deseja realmente reiniciar a oficina do zero?\n\nIsso apagará a sessão atual neste computador e iniciará uma nova oficina limpa."
-    );
-    if (!confirmed) return;
-    resetToPre();
-  }
-
-  function forceStage(stageNum) {
-    if (stageNum === 1) {
-      setScreen("pre");
-    } else if (stageNum === 2) {
-      if (screen === "pre") {
-        setActivityStartedAt(Date.now());
-        setElapsedMs(0);
-      }
-      setActivityStage(2);
-      setScreen("activity");
-      flash("Navegado para a Oficina Prática (Robô LEGO SPIKE).");
-    } else if (stageNum === 3) {
-      setScreen("post");
-      flash("Avançado para o Desafio da Corrida & Avaliação Final.");
-    }
-  }
-
-  function addMinutes(minutes = 5) {
-    if (!activityStartedAt) {
-      const now = Date.now();
-      setActivityStartedAt(now - minutes * 60 * 1000);
-      setElapsedMs(minutes * 60 * 1000);
-    } else {
-      setActivityStartedAt((prev) => prev - minutes * 60 * 1000);
-      setElapsedMs((prev) => prev + minutes * 60 * 1000);
-    }
-    flash(`Cronômetro adiantado em +${minutes} minutos.`);
   }
 
   function autoFillCurrentStep() {
+    if (!labMode) return;
     isSyntheticSessionRef.current = true;
     setIsSyntheticSession(true);
     if (screen === "pre") {
       setPreAnswers({ experience: 2 });
-      flash("Início preenchido com dados sintéticos de teste. Clique em 'Começar Atividade!'");
+      flash("Início preenchido com dados sintéticos de teste.");
     } else if (screen === "activity") {
       handleAdvanceToFinalChallenge();
     } else if (screen === "post") {
@@ -1999,6 +1246,7 @@ export default function StudentPage() {
       started_at: new Date(startedAt).toISOString(),
       completed_at: new Date().toISOString(),
       duration_seconds: Math.round(elapsedMs / 1000),
+      is_synthetic: isSyntheticSessionRef.current,
       team_size: teamSize,
       team_role: teamSize === 1 ? "individual" : "group",
       status: screen === "finished" ? "completed" : "in_progress",
@@ -2040,34 +1288,12 @@ export default function StudentPage() {
     }
   }
 
-  async function syncNow() {
-    if (!navigator.onLine) {
-      flash("Computador sem conexão com a internet no momento. Os registros continuam salvos com segurança no dispositivo.");
-      return;
-    }
-    flash("Sincronizando com a nuvem da pesquisa...");
-    const result = await flushPendingEvents((syncedId) => {
-      updateEventDeliveryState(syncedId, "delivered");
-    });
-    await refreshPendingCount();
-    if (result.synced > 0) {
-      flash(`Sucesso! ${result.synced} registro(s) sincronizados com o Supabase.`);
-    } else if (result.remaining === 0) {
-      flash("Todos os registros já estão sincronizados com a nuvem da pesquisa!");
-    } else {
-      flash("Tentativa concluída. Eventos pendentes continuarão sendo enviados automaticamente.");
-    }
-  }
-
   useEffect(() => {
     const handleOnline = () => {
-      setOnline(true);
-      void runSync(true);
+      void runSync(false);
     };
-    const handleOffline = () => setOnline(false);
 
     window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
 
     // Sincroniza eventos pendentes logo na inicialização
     void runSync(false);
@@ -2081,7 +1307,6 @@ export default function StudentPage() {
 
     return () => {
       window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
       window.clearInterval(syncTimer);
     };
   }, []);
@@ -2096,33 +1321,29 @@ export default function StudentPage() {
     const timer = window.setInterval(tick, 1000);
 
     // Coleta silenciosa e periódica da telemetria do LEGO SPIKE a cada 10 segundos
+    let cancelled = false;
+    const generation = generationRef.current;
     const pollSpike = async () => {
-      if (isFreeMode || !assentAgreedRef.current) return;
-      try {
-        const metrics = await fetchBridgeSpikeMetrics();
-        if (metrics && metrics.project_saved !== false) {
-          setSpikeTelemetry((prev) => {
-            const isFirstDetection = !prev || (!prev.executable_blocks && metrics.executable_blocks > 0);
-            const blocksChanged = prev && prev.executable_blocks !== metrics.executable_blocks;
-            if (isFirstDetection || blocksChanged) {
-              emitTimeline("spike_telemetry", {
-                activity_stage: isFirstDetection ? "primeira_programacao_detectada" : "atualizacao_codigo_spike",
-                details: {
-                  executable_blocks: metrics.executable_blocks,
-                  inferred_stage: metrics.inferred_stage,
-                  uses_motor: metrics.uses_motor,
-                  uses_sensor: metrics.uses_sensor,
-                  file_name: metrics.file_name,
-                  first_coding_detected: isFirstDetection,
-                  elapsed_ms: Math.max(0, Date.now() - activityStartedAt)
-                }
-              });
+      if (isFreeMode || !assentAgreedRef.current || isSubmittingRef.current) return;
+      const metrics = await fetchBridgeSpikeMetrics();
+      if (cancelled || generation !== generationRef.current || !assentAgreedRef.current || isSubmittingRef.current) return;
+      if (metrics && metrics.project_saved !== false) {
+        const previous = telemetryRef.current;
+        const first = !previous || (!previous.executable_blocks && metrics.executable_blocks > 0);
+        if (first || previous.executable_blocks !== metrics.executable_blocks) {
+          emitTimeline("spike_telemetry", {
+            activity_stage: first ? "primeira_programacao_detectada" : "atualizacao_codigo_spike",
+            details: {
+              executable_blocks: metrics.executable_blocks,
+              uses_motor: metrics.uses_motor,
+              uses_sensor: metrics.uses_sensor,
+              first_coding_detected: first,
+              elapsed_ms: Math.max(0, Date.now() - activityStartedAt)
             }
-            return metrics;
           });
         }
-      } catch {
-        // Falha silenciosa
+        telemetryRef.current = metrics;
+        setSpikeTelemetry(metrics);
       }
     };
 
@@ -2130,6 +1351,7 @@ export default function StudentPage() {
     const spikeInterval = window.setInterval(pollSpike, 10000);
 
     return () => {
+      cancelled = true;
       window.clearInterval(timer);
       window.clearTimeout(firstCheck);
       window.clearInterval(spikeInterval);
@@ -2161,210 +1383,68 @@ export default function StudentPage() {
       assentAgreed,
       memberAssents: memberAssentsRef.current,
       sequence: sequenceRef.current,
+      isSyntheticSession: isSyntheticSessionRef.current,
       savedAt: new Date().toISOString()
     };
-    localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
-    void saveSession({ session_id: sessionId, status: "in_progress", ...snapshot }).catch(() => {});
+    try { localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot)); } catch { reportStorageError(); }
+    void trackWrite(saveSession({ session_id: sessionId, status: "in_progress", ...snapshot })).catch(reportStorageError);
   }, [activityStartedAt, activityStage, assentAgreed, context, currentRole, elapsedMs, groupId, installationId, isFreeMode, memberAssents, postAnswers, preAnswers, responses, screen, sessionId, spikeTelemetry, startedAt, teamSize, timeline]);
+
+  useEffect(() => {
+    document.querySelector("[data-stage-heading]")?.focus();
+  }, [screen, isFreeMode]);
 
   let content;
 
   if (screen === "pre") {
-    content = (
-      <PreScreen
-        answers={preAnswers}
-        resumable={resumable}
-        onResume={resumeSession}
-        setAnswers={setPreAnswers}
-        onSubmit={submitPre}
-        onDecline={handleDeclinePre}
-        teamSize={teamSize}
-        setTeamSize={handleTeamSizeChange}
-        assentAgreed={assentAgreed}
-        memberAssents={memberAssents}
-        setMemberAssents={setMemberAssents}
-      />
-    );
+    content = <PreScreen answers={preAnswers} setAnswers={setPreAnswers} onSubmit={submitPre} onDecline={handleDeclinePre}
+      teamSize={teamSize} setTeamSize={handleTeamSizeChange} memberAssents={memberAssents} setMemberAssents={setMemberAssents} />;
   } else if (screen === "activity") {
-    content = (
-      <ActivityScreen
-        elapsedMs={elapsedMs}
-        labMode={labMode}
-        spikeTelemetry={spikeTelemetry}
-        onAdvanceToFinalChallenge={handleAdvanceToFinalChallenge}
-        assentAgreed={assentAgreed}
-        isFreeMode={isFreeMode}
-        onRefreshTelemetry={() => void captureSpikeTelemetry("manual_refresh")}
-      />
-    );
+    content = <ActivityScreen onAdvanceToFinalChallenge={handleAdvanceToFinalChallenge} isFreeMode={isFreeMode} />;
   } else if (screen === "post") {
-    content = (
-      <PostScreen
-        answers={postAnswers}
-        setAnswers={setPostAnswers}
-        onSubmit={submitPost}
-        onDecline={handleDeclinePost}
-        teamSize={teamSize}
-        memberAssents={memberAssents}
-      />
-    );
-  } else if (isFreeMode || !assentAgreed) {
-    content = <FreeModeFinishedScreen onRestart={prepareNextWorkshop} />;
+    content = <PostScreen answers={postAnswers} setAnswers={setPostAnswers} onSubmit={submitPost} onDecline={handleDeclinePost}
+      teamSize={teamSize} memberAssents={memberAssents} isFreeMode={isFreeMode} submitting={submitting} />;
   } else {
-    content = (
-      <FinishedScreen
-        pendingCount={pendingCount}
-        quarantinedCount={quarantinedCount}
-        totalSavedCount={totalSavedCount}
-        onDownload={downloadSession}
-        onRestart={prepareNextWorkshop}
-      />
-    );
+    content = <FinishedScreen onRestart={prepareNextWorkshop} isFreeMode={isFreeMode} />;
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand__mark" aria-hidden="true">
-            <img src="/alunos/robot.png" alt="Robô PulseLab" style={{ width: "32px", height: "32px", objectFit: "contain" }} />
-          </span>
-          <span>
-            <strong>PulseLab</strong>
-            <small>oficina de robótica · v2.2.1</small>
-
-          </span>
-        </div>
-        <div className="topbar__notice">
-          <span>{isFreeMode ? "MODO LIVRE" : (labMode ? "LAB" : "OFFLINE")}</span>
-          <p>{isFreeMode ? "Zero coleta de dados · Uso livre do robô" : (labMode ? "Modo acelerado para testes" : "Sem burocracia · telemetria automática do SPIKE")}</p>
-        </div>
-        <div className="topbar__controls">
-          <button
-            className={`topbar-btn ${showContextModal ? "is-active" : ""}`}
-            onClick={() => setShowContextModal(true)}
-            title="Configurar região do computador"
-            type="button"
-          >
-            📍 Região: {context.regional || "Nordeste"}
-          </button>
-          <div className="topbar__step-badge" title="Etapa atual da oficina">
-            🧭 Etapa {activeStep}/3 · {FLOW_STEPS.find((s) => s.id === activeStep)?.label}
-          </div>
-          <div className="topbar__session">
-            <span>Sessão</span>
-            <code>{sessionId.slice(0, 8).toUpperCase()}</code>
-          </div>
-          <button
-            className={`topbar-btn ${showInstructorTools ? "is-active" : ""}`}
-            onClick={() => setShowInstructorTools((v) => !v)}
-            title="Abrir controles do instrutor e demonstração rápida"
-            type="button"
-          >
-            ⚙️ Controles
-          </button>
-          <button
-            className="topbar-btn topbar-btn--danger"
-            onClick={handleConfirmReset}
-            title="Reiniciar oficina do zero"
-            type="button"
-          >
-            🔄 Reiniciar
-          </button>
-        </div>
+    <main className="app-shell student-app">
+      <header className="student-header">
+        <span className="student-brand">
+          <svg className="student-brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+            <path d="M3 17h6l4-9 6 16 4-7h6" />
+            <circle cx="3" cy="17" r="2" /><circle cx="29" cy="17" r="2" />
+          </svg>
+          <span><strong>PulseLab</strong><span className="student-brand__caption">Oficina de robótica</span></span>
+        </span>
+        {screen !== "pre" && !isFreeMode && <button className="button button--ghost withdrawal-button" type="button" onClick={withdrawSession}>Parar de participar e apagar meus dados</button>}
       </header>
-
-      {showInstructorTools ? (
-        <div className="instructor-banner">
-          <div className="instructor-banner__info">
-            <strong>🛠️ Controles de Demonstração & Instrutor</strong>
-            <span>Avance entre as etapas da oficina ou sincronize com a nuvem</span>
-          </div>
-          <div className="instructor-banner__actions">
-            <button className="inst-btn inst-btn--accent" onClick={() => setShowContextModal(true)} type="button">
-              📍 Região ({context.regional || "Nordeste"})
-            </button>
-            <button className="inst-btn" onClick={() => forceStage(2)} type="button">
-              🤖 2. Oficina Prática
-            </button>
-            <button className="inst-btn" onClick={() => forceStage(3)} type="button">
-              🏁 3. Desafio da Corrida
-            </button>
-            <button className="inst-btn" onClick={() => addMinutes(5)} type="button">
-              ⏱️ +5 min relógio
-            </button>
-            <button className="inst-btn" onClick={autoFillCurrentStep} type="button">
-              ✨ Preencher teste
-            </button>
-            {!isFreeMode && assentAgreed ? (
-              <button className="inst-btn" onClick={downloadSession} type="button" title="Baixar arquivo JSON desta oficina">
-                💾 Exportar (.json)
-              </button>
-            ) : null}
-            <button className="inst-btn inst-btn--accent" onClick={syncNow} type="button">
-              ☁️ Sincronizar Nuvem
-            </button>
-            <button className="inst-btn inst-btn--danger" onClick={handleConfirmReset} type="button">
-              🔄 Reiniciar Oficina
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <RegionMetadataModal
-        isOpen={showContextModal}
-        onClose={() => setShowContextModal(false)}
-        context={context}
-        onSave={handleSaveContext}
-        configHash={CONFIG_HASH}
-        computerId={getComputerId(installationId)}
-        systemMetadata={getSystemMetadata()}
-      />
-
-      <div className={`workspace-shell ${labMode ? "workspace-shell--lab" : "workspace-shell--student"}`}>
-        <section className="simulator-stage">
-          <div className="stage-toolbar">
-            <div>
-              <span className={`connection-dot ${online ? "is-online" : ""}`} />
-              {isFreeMode ? (
-                <>
-                  <strong>Modo Livre (sem coleta de pesquisa)</strong>
-                  <small>Oficina sem gravação de questionários ou telemetria por escolha inicial da bancada</small>
-                </>
-              ) : screen === "pre" ? (
-                <>
-                  <strong>Dispositivo Pronto · Armazenamento Local Seguro</strong>
-                  <small>
-                    {totalSavedCount > 0
-                      ? `${totalSavedCount} registro(s) salvos no dispositivo (offline-first)`
-                      : "Aguardando início da bancada · Salvamento automático após assentimento"}
-                  </small>
-                </>
-              ) : (
-                <>
-                  <strong>{quarantinedCount > 0 ? "Atenção · Registros em Quarentena" : (online ? "Dispositivo Pronto · Armazenamento Local Seguro" : "Modo Offline (salvando localmente)")}</strong>
-                  <small>
-                    {quarantinedCount > 0
-                      ? `${quarantinedCount} registro(s) em quarentena local para análise do pesquisador`
-                      : `${totalSavedCount} registro(s) salvos no dispositivo (offline-first)`}
-                  </small>
-                </>
-              )}
+      {storageError && <div className="storage-notice" role="alert">{storageError}</div>}
+      <div className="student-content">{content}</div>
+      <aside className="educator-area" aria-label="Área do educador">
+        <details key={`${screen}-${sessionId}`}>
+          <summary>Área do educador</summary>
+          <div className="educator-tools">
+            <p>oficina de robótica · v2.2.2</p>
+            <p>Registros no dispositivo: {dbTotalStoredCount}. Pendentes: {dbPendingCount}. Em quarentena: {dbQuarantinedCount}.</p>
+            <p>A consolidação dos dados é feita pelo pesquisador. Internet não é necessária para a aula.</p>
+            <div className="action-row">
+              <button className="button button--ghost" onClick={() => setShowContextModal(true)} type="button">Configurar oficina</button>
+              {!isFreeMode && assentAgreed && screen !== "pre" && <button className="button button--ghost" onClick={downloadSession} type="button">Baixar cópia local (.json)</button>}
+              {isFreeMode && screen !== "finished" && <button className="button button--ghost" onClick={prepareNextWorkshop} type="button">Preparar nova oficina</button>}
             </div>
-            {labMode ? (
-              <>
-                <button className="toolbar-button" onClick={() => setOnline((value) => !value)} type="button">Alternar rede</button>
-                <button className="toolbar-button is-accent" onClick={syncNow} type="button">☁️ Sincronizar Nuvem</button>
-              </>
-            ) : null}
+            {labMode && <section aria-label="Laboratório" className="lab-tools">
+              <h2>Laboratório · dados sintéticos</h2>
+              <button className="button button--ghost" onClick={autoFillCurrentStep} type="button">Preencher teste</button>
+              <EvidencePanel events={allEvents} />
+            </section>}
           </div>
-          <div className="stage-scroll">{content}</div>
-        </section>
-
-        {labMode ? <EvidencePanel events={allEvents} /> : null}
-      </div>
-
-      {toast ? <div className="toast"><span>✓</span>{toast}</div> : null}
+        </details>
+      </aside>
+      <RegionMetadataModal isOpen={showContextModal} onClose={() => setShowContextModal(false)} context={context}
+        onSave={handleSaveContext} computerId={getComputerId(installationId)} systemMetadata={getSystemMetadata()} />
+      {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
 }

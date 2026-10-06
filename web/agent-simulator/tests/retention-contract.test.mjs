@@ -98,8 +98,8 @@ test("Zero persistência antes do assentimento: student-page.jsx protege localSt
   );
   assert.match(
     pageContent,
-    /async function resetToPre\(\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
-    "Deve remover INSTALLATION_KEY em resetToPre"
+    /async function withdrawSession\(broadcast = true\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
+    "Deve remover INSTALLATION_KEY em withdrawSession"
   );
   assert.match(
     pageContent,
