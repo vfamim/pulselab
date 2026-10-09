@@ -1,7 +1,7 @@
 {
-  "version": "2.2.1",
+  "version": "2.2.2",
   "environment": "production",
   "auto_update_enabled": false,
-  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.1-Windows.zip",
+  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.2-Windows.zip",
   "notes": "PulseLab v2.2.0 - Persistência local offline aprimorada, integridade atômica no Windows PowerShell 5.1, visual gamificado, questionários pedagógicos integrais, telemetria automática do SPIKE e retenção de 7 dias."
 }
