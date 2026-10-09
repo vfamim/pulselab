@@ -27,7 +27,7 @@ if (-not (Test-Path -LiteralPath $bridge) -or -not (Test-Path -LiteralPath (Join
 }
 
 # --- VERIFICA VERSAO LOCAL ---
-$localVersion = "2.2.1"
+$localVersion = "2.2.2"
 $verFile = Join-Path $scriptRoot "VERSION"
 if (Test-Path -LiteralPath $verFile) {
     try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
@@ -45,14 +45,26 @@ try { $running = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -Timeout
 if (-not $running) {
     Start-Process powershell.exe -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"' + $bridge + '"'), "-Port", "$port", "-AppRoot", ('"' + $app + '"'))
     $ready = $false
-    for ($i = 0; $i -lt 20; $i++) {
+    for ($i = 0; $i -lt 60; $i++) {
         try {
             $health = Invoke-RestMethod -Uri "http://127.0.0.1:$port/health" -TimeoutSec 1
             if ($health) { $ready = $true; break }
         } catch {}
         Start-Sleep -Milliseconds 250
     }
-    if (-not $ready) { throw "Servidor local nao iniciou na porta $port. Confira a janela do PowerShell." }
+    if (-not $ready) {
+        # A janela do bridge fecha ao falhar; o log em dados_locais e a unica pista que sobra.
+        $logCandidates = @((Join-Path $scriptRoot "dados_locais\bridge.log"))
+        if ($env:LOCALAPPDATA) { $logCandidates += Join-Path $env:LOCALAPPDATA "PulseLab\dados_locais\bridge.log" }
+        foreach ($log in $logCandidates) {
+            if (Test-Path -LiteralPath $log) {
+                Write-Host "Ultimas linhas de ${log}:"
+                Get-Content -LiteralPath $log -Tail 15 | ForEach-Object { Write-Host "  $_" }
+                break
+            }
+        }
+        throw "Servidor local nao iniciou na porta $port. Para ver o erro, execute: powershell -NoProfile -ExecutionPolicy Bypass -File `"$bridge`""
+    }
 }
 
 Write-Host "[OK] Servidor ativo em http://127.0.0.1:$port/alunos/"
