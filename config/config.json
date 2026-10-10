@@ -1,11 +1,13 @@
 {
-    "version":  "2.2.4",
+    "version":  "2.2.5",
     "protocol_version":  "protocolo-pesquisa-v1",
 
     "group_size":  2,
-    "research_collection_enabled":  false,
-    "research_authorization_version":  null,
-    "research_authorized_purposes":  [],
+    "research_collection_enabled":  true,
+    "research_authorization_version":  "v2.0-piloto",
+    "research_authorized_purposes":  [
+        "academic_research"
+    ],
     "site_id":  "CONFIGURE_SEDE",
     "activity_id":  "atividade-01-spike",
     "regional_hub":  "Polo-Nordeste-01",

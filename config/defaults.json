@@ -7,8 +7,10 @@
     "spike_parser_enabled": true,
     "ui_automation_enabled": true
   },
-  "client_version": "2.2.4",
-  "research_collection_enabled": false,
-  "research_authorization_version": null,
-  "research_authorized_purposes": []
+  "client_version": "2.2.5",
+  "research_collection_enabled": true,
+  "research_authorization_version": "v2.0-piloto",
+  "research_authorized_purposes": [
+    "academic_research"
+  ]
 }
