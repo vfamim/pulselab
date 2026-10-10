@@ -178,7 +178,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.2.2"
+$script:BridgeVersion = "2.2.3"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -234,6 +234,74 @@ if (Test-Path $script:QuarantinedSessionsTrackerFile) {
     } catch {}
 }
 
+# Tombstones de retirada impedem que arquivos atrasados voltem a ser sincronizados.
+# A fila pendente guarda apenas session_id e sobrevive a reinicios ate a exclusao remota.
+$script:WithdrawnSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+$script:WithdrawnSessionsTrackerFile = Join-Path $DataDir "sessions_withdrawn.txt"
+$script:PendingWithdrawalIds = [System.Collections.Generic.HashSet[string]]::new()
+$script:PendingWithdrawalsTrackerFile = Join-Path $DataDir "withdrawals_pending.txt"
+
+foreach ($trackerSpec in @(
+    @{ Path = $script:WithdrawnSessionsTrackerFile; Set = $script:WithdrawnSessionIds },
+    @{ Path = $script:PendingWithdrawalsTrackerFile; Set = $script:PendingWithdrawalIds }
+)) {
+    if (Test-Path $trackerSpec.Path) {
+        try {
+            Get-Content $trackerSpec.Path | ForEach-Object {
+                $tracked = $_.Trim()
+                if ($tracked) { [void]$trackerSpec.Set.Add($tracked) }
+            }
+        } catch {}
+    }
+}
+
+function Save-WithdrawalTrackers {
+    try { [System.IO.File]::WriteAllLines($script:WithdrawnSessionsTrackerFile, [string[]]$script:WithdrawnSessionIds, [System.Text.Encoding]::UTF8) } catch {}
+    try { [System.IO.File]::WriteAllLines($script:PendingWithdrawalsTrackerFile, [string[]]$script:PendingWithdrawalIds, [System.Text.Encoding]::UTF8) } catch {}
+}
+
+function Invoke-RemoteSessionPurge {
+    param([Parameter(Mandatory = $true)][string]$SessionId)
+    if (-not $script:SupabaseOperationalJwt) { return $false }
+    try {
+        $headers = @{
+            apikey = $script:SupabaseAnonKey
+            Authorization = "Bearer $($script:SupabaseOperationalJwt)"
+            "Content-Type" = "application/json"
+        }
+        $body = @{ p_session_id = $SessionId } | ConvertTo-Json -Compress
+        $uri = "$($script:SupabaseUrl)/rest/v1/rpc/purge_own_research_session"
+        Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $body -TimeoutSec 8 -ErrorAction Stop | Out-Null
+        return $true
+    } catch {
+        Write-BridgeLog "Exclusao remota pendente para sessao $SessionId`: $($_.Exception.Message)" "WARN"
+        return $false
+    }
+}
+
+function Register-SessionWithdrawal {
+    param([Parameter(Mandatory = $true)][string]$SessionId)
+    [void]$script:WithdrawnSessionIds.Add($SessionId)
+    [void]$script:PendingWithdrawalIds.Add($SessionId)
+    Save-WithdrawalTrackers
+    if (Invoke-RemoteSessionPurge -SessionId $SessionId) {
+        [void]$script:PendingWithdrawalIds.Remove($SessionId)
+        Save-WithdrawalTrackers
+        return $true
+    }
+    return $false
+}
+
+function Sync-PendingWithdrawals {
+    if (-not $script:SupabaseOperationalJwt -or $script:PendingWithdrawalIds.Count -eq 0) { return }
+    foreach ($pendingSessionId in @($script:PendingWithdrawalIds)) {
+        if (Invoke-RemoteSessionPurge -SessionId $pendingSessionId) {
+            [void]$script:PendingWithdrawalIds.Remove($pendingSessionId)
+        }
+    }
+    Save-WithdrawalTrackers
+}
+
 $script:HasLoggedJwtWarning = $false
 
 function Sync-EventsToSupabase {
@@ -262,7 +330,8 @@ function Sync-EventsToSupabase {
             try {
                 $ev = $line | ConvertFrom-Json
                 $eventId = [string]$ev.event_id
-                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId) -or $script:QuarantinedEventIds.Contains($eventId)) {
+                $eventSessionId = [string]$ev.session_id
+                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId) -or $script:QuarantinedEventIds.Contains($eventId) -or $script:WithdrawnSessionIds.Contains($eventSessionId)) {
                     continue
                 }
 
@@ -403,7 +472,7 @@ function Sync-SessionSnapshotsToSupabase {
             if (-not $sdata -or -not $sdata.session_id) { continue }
 
             $sid = [string]$sdata.session_id
-            if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid)) {
+            if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid) -or $script:WithdrawnSessionIds.Contains($sid)) {
                 continue
             }
 
@@ -1106,6 +1175,7 @@ function Invoke-BridgePeriodicTasks {
         $script:LastSyncAttempt = [DateTime]::UtcNow
         Sync-EventsToSupabase
         Sync-SessionSnapshotsToSupabase
+        Sync-PendingWithdrawals
     }
 }
 
@@ -1321,8 +1391,11 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.2.2"
+                    protocol_version = "2.2.3"
                     group_size = 2
+                    research_collection_enabled = $false
+                    research_authorization_version = $null
+                    research_authorized_purposes = @()
                     site_id = "CONFIGURE_SEDE"
                     activity_id = "atividade-01-spike"
                     regional_hub = "Nordeste"
@@ -1336,7 +1409,10 @@ try {
                         $cfg = Get-Content -Path $candidateConfig -Raw -Encoding UTF8 | ConvertFrom-Json
                         if ($cfg.version) { $publicConfig.version = $cfg.version }
                         if ($cfg.protocol_version) { $publicConfig.protocol_version = $cfg.protocol_version }
-                        if ($cfg.group_size) { $publicConfig.group_size = $cfg.group_size }
+                        if ($null -ne $cfg.group_size) { $publicConfig.group_size = $cfg.group_size }
+                        if ($null -ne $cfg.research_collection_enabled) { $publicConfig.research_collection_enabled = $cfg.research_collection_enabled }
+                        if ($null -ne $cfg.research_authorization_version) { $publicConfig.research_authorization_version = $cfg.research_authorization_version }
+                        if ($null -ne $cfg.research_authorized_purposes) { $publicConfig.research_authorized_purposes = $cfg.research_authorized_purposes }
                         if ($cfg.site_id) { $publicConfig.site_id = $cfg.site_id }
                         if ($cfg.activity_id) { $publicConfig.activity_id = $cfg.activity_id }
                         if ($cfg.regional_hub) { $publicConfig.regional_hub = $cfg.regional_hub }
@@ -1714,6 +1790,10 @@ try {
                     continue
                 }
 
+                # Registra o tombstone antes de apagar qualquer arquivo. Assim, mesmo em caso
+                # de queda ou falha de rede, nenhum payload atrasado desta sessao volta a subir.
+                $remotePurgeConfirmed = Register-SessionWithdrawal -SessionId $reqSessId
+
                 # PURGA ATOMICA
                 $safeSessId = ($reqSessId -replace '[^a-zA-Z0-9_-]', '_')
 
@@ -1849,8 +1929,9 @@ try {
                     } catch {}
                 }
 
-                Write-BridgeLog "Sessao $safeSessId expurgada com sucesso (motivo: $reason). Nenhum payload mantido." "INFO"
-                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "purged"; session_id = $reqSessId; purged = $true; purged_events = $purgedEventIds.Count }
+                $purgeStatus = if ($remotePurgeConfirmed) { "purged" } else { "purged_local_remote_pending" }
+                Write-BridgeLog "Sessao $safeSessId expurgada localmente (motivo: $reason; remoto confirmado: $remotePurgeConfirmed)." "INFO"
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = $purgeStatus; session_id = $reqSessId; purged = $true; remote_pending = (-not $remotePurgeConfirmed); purged_events = $purgedEventIds.Count }
                 continue
             }
 

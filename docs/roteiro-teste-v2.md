@@ -35,7 +35,7 @@ em `web/agent-simulator` e abra `http://127.0.0.1:4179/alunos/`.
 | Projeto incompatível | Selecionar Python/JSON sem blocos | Erro explícito; não produz “projeto vazio” ou “montagem inicial” |
 | Retomada | Recarregar após salvar | Abrir sessão preserva contexto, identidade e início da atividade |
 | Offline | Carregar build uma vez; desligar rede; recarregar | Interface e registros locais disponíveis |
-| Retirada | Parar registros e apagar sessão | Apaga respostas, eventos, rubrica e artefatos locais juntos |
+| Retirada | Parar de participar e apagar meus dados | Apaga respostas, eventos, rubrica e artefatos locais; impede reenvio e agenda exclusão remota autenticada |
 | Exportação | Baixar JSON | `environment: test`, instrumento completo e limites explícitos |
 
 Para testar rapidamente, abra os controles de teste na tela da atividade. Eles

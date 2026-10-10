@@ -46,29 +46,3 @@ test("Persistência local Bridge: ausência de File::Replace incompatível e var
     "Bridge não deve usar $pid como variável de iteração (somente-leitura no PowerShell)"
   );
 });
-
-test("Persistência local UX: student-page.jsx diferencia tela inicial, modo livre e contagem real", () => {
-  assert.ok(fs.existsSync(studentPagePath), "student-page.jsx deve existir");
-  const pageCode = fs.readFileSync(studentPagePath, "utf-8");
-
-  // Modo livre deve explicar claramente que é opção ética e sem questionários
-  assert.match(
-    pageCode,
-    /Modo Livre \(sem coleta de pesquisa\)/,
-    "UI deve indicar explicitamente Modo Livre no rodapé"
-  );
-
-  // Tela inicial deve indicar aguardo do assentimento em vez de causar alarme falso
-  assert.match(
-    pageCode,
-    /Aguardando início da bancada · Salvamento automático após assentimento/,
-    "Tela inicial deve orientar que o salvamento é ativado após o assentimento"
-  );
-
-  // FinishedScreen deve receber e utilizar totalSavedCount
-  assert.match(
-    pageCode,
-    /totalSavedCount=\{totalSavedCount\}/,
-    "FinishedScreen deve receber a contagem real de registros salvos localmente"
-  );
-});

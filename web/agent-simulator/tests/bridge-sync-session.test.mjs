@@ -96,4 +96,11 @@ test("Bridge Store-and-Forward: acionamento de sincronização em save e expurgo
     /\$script:SyncedSessionIds\.Remove\(\$reqSessId\)/,
     "Rota /v1/sessions/reset deve purgar session_id do tracker de sessões sincronizadas"
   );
+  assert.match(code, /function\s+Invoke-RemoteSessionPurge/, "Bridge deve implementar exclusão remota autenticada");
+  assert.match(code, /purge_own_research_session/, "Bridge deve usar RPC restrita para retirada ética");
+  assert.match(code, /sessions_withdrawn\.txt/, "Bridge deve manter tombstone persistente contra reenvio");
+  assert.match(code, /withdrawals_pending\.txt/, "Bridge deve manter fila durável para retry da exclusão remota");
+  assert.match(code, /Sync-PendingWithdrawals/, "Loop deve repetir retiradas remotas pendentes");
+  assert.match(code, /WithdrawnSessionIds\.Contains\(\$eventSessionId\)/, "Eventos retirados nunca podem ser reenviados");
+  assert.match(code, /WithdrawnSessionIds\.Contains\(\$sid\)/, "Snapshots retirados nunca podem ser reenviados");
 });

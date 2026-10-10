@@ -21,11 +21,11 @@ test("Service Worker: CACHE_NAME incrementado e não permanece em 2.0.0-test.1",
     "A versão do cache no Service Worker não deve permanecer como 2.0.0-test.1"
   );
 
-  // Versão deve estar incrementada para 2.2.2
+  // Versão deve estar incrementada para 2.2.3
   assert.match(
     swContent,
-    /CACHE_NAME\s*=\s*CACHE_PREFIX\s*\+\s*["']2\.2\.2["']/,
-    "CACHE_NAME deve ser incrementado para 2.2.2"
+    /CACHE_NAME\s*=\s*CACHE_PREFIX\s*\+\s*["']2\.2\.3["']/,
+    "CACHE_NAME deve ser incrementado para 2.2.3"
   );
 
 });

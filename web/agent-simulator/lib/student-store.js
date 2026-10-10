@@ -94,9 +94,25 @@ export async function deleteSessionEvents(sessionId) {
 
 export async function purgeSession(sessionId) {
   if (!sessionId) return { sessionDeleted: false, eventsDeleted: 0 };
-  const eventsDeleted = await deleteSessionEvents(sessionId);
-  await removeSession(sessionId);
-  return { sessionDeleted: true, eventsDeleted };
+  const database = await openDatabase();
+  try {
+    return await new Promise((resolve, reject) => {
+      const transaction = database.transaction([EVENTS_STORE, SESSIONS_STORE], "readwrite");
+      transaction.objectStore(SESSIONS_STORE).delete(sessionId);
+      const request = transaction.objectStore(EVENTS_STORE).index("session_id").openCursor(IDBKeyRange.only(sessionId));
+      let eventsDeleted = 0;
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) return;
+        cursor.delete();
+        eventsDeleted += 1;
+        cursor.continue();
+      };
+      transaction.oncomplete = () => resolve({ sessionDeleted: true, eventsDeleted });
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () => reject(transaction.error);
+    });
+  } finally { database.close(); }
 }
 
 export async function listQuarantinedEvents() {
@@ -260,7 +276,7 @@ export async function enforceAbsoluteRetention(maxAgeDays = 7) {
         ).getTime();
 
         // Prazo absoluto: sete dias desde a criação, sem extensão por retomada
-        if (sessionTime > 0 && sessionTime < thresholdMs) {
+        if (!Number.isFinite(sessionTime) || sessionTime <= 0 || sessionTime <= thresholdMs) {
           if (session.session_id) {
             expiredSessionIds.add(session.session_id);
           }
@@ -292,8 +308,8 @@ export async function enforceAbsoluteRetention(maxAgeDays = 7) {
 
         const ev = cursor.value;
         const belongsToExpiredSession = ev.session_id && expiredSessionIds.has(ev.session_id);
-        const evTime = new Date(ev._synced_at || ev.occurred_at || ev.timestamp || 0).getTime();
-        const isOrphanExpired = evTime > 0 && evTime < thresholdMs;
+        const evTime = new Date(ev.occurred_at || ev.timestamp || 0).getTime();
+        const isOrphanExpired = !Number.isFinite(evTime) || evTime <= 0 || evTime <= thresholdMs;
 
         if (belongsToExpiredSession || isOrphanExpired) {
           cursor.delete();
@@ -310,6 +326,7 @@ export async function enforceAbsoluteRetention(maxAgeDays = 7) {
     console.warn("Aviso ao expurgar eventos na retenção:", err);
   }
 
+  database.close();
   return { purgedSessions, purgedEvents };
 }
 

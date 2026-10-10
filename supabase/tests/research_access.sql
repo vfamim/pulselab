@@ -38,6 +38,10 @@ VALUES(gen_random_uuid(),gen_random_uuid(),gen_random_uuid(),'10000000-0000-4000
 
 -- Snapshots RLS: device insert, null installation_id, peer installation, cross-site, and append-only check
 SELECT lives_ok($q$INSERT INTO public.research_bancada_sessions(session_id, site_id, installation_id, session_payload, created_at, updated_at) VALUES ('30000000-0000-4000-8000-000000000001', 'SITE_A', '10000000-0000-4000-8000-000000000001', '{"data": "ok"}'::jsonb, now(), now())$q$, 'registered device can insert snapshot for its site and installation');
+SELECT ok(has_function_privilege('authenticated','public.purge_own_research_session(uuid)','EXECUTE'),'authenticated device can call bounded ethical withdrawal RPC');
+SELECT is((public.purge_own_research_session('30000000-0000-4000-8000-000000000001'::uuid)->>'purged')::boolean,true,'device can purge its own session through bounded RPC');
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_id='30000000-0000-4000-8000-000000000001'),0::bigint,'ethical withdrawal removes own remote snapshot');
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_id='20000000-0000-4000-8000-000000000002'),0::bigint,'device still cannot read another site snapshot during withdrawal');
 SELECT throws_ok($q$INSERT INTO public.research_bancada_sessions(session_id, site_id, installation_id, session_payload, created_at, updated_at) VALUES (gen_random_uuid(), 'SITE_A', NULL, '{"data": "null_installation"}'::jsonb, now(), now())$q$, '42501', NULL, 'bancada session insert with NULL installation_id rejected');
 SELECT throws_ok($q$INSERT INTO public.research_bancada_sessions(session_id, site_id, installation_id, session_payload, created_at, updated_at) VALUES (gen_random_uuid(), 'SITE_A', '10000000-0000-4000-8000-000000000004', '{"data": "peer_installation"}'::jsonb, now(), now())$q$, '42501', NULL, 'device cannot forge peer installation in same site');
 SELECT throws_ok($q$INSERT INTO public.research_bancada_sessions(session_id, site_id, installation_id, session_payload, created_at, updated_at) VALUES (gen_random_uuid(), 'SITE_B', '10000000-0000-4000-8000-000000000002', '{"data": "cross_site_installation"}'::jsonb, now(), now())$q$, '42501', NULL, 'device cannot insert snapshot for another site or installation');
@@ -57,7 +61,7 @@ SELECT throws_ok($q$INSERT INTO public.research_site_memberships(user_id,site_id
 SELECT throws_ok($q$INSERT INTO storage.objects(bucket_id,name) VALUES('screenshots','10000000-0000-4000-8000-000000000001/test.jpg')$q$,'42501',NULL,'screenshot upload disabled');
 SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 SELECT is((SELECT count(*) FROM public.research_events),3::bigint,'researcher sees assigned site only');
-SELECT is((SELECT count(*) FROM public.research_bancada_sessions),2::bigint,'researcher sees bancada sessions of assigned site only');
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions),1::bigint,'researcher sees remaining bancada sessions of assigned site only');
 SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE site_id = 'SITE_B'),0::bigint,'researcher cannot see SITE_B snapshots');
 SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_payload->>'hacked' = 'true'),0::bigint,'device cannot update another site snapshot');
 RESET ROLE;
@@ -76,6 +80,7 @@ UPDATE public.research_events SET received_at=now()-interval '10 days';
 SET LOCAL ROLE service_role;
 SELECT is(public.purge_expired_research_records(),3::bigint,'purge applies only approved site and server receipt age');
 SELECT is((SELECT count(*) FROM public.research_events WHERE site_id='SITE_B'),1::bigint,'other site data retained');
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_id='20000000-0000-4000-8000-000000000002'),1::bigint,'bounded ethical withdrawal preserved another site snapshot');
 SELECT lives_ok($q$INSERT INTO public.research_bancada_sessions(session_id, site_id, installation_id, session_payload, created_at, updated_at) VALUES (gen_random_uuid(), 'SITE_A', NULL, '{"data": "service_role_import"}'::jsonb, now(), now())$q$, 'service_role can insert session snapshots without restriction');
 RESET ROLE;
 SELECT * FROM finish();

@@ -15,7 +15,7 @@ export default defineConfig({
   webServer: {
     command: "npm run preview:test",
     url: "http://127.0.0.1:4173/alunos/",
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 30_000
   }
 });
