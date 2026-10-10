@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "2.2.5"
+VERSION = "2.2.6"
 
 
 INSTRUCTIONS = """====================================================================
@@ -166,6 +166,8 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         # 7. Copiar Batch files e Launchers
         shutil.copy2(repo_root / "Instalar-PulseLab.bat", stage / "Instalar-PulseLab.bat")
         shutil.copy2(repo_root / "Iniciar-PulseLab.bat", stage / "Iniciar-PulseLab.bat")
+        if (repo_root / "iniciar-silencioso.vbs").is_file():
+            shutil.copy2(repo_root / "iniciar-silencioso.vbs", stage / "iniciar-silencioso.vbs")
         shutil.copy2(repo_root / "Desinstalar-PulseLab.bat", stage / "Desinstalar-PulseLab.bat")
         if (repo_root / "Exportar-Dados-Pendrive.bat").is_file():
             shutil.copy2(repo_root / "Exportar-Dados-Pendrive.bat", stage / "Exportar-Dados-Pendrive.bat")

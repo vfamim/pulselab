@@ -10,9 +10,9 @@ cd web\agent-simulator
 call npm run build
 cd ..\..
 echo.
-python installer\build-installer.py --output instalador\downloads\PulseLab-2.2.5-Windows.zip
-copy /Y instalador\downloads\PulseLab-2.2.5-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.2.5.zip >nul 2>&1
-copy /Y instalador\downloads\PulseLab-2.2.5-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.2.5.zip.sha256 >nul 2>&1
+python installer\build-installer.py --output instalador\downloads\PulseLab-2.2.6-Windows.zip
+copy /Y instalador\downloads\PulseLab-2.2.6-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.2.6.zip >nul 2>&1
+copy /Y instalador\downloads\PulseLab-2.2.6-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.2.6.zip.sha256 >nul 2>&1
 
 echo [3/3] Publicando site e PWA no Firebase Hosting...
 call npx firebase-tools deploy --only hosting

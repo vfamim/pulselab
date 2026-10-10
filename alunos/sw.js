@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "pulselab-test-v2-";
-const CACHE_NAME = CACHE_PREFIX + "2.2.5";
+const CACHE_NAME = CACHE_PREFIX + "2.2.6";
 const SHELL = [
   "/alunos/",
   "/alunos/index.html",

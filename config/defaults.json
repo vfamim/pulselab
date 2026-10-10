@@ -7,7 +7,7 @@
     "spike_parser_enabled": true,
     "ui_automation_enabled": true
   },
-  "client_version": "2.2.5",
+  "client_version": "2.2.6",
   "research_collection_enabled": true,
   "research_authorization_version": "v2.0-piloto",
   "research_authorized_purposes": [

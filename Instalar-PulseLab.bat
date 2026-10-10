@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab - Instalador Local (v2.2.5)
+title PulseLab - Instalador Local (v2.2.6)
 echo ====================================================================
-echo                   PULSELAB - INSTALADOR OFFLINE (v2.2.5)
+echo                   PULSELAB - INSTALADOR OFFLINE (v2.2.6)
 
 echo ====================================================================
 echo.
@@ -44,18 +44,25 @@ if exist "%SRC_DIR%tools" (
 )
 
 if exist "%SRC_DIR%Iniciar-PulseLab.bat" copy "%SRC_DIR%Iniciar-PulseLab.bat" "%INSTALL_DIR%\" /Y >nul 2>&1
+if exist "%SRC_DIR%iniciar-silencioso.vbs" copy "%SRC_DIR%iniciar-silencioso.vbs" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%Desinstalar-PulseLab.bat" copy "%SRC_DIR%Desinstalar-PulseLab.bat" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%pulselab.ps1" copy "%SRC_DIR%pulselab.ps1" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%Install-PulseLab.ps1" copy "%SRC_DIR%Install-PulseLab.ps1" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%VERSION" copy "%SRC_DIR%VERSION" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%pulselab.ico" copy "%SRC_DIR%pulselab.ico" "%INSTALL_DIR%\" /Y >nul 2>&1
 
-echo [3/3] Criando atalho na Area de Trabalho com icone oficial...
+echo [3/3] Criando atalho silencioso na Area de Trabalho com icone oficial...
 :: Limpar atalhos ou pastas de versoes legadas (v1.6.0)
 if exist "%INSTALL_DIR%\app\agent" rd /s /q "%INSTALL_DIR%\app\agent" >nul 2>&1
 if exist "%INSTALL_DIR%\app\pulselab-agent.ps1" del /f /q "%INSTALL_DIR%\app\pulselab-agent.ps1" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$desktop = [Environment]::GetFolderPath('Desktop'); $startup = [Environment]::GetFolderPath('Startup'); Remove-Item -LiteralPath (Join-Path $desktop 'Iniciar Pulselab - Oficina de Robotica.lnk') -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $startup 'PulseLab.lnk') -Force -ErrorAction SilentlyContinue" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'PulseLab - Iniciar Oficina.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\Iniciar-PulseLab.bat'); $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'Iniciar oficina do PulseLab'; $s.Save()" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'PulseLab - Iniciar Oficina.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:SystemRoot, 'System32\wscript.exe'); $s.Arguments = '\"' + [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\iniciar-silencioso.vbs') + '\"'; $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'Iniciar oficina de robotica do PulseLab'; $s.Save()" >nul 2>&1
+
+:: Suporte a provisionamento centralizado para notebooks dedicados (--startup)
+if /i "%1"=="--startup" (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Startup'), 'PulseLab.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:SystemRoot, 'System32\wscript.exe'); $s.Arguments = '\"' + [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\iniciar-silencioso.vbs') + '\"'; $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'PulseLab - Inicializacao Automatica'; $s.Save()" >nul 2>&1
+    echo [OK] Configurado para iniciar automaticamente no logon do Windows.
+)
 
 echo.
 echo ====================================================================
