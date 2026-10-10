@@ -209,3 +209,5 @@ export function qualityLabel(status) {
 
   return labels[status] || status;
 }
+
+export { isResearchAuthorized } from "./evaluation.js";

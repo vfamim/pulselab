@@ -1,7 +1,7 @@
 {
-  "version": "2.2.2",
+  "version": "2.2.3",
   "environment": "production",
   "auto_update_enabled": false,
-  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.2-Windows.zip",
-  "notes": "PulseLab v2.2.2 - Fluxo silencioso do estudante, contraste acessível, expurgo ético com retry e integridade offline."
+  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.3-Windows.zip",
+  "notes": "PulseLab v2.2.3 - Correção fail-closed de sincronização, modo livre silencioso e validação institucional endurecida."
 }

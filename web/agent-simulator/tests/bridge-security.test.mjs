@@ -115,3 +115,42 @@ test("Bridge Security: endpoint /v1/sessions/reset exige session_id e purga atom
   assert.match(resetBlock, /Register-SessionWithdrawal/, "Deve registrar tombstone durável antes do expurgo");
   assert.match(resetBlock, /expurgada localmente/, "Deve registrar expurgo sem registrar payload do estudante recusante");
 });
+
+test("Bridge Security: rota /v1/config expõe explicitamente campos de autorização fail-closed", () => {
+  const code = fs.readFileSync(bridgePath, "utf-8");
+
+  const configRouteIdx = code.indexOf('$path -eq "/config" -or $path -eq "/v1/config"');
+  assert.ok(configRouteIdx !== -1, "Rota /v1/config deve existir");
+  const configBlock = code.slice(configRouteIdx, configRouteIdx + 2500);
+
+  assert.match(
+    configBlock,
+    /research_collection_enabled\s*=\s*\$false/,
+    "Deve definir research_collection_enabled como $false por padrão"
+  );
+  assert.match(
+    configBlock,
+    /research_authorization_version\s*=\s*\$null/,
+    "Deve definir research_authorization_version como $null por padrão"
+  );
+  assert.match(
+    configBlock,
+    /research_authorized_purposes\s*=\s*@\(\)/,
+    "Deve definir research_authorized_purposes como array vazio por padrão"
+  );
+  assert.match(
+    configBlock,
+    /\$publicConfig\.research_collection_enabled\s*=\s*\$cfg\.research_collection_enabled/,
+    "Deve repassar research_collection_enabled do arquivo de configuração"
+  );
+  assert.match(
+    configBlock,
+    /\$publicConfig\.research_authorization_version\s*=\s*\$cfg\.research_authorization_version/,
+    "Deve repassar research_authorization_version do arquivo de configuração"
+  );
+  assert.match(
+    configBlock,
+    /\$publicConfig\.research_authorized_purposes\s*=\s*\$cfg\.research_authorized_purposes/,
+    "Deve repassar research_authorized_purposes do arquivo de configuração"
+  );
+});

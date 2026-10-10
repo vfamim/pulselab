@@ -17,20 +17,17 @@ import {
   syncSingleEvent
 } from "../lib/sync-engine.js";
 import {
+  isResearchAuthorized,
+  validateRestoredSession,
   downloadSessionData,
-  isAllAssented,
-  isPostScreenReady,
-  resolveMemberExperiences,
-  validateFinalTelemetry,
-  structuralSpikeMetrics,
-  validateRestoredSession
+  structuralSpikeMetrics
 } from "../lib/evaluation.js";
 
 const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.2.2";
+const CLIENT_VERSION = "student-pwa/2.2.3";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -40,60 +37,6 @@ const DEFAULT_CONTEXT = {
   class: "turma-geral",
   activity: "atividade-01-spike"
 };
-
-const PRE_DEFAULT = { experience: null };
-const POST_DEFAULT = {
-  experience: null,
-  experienceSkipped: false,
-  memberExperiences: [],
-  raceResult: null,
-  raceTimeSeconds: "",
-  assemblyResult: null,
-  quizCompleted: null,
-  supportLevel: null
-};
-
-const EXPERIENCE_OPTIONS = [
-  [1, "🐣 Primeira vez", "Ninguém na bancada mexeu com robôs"],
-  [2, "🧩 Pouca prática", "Alguém já viu ou usou 1 ou 2 vezes"],
-  [3, "🚀 Já praticamos", "Já montamos ou programamos antes"],
-  [4, "⚡ Muita prática", "Temos facilidade com montagem e código"]
-];
-
-const POST_EXPERIENCE_OPTIONS = [
-  [1, "😞 Muito ruim", "Não gostei da experiência"],
-  [2, "🙁 Ruim", "Poderia ter sido melhor"],
-  [3, "😐 Nem boa nem ruim", "Achei normal"],
-  [4, "🙂 Boa", "Gostei da oficina"],
-  [5, "😄 Muito boa", "Adorei a atividade"]
-];
-
-const RACE_RESULT_OPTIONS = [
-  ["success", "🏆 Concluiu com sucesso", "Carrinho completou o percurso no circuito"],
-  ["partial", "⏱️ Não concluiu o percurso", "Travou, saiu da pista ou precisou de ajuste"],
-  ["tech_failure", "⚠️ Falha técnica / Bluetooth", "Problema de bateria, desconexão ou peça solta"],
-  ["not_observed", "👁️ Não observado / Sem oportunidade", "Não houve teste na pista ou não foi observado"]
-];
-
-const ASSEMBLY_OPTIONS = [
-  ["complete", "🧩 Concluída conforme o roteiro", "Estrutura firme, motores e rodas alinhados"],
-  ["partial", "🔧 Parcial / com adaptações", "Montagem com peças faltantes ou ajustes manuais"],
-  ["incomplete", "❌ Não concluída", "Não completou a estrutura básica do carrinho"],
-  ["not_observed", "👁️ Não observado", "Não foi possível verificar a montagem física"]
-];
-
-const QUIZ_OPTIONS = [
-  ["participated", "🎮 Realizada com botões do robô", "A bancada participou da dinâmica lúdica A/B"],
-  ["skipped", "⏭️ Dinâmica não realizada", "Tempo insuficiente ou atividade não aplicada"],
-  ["not_applicable", "🚫 Não aplicável", "Oficina sem previsão dessa dinâmica"]
-];
-
-const SUPPORT_OPTIONS = [
-  ["independent", "🟢 Autônomo", "Trabalharam praticamente sozinhos"],
-  ["occasional", "🟡 Apoio pontual", "Dúvidas breves tiradas com o instrutor"],
-  ["constant", "🔴 Apoio constante", "Mediação intensiva necessária durante a oficina"],
-  ["not_observed", "👁️ Não observado", "Nível de apoio não registrado"]
-];
 
 const BRIDGE_PORT = 43128;
 const BRIDGE_URL = `http://127.0.0.1:${BRIDGE_PORT}`;
@@ -166,16 +109,16 @@ async function notifyBridgeSessionSave(sessionPayload, allowed = true) {
 
 async function resetBridgeSession(sessionId = null, options = {}) {
   const response = await fetch(`${BRIDGE_URL}/v1/sessions/reset`, {
-      signal: AbortSignal.timeout(1500),
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        session_id: sessionId,
-        reason: options.reason || (options.purge ? "ethical_refusal" : "prepare_next"),
-        purge: Boolean(options.purge),
-        completed: Boolean(options.completed)
-      })
-    });
+    signal: AbortSignal.timeout(1500),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: sessionId,
+      reason: options.reason || (options.purge ? "ethical_withdrawal" : "prepare_next"),
+      purge: Boolean(options.purge),
+      completed: Boolean(options.completed)
+    })
+  });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || (options.purge && (payload.purged !== true || payload.remote_pending === true))) {
     throw new Error(payload.error || payload.status || `Bridge reset failed (${response.status})`);
@@ -225,236 +168,8 @@ function getSystemMetadata() {
   };
 }
 
-function ScaleQuestion({ legend, hint, options, value, onChange }) {
-  return (
-    <fieldset className="question-block">
-      <legend>{legend}</legend>
-      {hint ? <p>{hint}</p> : null}
-      <div className="scale-grid">
-        {options.map(([optionValue, label, sublabel], index) => {
-          const parts = String(label).match(/^(\S+)\s+(.+)$/);
-          const icon = parts ? parts[1] : (index + 1);
-          const title = parts ? parts[2] : label;
-          const isSelected = value === optionValue;
-          return (
-            <button
-              className={`scale-option ${isSelected ? "is-selected" : ""}`}
-              key={optionValue}
-              onClick={() => onChange(optionValue)}
-              type="button"
-              aria-pressed={isSelected}
-            >
-              <span className="scale-option__icon" aria-hidden="true">{icon}</span>
-              <strong className="scale-option__title">{title}</strong>
-              {sublabel ? <small className="scale-option__sub">{sublabel}</small> : null}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
-  );
-}
-
-function Card({ eyebrow, title, description, children, footer, compact = false }) {
-  return (
-    <section className={`flow-card ${compact ? "flow-card--compact" : ""}`}>
-      <header className="flow-card__heading">
-        <span className="eyebrow">{eyebrow}</span>
-        <h1 tabIndex={-1} data-stage-heading>{title}</h1>
-        <p>{description}</p>
-      </header>
-      <div className="flow-card__body">{children}</div>
-      {footer ? <footer className="flow-card__footer">{footer}</footer> : null}
-    </section>
-  );
-}
-
-const REGIONS = [
-  { id: "Nordeste", label: "☀️ Nordeste", desc: "Polo Regional Nordeste" },
-  { id: "Sudeste", label: "🏙️ Sudeste", desc: "Polo Regional Sudeste" },
-  { id: "Sul", label: "❄️ Sul", desc: "Polo Regional Sul" },
-  { id: "Norte", label: "🌿 Norte", desc: "Polo Regional Norte" },
-  { id: "Centro-Oeste", label: "🌾 Centro-Oeste", desc: "Polo Regional Centro-Oeste" }
-];
-
-function RegionMetadataModal({ isOpen, onClose, context, onSave, computerId, systemMetadata }) {
-  const [selectedRegion, setSelectedRegion] = useState(context.regional || "Nordeste");
-  const dialogRef = useRef(null);
-  useEffect(() => {
-    if (!isOpen) return;
-    const previous = document.activeElement;
-    const dialog = dialogRef.current;
-    setSelectedRegion(context.regional || "Nordeste");
-    dialog.showModal();
-    return () => {
-      dialog.close();
-      previous?.focus();
-    };
-  }, [isOpen, context.regional]);
-  return (
-    <dialog ref={dialogRef} className="settings-dialog" aria-labelledby="region-modal-title"
-      onKeyDown={(event) => {
-        if (event.key !== "Tab") return;
-        const buttons = dialogRef.current.querySelectorAll("button:not(:disabled)");
-        const first = buttons[0], last = buttons[buttons.length - 1];
-        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-      }}
-      onCancel={(event) => { event.preventDefault(); onClose(); }}>
-      <h2 id="region-modal-title">Configuração da oficina</h2>
-      <fieldset className="question-block">
-        <legend>Região</legend>
-        <div className="region-options">
-          {REGIONS.map((region) => (
-            <button key={region.id} type="button" className={`scale-option ${selectedRegion === region.id ? "is-selected" : ""}`}
-              aria-pressed={selectedRegion === region.id} onClick={() => setSelectedRegion(region.id)}>{region.id}</button>
-          ))}
-        </div>
-      </fieldset>
-      <p>Computador: {computerId} · {systemMetadata.os} · {systemMetadata.screen_resolution}</p>
-      <div className="action-row">
-        <button className="button button--ghost" onClick={onClose} type="button">Cancelar</button>
-        <button className="button button--primary" type="button" onClick={() => {
-          onSave({ ...context, regional: selectedRegion, site_id: `Polo-${selectedRegion}` });
-          onClose();
-        }}>Salvar</button>
-      </div>
-    </dialog>
-  );
-}
-
-function PreScreen({ answers, setAnswers, onSubmit, onDecline, teamSize, setTeamSize, memberAssents, setMemberAssents }) {
-  const allAssented = isAllAssented(teamSize, memberAssents);
-  const ready = !allAssented || answers.experience !== null;
-  return (
-    <Card eyebrow="1 de 3 · Antes de começar" title="Vamos montar e programar?"
-      description="Robótica para todos. A pesquisa é opcional."
-      footer={<div className="action-row">
-        {allAssented && <button className="button button--ghost" onClick={onDecline} type="button">Começar sem pesquisa</button>}
-        <button className="button button--primary" disabled={!ready} onClick={allAssented ? onSubmit : onDecline} type="button"
-          aria-describedby={allAssented && !ready ? "experience-hint" : undefined}>
-          {allAssented ? "Começar atividade" : "Começar sem pesquisa"}
-        </button>
-      </div>}>
-      <fieldset className="question-block team-choice">
-        <legend>Quantas pessoas na bancada?</legend>
-        <div className="team-options">
-          {[1, 2, 3, 4].map((size) => <button key={size} type="button"
-            className={`scale-option ${teamSize === size ? "is-selected" : ""}`} aria-pressed={teamSize === size}
-            aria-label={`${size} ${size === 1 ? "pessoa" : "pessoas"}`}
-            onClick={() => setTeamSize(size)}><span>{size}</span><span className="team-option__unit">{size === 1 ? "pessoa" : "pessoas"}</span></button>)}
-        </div>
-      </fieldset>
-      <fieldset className={`assent-panel ${allAssented ? "assent-panel--accepted" : "assent-panel--pending"}`} aria-describedby="assent-explanation">
-        <legend>Vocês querem participar da pesquisa?</legend>
-        <p id="assent-explanation">Cada pessoa decide e não usamos nomes. Se alguém não quiser, todos usam o LEGO SPIKE em <strong>Modo Livre: sem gravação nem envio de dados</strong>. Podem desistir e apagar os dados a qualquer momento.</p>
-        <div className="assent-members">
-          {Array.from({ length: teamSize }, (_, index) => {
-            const member = index + 1;
-            const accepted = memberAssents[member] === true;
-            const id = member === 1 ? "ethical-assent-checkbox" : `ethical-assent-member-${member}`;
-            return <label key={member} htmlFor={id} className={`assent-member ${accepted ? "assent-member--accepted" : ""}`}>
-              <input id={id} type="checkbox" checked={accepted}
-                onChange={(event) => setMemberAssents((prev) => ({ ...prev, [member]: event.target.checked }))} />
-              <span><strong>Pessoa {member}:</strong> aceito</span>
-            </label>;
-          })}
-        </div>
-        <p className="assent-status" role="status">{allAssented ? "Todos aceitaram participar." : "Aguardando a escolha de cada pessoa."}</p>
-        <details className="research-details">
-          <summary>Sobre os dados da pesquisa</summary>
-          <p>Os registros descrevem a bancada, sem identificar estudantes. Os dados locais são apagados em até 7 dias.
-            Durante a oficina, use “Parar de participar e apagar meus dados” para sair da pesquisa.</p>
-        </details>
-      </fieldset>
-      {allAssented && <>
-        <ScaleQuestion legend="Já montaram ou programaram robôs ou blocos?"
-          options={EXPERIENCE_OPTIONS} value={answers.experience} onChange={(experience) => setAnswers({ ...answers, experience })} />
-        {answers.experience === null && <p id="experience-hint" className="choice-hint">Escolham uma opção ou comecem sem pesquisa.</p>}
-      </>}
-    </Card>
-  );
-}
-
-function ActivityScreen({ onAdvanceToFinalChallenge, isFreeMode }) {
-  return <Card eyebrow="2 de 3 · Mãos à obra" title="Montem, programem e testem o robô"
-    description="Usem o kit e o aplicativo LEGO SPIKE para criar e testar o carrinho."
-    footer={<div className="action-row"><button className="button button--primary" type="button" onClick={onAdvanceToFinalChallenge}>Ir para o desafio final</button></div>}>
-    <div className="activity-guide">
-      <p>Sigam a atividade e peçam ajuda ao educador quando precisarem.</p>
-      <p>Voltem aqui para testar o carrinho na pista.</p>
-    </div>
-    {isFreeMode && <p className="free-mode-note">Modo Livre: a aula continua sem guardar dados da pesquisa.</p>}
-  </Card>;
-}
-
-function RubricQuestion({ legend, name, options, value, onChange }) {
-  return <fieldset className="question-block rubric-question"><legend>{legend}</legend>
-    <div className="option-list">{options.map(([optionValue, label, hint]) => (
-      <label key={optionValue} className={`option-row ${value === optionValue ? "is-selected" : ""}`}>
-        <input type="radio" name={name} value={optionValue} checked={value === optionValue} onChange={() => onChange(optionValue)} />
-        <span className="option-row__body"><strong>{label}</strong><small>{hint}</small></span>
-      </label>
-    ))}</div>
-  </fieldset>;
-}
-
-function PostScreen({ answers, setAnswers, onSubmit, onDecline, teamSize, memberAssents, isFreeMode, submitting }) {
-  const experiences = useMemo(() => resolveMemberExperiences(teamSize, memberAssents, answers.memberExperiences), [teamSize, memberAssents, answers.memberExperiences]);
-  const ready = isPostScreenReady(teamSize, experiences);
-  function updateMember(memberIndex, patch) {
-    setAnswers({ ...answers, memberExperiences: experiences.map((member) => member.memberIndex === memberIndex ? { ...member, ...patch } : member) });
-  }
-  return <Card eyebrow="3 de 3 · Desafio final" title="Testem o carrinho na pista"
-    description={isFreeMode ? "Façam o desafio com o educador e concluam a oficina." : "Façam o desafio com o educador. Depois, cada pessoa escolhe se quer avaliar a oficina."}
-    footer={<div className="action-row">
-      {!isFreeMode && <button className="button button--ghost" onClick={onDecline} disabled={submitting} type="button">Pular avaliação e concluir</button>}
-      <button className="button button--primary" onClick={() => onSubmit()} disabled={submitting || (!isFreeMode && !ready)} type="button">{submitting ? "Concluindo…" : "Concluir oficina"}</button>
-    </div>}>
-    {!isFreeMode && <>
-      <div className="member-evaluations">
-        {experiences.map((member) => <fieldset className="question-block member-evaluation" key={member.memberIndex}>
-          <legend>Pessoa {member.memberIndex}: como foi a oficina de robótica hoje?</legend>
-          <div className="member-evaluation__actions"><button type="button" className="button button--ghost" aria-pressed={member.skipped}
-            onClick={() => updateMember(member.memberIndex, { rating: null, skipped: !member.skipped })}>
-            {member.skipped ? "Responder à avaliação" : "Prefiro não responder"}
-          </button></div>
-          {member.skipped ? <p>Você escolheu não responder. Tudo bem.</p> : <div className="scale-grid experience-grid">
-            {POST_EXPERIENCE_OPTIONS.map(([value, label, hint]) => <button key={value} className={`scale-option ${member.rating === value ? "is-selected" : ""}`}
-              type="button" aria-pressed={member.rating === value} onClick={() => updateMember(member.memberIndex, { rating: value, skipped: false })}>
-              <span className="scale-option__icon" aria-hidden="true">{label.split(" ")[0]}</span>
-              <strong className="scale-option__title">{label.slice(label.indexOf(" ") + 1)}</strong>
-              <small className="scale-option__sub">{hint}</small>
-            </button>)}
-          </div>}
-        </fieldset>)}
-      </div>
-      <details className="educator-rubric"><summary>Educador: observações do desafio</summary>
-        <p>Registre o que observou. Todos os campos são opcionais.</p>
-        <RubricQuestion legend="Desfecho do desafio da pista" name="race-result" options={RACE_RESULT_OPTIONS} value={answers.raceResult} onChange={(raceResult) => setAnswers({ ...answers, raceResult })} />
-        <label className="race-time" htmlFor="race-time-input">Tempo da corrida em segundos (opcional)
-          <input id="race-time-input" type="number" step="0.1" min="0" value={answers.raceTimeSeconds || ""}
-            onChange={(event) => setAnswers({ ...answers, raceTimeSeconds: event.target.value })} />
-        </label>
-        <RubricQuestion legend="Montagem do carrinho" name="assembly-result" options={ASSEMBLY_OPTIONS} value={answers.assemblyResult} onChange={(assemblyResult) => setAnswers({ ...answers, assemblyResult })} />
-        <ScaleQuestion legend="Dinâmica com os botões do robô" options={QUIZ_OPTIONS} value={answers.quizCompleted} onChange={(quizCompleted) => setAnswers({ ...answers, quizCompleted })} />
-        <RubricQuestion legend="Apoio do educador" name="support-level" options={SUPPORT_OPTIONS} value={answers.supportLevel} onChange={(supportLevel) => setAnswers({ ...answers, supportLevel })} />
-      </details>
-    </>}
-    {isFreeMode && <p className="free-mode-note">Modo Livre: a aula continua sem guardar dados da pesquisa.</p>}
-  </Card>;
-}
-
-function FinishedScreen({ onRestart, isFreeMode }) {
-  return <Card compact eyebrow="Tudo pronto" title="Oficina concluída!"
-    description="Obrigado por participar da aula de robótica."
-    footer={<div className="action-row"><button className="button button--primary" onClick={onRestart} type="button">Preparar nova oficina</button></div>}>
-    {isFreeMode && <p className="free-mode-note">Modo Livre: nenhum dado da pesquisa foi guardado.</p>}
-  </Card>;
-}
-
 function EvidencePanel({ events }) {
-  const ordered = [...events].sort((left, right) => right._sequence - left._sequence);
+  const ordered = [...events].sort((left, right) => (right._sequence || 0) - (left._sequence || 0));
   return (
     <aside className="evidence-panel">
       <header className="evidence-panel__header">
@@ -467,7 +182,7 @@ function EvidencePanel({ events }) {
       <div className="event-list">
         {ordered.length ? ordered.map((event) => (
           <article className="event-row" key={event.event_id}>
-            <span className={`event-row__icon ${event.participant_id ? "event-row__icon--response" : ""}`}>•</span>
+            <span className="event-row__icon">•</span>
             <span>
               <strong>{formatEventName(event.event_type)}</strong>
               <small>{event.activity_stage || "sessão"}</small>
@@ -477,7 +192,7 @@ function EvidencePanel({ events }) {
         )) : (
           <div className="empty-events">
             <span>○</span>
-            <p>Os eventos da oficina aparecerão aqui.</p>
+            <p>Os eventos da bancada aparecerão aqui.</p>
           </div>
         )}
       </div>
@@ -485,105 +200,44 @@ function EvidencePanel({ events }) {
   );
 }
 
-
 export default function StudentPage() {
-  const labMode = useMemo(() => new URLSearchParams(window.location.search).get("lab") === "1", []);
-  const rawSavedSession = useMemo(() => readJson(ACTIVE_SESSION_KEY, null), []);
-  const savedSession = useMemo(() => {
-    if (!rawSavedSession) return null;
-    const validated = validateRestoredSession(rawSavedSession);
-    if (!validated) {
-      if (typeof rawSavedSession.sessionId === "string") void purgeSession(rawSavedSession.sessionId);
-      try {
-        localStorage.removeItem(ACTIVE_SESSION_KEY);
-      } catch {}
-      return null;
-    }
-    return validated;
-  }, [rawSavedSession]);
+  const labMode = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("lab") === "1";
+  }, []);
 
+  const [configResolved, setConfigResolved] = useState(false);
+  const [isResearchActive, setIsResearchActive] = useState(false);
+  const [isFreeMode, setIsFreeMode] = useState(true);
+  const [groupSize, setGroupSize] = useState(2);
+
+  const [sessionId, setSessionId] = useState(null);
+  const [groupId, setGroupId] = useState(null);
+  const [installationId, setInstallationId] = useState(() => getInstallationId());
+  const [startedAt, setStartedAt] = useState(null);
+  const [timeline, setTimeline] = useState([]);
+  const [spikeTelemetry, setSpikeTelemetry] = useState(null);
   const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
-  const VALID_SCREENS = ["pre", "activity", "post", "finished"];
-  const [screen, setScreen] = useState(() => {
-    if (savedSession?.screen && VALID_SCREENS.includes(savedSession.screen)) {
-      return savedSession.screen;
-    }
-    return "pre";
-  });
-  const [activityStage, setActivityStage] = useState(() => savedSession?.activityStage || 2);
-  const [sessionId, setSessionId] = useState(() => savedSession?.sessionId || createUuid());
-  const [groupId, setGroupId] = useState(() => savedSession?.groupId || createUuid());
-  const [installationId, setInstallationId] = useState(() => {
-    if (savedSession && isAllAssented(savedSession.teamSize, savedSession.memberAssents)) {
-      return savedSession.installation_id || getPersistedInstallationId() || createUuid();
-    }
-    return createUuid();
-  });
-  const [startedAt, setStartedAt] = useState(() => savedSession?.startedAt || null);
-  const [activityStartedAt, setActivityStartedAt] = useState(() => savedSession?.activityStartedAt || null);
-  const [elapsedMs, setElapsedMs] = useState(() => {
-    if (savedSession?.screen === "activity" && savedSession?.activityStartedAt) {
-      return Math.max(0, Date.now() - savedSession.activityStartedAt);
-    }
-    return savedSession?.elapsedMs || 0;
-  });
-  const [timeline, setTimeline] = useState(() => savedSession?.timeline || []);
-  const [responses, setResponses] = useState(() => savedSession?.responses || []);
-  const [spikeTelemetry, setSpikeTelemetry] = useState(() => structuralSpikeMetrics(savedSession?.spikeTelemetry));
-  const [preAnswers, setPreAnswers] = useState(() => ({
-    ...PRE_DEFAULT,
-    ...(savedSession?.preAnswers && typeof savedSession.preAnswers === "object" ? savedSession.preAnswers : {})
-  }));
-  const [postAnswers, setPostAnswers] = useState(() => ({
-    ...POST_DEFAULT,
-    ...(savedSession?.postAnswers && typeof savedSession.postAnswers === "object" ? savedSession.postAnswers : {})
-  }));
-  const [teamSize, setTeamSize] = useState(() => savedSession?.teamSize || 2);
-  const [currentRole] = useState(() => savedSession?.currentRole || "computer");
-  const [memberAssents, setMemberAssentsState] = useState(() => savedSession?.memberAssents || { 1: false, 2: false, 3: false, 4: false });
-  const memberAssentsRef = useRef(savedSession?.memberAssents || { 1: false, 2: false, 3: false, 4: false });
-  const [assentAgreed, setAssentAgreedState] = useState(() => {
-    if (savedSession?.memberAssents) {
-      return isAllAssented(savedSession?.teamSize || 2, savedSession.memberAssents);
-    }
-    return false;
-  });
-  const assentAgreedRef = useRef(assentAgreed);
-  const [isFreeMode, setIsFreeMode] = useState(() => savedSession?.isFreeMode || false);
 
-  function setMemberAssents(valOrFn) {
-    const next = typeof valOrFn === "function" ? valOrFn(memberAssentsRef.current) : valOrFn;
-    memberAssentsRef.current = next;
-    setMemberAssentsState(next);
-    const allAssented = isAllAssented(teamSize, next);
-    assentAgreedRef.current = allAssented;
-    setAssentAgreedState(allAssented);
-  }
-
-  function handleTeamSizeChange(newSize) {
-    if (newSize === teamSize) return;
-    setTeamSize(newSize);
-    const empty = { 1: false, 2: false, 3: false, 4: false };
-    memberAssentsRef.current = empty;
-    setMemberAssentsState(empty);
-    assentAgreedRef.current = false;
-    setAssentAgreedState(false);
-    setPreAnswers(PRE_DEFAULT);
-  }
-  const [isSyntheticSession, setIsSyntheticSession] = useState(() => savedSession?.isSyntheticSession || labMode);
-  const [showContextModal, setShowContextModal] = useState(false);
   const [toast, setToast] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [storageError, setStorageError] = useState("");
-  const sequenceRef = useRef(savedSession?.sequence || 0);
-  const isSyntheticSessionRef = useRef(savedSession?.isSyntheticSession || labMode);
-  const isSubmittingRef = useRef(false);
+  const [dbPendingCount, setDbPendingCount] = useState(0);
+  const [dbQuarantinedCount, setDbQuarantinedCount] = useState(0);
+  const [dbTotalStoredCount, setDbTotalStoredCount] = useState(0);
+
+  const configResolvedRef = useRef(false);
+  const isResearchActiveRef = useRef(false);
+  const isFreeModeRef = useRef(true);
+  const isWithdrawnRef = useRef(false);
+  const sessionStartedEmittedRef = useRef(false);
+  const sequenceRef = useRef(0);
+  const startedAtRef = useRef(null);
   const writesRef = useRef(new Set());
   const bridgeWritesRef = useRef(new Set());
   const generationRef = useRef(0);
   const withdrawalChannelRef = useRef(null);
-  const telemetryRef = useRef(savedSession?.spikeTelemetry || null);
-  const startedAtRef = useRef(savedSession?.startedAt || null);
+  const telemetryRef = useRef(null);
+  const isSubmittingRef = useRef(false);
 
   function trackWrite(promise) {
     writesRef.current.add(promise);
@@ -598,95 +252,8 @@ export default function StudentPage() {
   }
 
   function reportStorageError() {
-    setStorageError("Não foi possível guardar todas as respostas neste computador. Chamem o educador; vocês podem continuar a aula.");
+    setStorageError("Aviso de armazenamento local; o uso do robô permanece inalterado.");
   }
-
-  async function withdrawSession(broadcast = true) {
-    // Revoke permission synchronously, before any await, including late requests.
-    assentAgreedRef.current = false;
-    generationRef.current += 1;
-    isSubmittingRef.current = true;
-    setAssentAgreedState(false);
-    setIsFreeMode(true);
-    setSubmitting(false);
-    setTimeline([]);
-    setResponses([]);
-    setSpikeTelemetry(null);
-    telemetryRef.current = null;
-    setPreAnswers(PRE_DEFAULT);
-    setPostAnswers(POST_DEFAULT);
-    startedAtRef.current = null;
-    const empty = { 1: false, 2: false, 3: false, 4: false };
-    memberAssentsRef.current = empty;
-    setMemberAssentsState(empty);
-    try {
-      localStorage.removeItem(ACTIVE_SESSION_KEY);
-      localStorage.removeItem(INSTALLATION_KEY);
-      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-    } catch { reportStorageError(); }
-    if (broadcast) withdrawalChannelRef.current?.postMessage({ type: "withdraw", sessionId });
-    isSubmittingRef.current = false;
-    setScreen("activity");
-    // Drain writes already in flight so that deletion is terminal.
-    await Promise.allSettled([...writesRef.current]);
-    await purgeSession(sessionId).catch(reportStorageError);
-    void refreshDeliveryCounts();
-    await Promise.allSettled([...bridgeWritesRef.current]);
-    try {
-      await resetBridgeSession(sessionId, { reason: "ethical_withdrawal", purge: true });
-    } catch {
-      setStorageError("Os dados deste navegador foram apagados, mas o computador ainda precisa confirmar a exclusão completa. Chamem o educador e mantenham o PulseLab aberto para tentar novamente.");
-    }
-  }
-
-  useEffect(() => {
-    const channel = new BroadcastChannel("pulselab-session-control");
-    withdrawalChannelRef.current = channel;
-    channel.onmessage = ({ data }) => {
-      if (data?.type === "withdraw" && data.sessionId === sessionId) void withdrawSession(false);
-    };
-    return () => { channel.close(); withdrawalChannelRef.current = null; };
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (screen === "pre" || isFreeMode || !assentAgreed) return;
-    const remaining = startedAt + 7 * 24 * 60 * 60 * 1000 - Date.now();
-    const expiry = window.setTimeout(() => void withdrawSession(), Math.max(0, remaining));
-    return () => window.clearTimeout(expiry);
-  }, [startedAt, screen, isFreeMode, assentAgreed]);
-
-
-  useEffect(() => {
-    if (!savedSession || !isAllAssented(savedSession.teamSize, savedSession.memberAssents)) {
-      try {
-        localStorage.removeItem(INSTALLATION_KEY);
-        localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-      } catch {}
-    }
-  }, [savedSession]);
-
-  useEffect(() => {
-    const storedContext = localStorage.getItem(CONTEXT_KEY);
-    if (!storedContext) {
-      fetchBridgeConfig().then((cfg) => {
-        if (cfg && (cfg.site_id || cfg.school_code)) {
-          setContext((prev) => ({
-            ...prev,
-            site_id: cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE" ? cfg.site_id : prev.site_id,
-            regional: cfg.regional_hub || prev.regional,
-            school: cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA" ? cfg.school_code : prev.school,
-            workshop: cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA" ? cfg.workshop_code : prev.workshop,
-            class: cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA" ? cfg.class_code : prev.class,
-            activity: cfg.activity_id || prev.activity
-          }));
-        }
-      });
-    }
-  }, []);
-
-  const [dbPendingCount, setDbPendingCount] = useState(0);
-  const [dbQuarantinedCount, setDbQuarantinedCount] = useState(0);
-  const [dbTotalStoredCount, setDbTotalStoredCount] = useState(0);
 
   const refreshDeliveryCounts = React.useCallback(async () => {
     try {
@@ -695,26 +262,72 @@ export default function StudentPage() {
       setDbQuarantinedCount(summary.quarantinedCount);
       setDbTotalStoredCount(summary.totalRecords);
     } catch {
-      // IndexedDB indisponível em fallback
+      // IndexedDB indisponível
     }
   }, []);
 
-  const refreshPendingCount = refreshDeliveryCounts;
-
-  useEffect(() => {
-    enforceAbsoluteRetention(7).catch(() => {});
-    refreshDeliveryCounts();
-    const interval = setInterval(() => {
-      enforceAbsoluteRetention(7).catch(() => {});
-    }, 60 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [refreshDeliveryCounts]);
-
-  const allEvents = [...timeline, ...responses];
   function flash(message) {
     setToast(message);
     window.setTimeout(() => setToast(""), 3200);
   }
+
+  async function withdrawSession(broadcast = true) {
+    isWithdrawnRef.current = true;
+    isResearchActiveRef.current = false;
+    isFreeModeRef.current = true;
+    generationRef.current += 1;
+    isSubmittingRef.current = true;
+
+    setIsResearchActive(false);
+    setIsFreeMode(true);
+    setTimeline([]);
+    setSpikeTelemetry(null);
+    telemetryRef.current = null;
+    startedAtRef.current = null;
+
+    try {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+      localStorage.removeItem(INSTALLATION_KEY);
+      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.removeItem("pulselab_tab_session_id");
+      }
+    } catch {
+      reportStorageError();
+    }
+
+    if (broadcast && sessionId) {
+      withdrawalChannelRef.current?.postMessage({ type: "withdraw", sessionId });
+    }
+
+    isSubmittingRef.current = false;
+
+    await Promise.allSettled([...writesRef.current]);
+    if (sessionId) {
+      await purgeSession(sessionId).catch(reportStorageError);
+      void refreshDeliveryCounts();
+      await Promise.allSettled([...bridgeWritesRef.current]);
+      try {
+        await resetBridgeSession(sessionId, { reason: "ethical_withdrawal", purge: true });
+      } catch {
+        setStorageError("Os dados foram expurgados no navegador; o computador confirma a exclusão.");
+      }
+    }
+  }
+
+  useEffect(() => {
+    const channel = new BroadcastChannel("pulselab-session-control");
+    withdrawalChannelRef.current = channel;
+    channel.onmessage = ({ data }) => {
+      if (data?.type === "withdraw" && data.sessionId === sessionId) {
+        void withdrawSession(false);
+      }
+    };
+    return () => {
+      channel.close();
+      withdrawalChannelRef.current = null;
+    };
+  }, [sessionId]);
 
   function eventBase(eventType, overrides = {}) {
     const now = Date.now();
@@ -743,7 +356,7 @@ export default function StudentPage() {
       _sequence: sequenceRef.current,
       _client_occurred_at: new Date(now).toISOString(),
       event_type: eventType,
-      ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
+      ...(labMode ? { is_synthetic: true } : {}),
       ...overrides
     };
   }
@@ -752,18 +365,20 @@ export default function StudentPage() {
     setTimeline((prev) =>
       prev.map((ev) => (ev.event_id === eventId ? { ...ev, _delivery_state: state } : ev))
     );
-    setResponses((prev) =>
-      prev.map((ev) => (ev.event_id === eventId ? { ...ev, _delivery_state: state } : ev))
-    );
-    void refreshPendingCount();
+    void refreshDeliveryCounts();
   }
 
   function persist(event) {
-    if (!assentAgreedRef.current || isFreeMode) return;
+    if (
+      !configResolvedRef.current ||
+      !isResearchActiveRef.current ||
+      isFreeModeRef.current ||
+      isWithdrawnRef.current
+    ) return;
     void trackWrite(saveEvent(event)).then(() => {
       void refreshDeliveryCounts();
     }).catch(reportStorageError);
-    void trackBridgeWrite(notifyBridgeEvent(event));
+    void trackBridgeWrite(notifyBridgeEvent(event, isResearchActiveRef.current));
     if (typeof navigator !== "undefined" && navigator.onLine) {
       void syncSingleEvent(event).then((result) => {
         if (result && result.success === true) {
@@ -777,7 +392,12 @@ export default function StudentPage() {
   }
 
   function emitTimeline(eventType, overrides = {}) {
-    if (isFreeMode || !assentAgreedRef.current) return null;
+    if (
+      !configResolvedRef.current ||
+      !isResearchActiveRef.current ||
+      isFreeModeRef.current ||
+      isWithdrawnRef.current
+    ) return null;
     const sysMeta = getSystemMetadata();
     const event = eventBase(eventType, {
       _target_table: "research_session_events",
@@ -785,13 +405,15 @@ export default function StudentPage() {
       interval_mark: null,
       participant_id: null,
       participant_role: null,
-      activity_stage: null,
+      activity_stage: overrides.activity_stage || "oficina_coletiva",
       scheduled_at: null,
       details: {
         runtime: "browser_pwa",
         os: sysMeta.os,
         screen_resolution: sysMeta.screen_resolution,
-        ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
+        group_size: groupSize,
+        collective_unit: "bancada",
+        ...(labMode ? { is_synthetic: true } : {}),
         ...overrides.details
       },
       ...overrides
@@ -801,532 +423,247 @@ export default function StudentPage() {
     return event;
   }
 
-  function emitResponse(eventType, overrides = {}) {
-    if (isFreeMode || !assentAgreedRef.current) return null;
-    const sysMeta = getSystemMetadata();
-    const role = teamSize === 1 ? "individual" : "group";
-    const participantSuffix = "BANCADA";
-    const groupSize = teamSize;
+  useEffect(() => {
+    let isMounted = true;
 
-    const event = eventBase(eventType, {
-      _target_table: "research_events",
-      participant_id: `${groupId.slice(0, 8).toUpperCase()}-${participantSuffix}`,
-      participant_role: role,
-      response_status: overrides.response_status || "completed",
-      interval_mark: null,
-      group_size: groupSize,
-      activity_stage: null,
-      telemetry_window_title: `Res: ${sysMeta.screen_resolution}`,
-      telemetry_foreground_app: sysMeta.os,
-      ...(isSyntheticSessionRef.current || isSyntheticSession ? { is_synthetic: true } : {}),
-      ...overrides
-    });
-    setResponses((current) => [...current, event]);
-    persist(event);
-    return event;
-  }
+    async function resolveConfigAndSession() {
+      // 1. Retenção absoluta de 7 dias executada no mount
+      enforceAbsoluteRetention(7).catch(() => {});
+      void refreshDeliveryCounts();
 
-  async function captureSpikeTelemetry(stageLabel) {
-    if (isFreeMode || !assentAgreedRef.current) return { metrics: null, event: null };
-    try {
-      const generation = generationRef.current;
-      const metrics = await fetchBridgeSpikeMetrics();
-      if (generation !== generationRef.current || !assentAgreedRef.current || (isSubmittingRef.current && stageLabel !== "session_completed")) return { metrics: null, event: null };
-      if (metrics && metrics.project_saved !== false) {
-        telemetryRef.current = metrics;
-        setSpikeTelemetry(metrics);
-        const event = emitTimeline("spike_telemetry", {
-          activity_stage: stageLabel,
-          details: {
-            executable_blocks: metrics.executable_blocks,
-            top_level_stacks: metrics.top_level_stacks,
-            uses_motor: metrics.uses_motor,
-            uses_sensor: metrics.uses_sensor,
-            uses_loop: metrics.uses_loop,
-            uses_condition: metrics.uses_condition
-          }
-        });
-        return { metrics, event };
+      // 2. Busca configuração institucional do Bridge
+      const cfg = await fetchBridgeConfig();
+      if (!isMounted) return;
+
+      configResolvedRef.current = true;
+      setConfigResolved(true);
+
+      const authorized = isResearchAuthorized(cfg);
+      if (!authorized) {
+        // Configuração inválida ou ausente => Modo Livre interno, zero pesquisa!
+        // Não apaga indiscriminadamente sessões válidas de outra autorização ainda vigente,
+        // mas garante Modo Livre com zero transmissão e zero persistência de pesquisa.
+        setIsFreeMode(true);
+        isFreeModeRef.current = true;
+        setIsResearchActive(false);
+        isResearchActiveRef.current = false;
+        return;
       }
-      return { metrics: metrics || null, event: null };
-    } catch {
-      return { metrics: null, event: null };
-    }
-  }
 
-  function handleSaveContext(newContext) {
-    setContext(newContext);
-    try { localStorage.setItem(CONTEXT_KEY, JSON.stringify(newContext)); } catch { reportStorageError(); }
-    flash(`Região salva com sucesso: ${newContext.regional}!`);
-  }
+      // Configuração válida => ativa bancada coletiva de pesquisa
+      setIsFreeMode(false);
+      isFreeModeRef.current = false;
+      setIsResearchActive(true);
+      isResearchActiveRef.current = true;
+      setGroupSize(cfg.group_size);
 
-  function submitPre() {
-    if (!assentAgreedRef.current || isFreeMode || preAnswers.experience === null) return;
+      if (cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE") {
+        setContext((prev) => ({ ...prev, site_id: cfg.site_id }));
+      }
+      if (cfg.regional_hub) {
+        setContext((prev) => ({ ...prev, regional: cfg.regional_hub }));
+      }
+      if (cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA") {
+        setContext((prev) => ({ ...prev, school: cfg.school_code }));
+      }
+      if (cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA") {
+        setContext((prev) => ({ ...prev, workshop: cfg.workshop_code }));
+      }
+      if (cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA") {
+        setContext((prev) => ({ ...prev, class: cfg.class_code }));
+      }
+      if (cfg.activity_id) {
+        setContext((prev) => ({ ...prev, activity: cfg.activity_id }));
+      }
 
-    const activityStart = Date.now();
-    startedAtRef.current = activityStart;
-    setStartedAt(activityStart);
-
-    if (assentAgreedRef.current) {
+      // 3. Verifica sessão ativa salva para manter idempotência após reload na mesma aba
+      const rawSaved = readJson(ACTIVE_SESSION_KEY, null);
+      let isSameTab = false;
       try {
-        localStorage.setItem(INSTALLATION_KEY, installationId);
+        isSameTab =
+          typeof sessionStorage !== "undefined" &&
+          sessionStorage.getItem("pulselab_tab_session_id") === rawSaved?.sessionId;
       } catch {}
-    }
 
-    emitTimeline("session_started", {
-      activity_stage: "1. Introdução",
-      details: {
-        runtime: "browser_pwa",
-        team_role: teamSize === 1 ? "individual" : "group",
-        ethical_assent: assentAgreed,
-        participant_count: teamSize,
-        expected_checkpoints: []
-      }
-    });
+      // Apenas restaura se for a mesma sessão na mesma aba recarregada e salva recentemente (< 30 min)
+      const isFresh =
+        rawSaved?.savedAt &&
+        Date.now() - new Date(rawSaved.savedAt).getTime() < 30 * 60 * 1000;
 
-    emitResponse("pre", {
-      activity_stage: "1. Introdução",
-      prior_robotics: preAnswers.experience,
-      response_status: "completed"
-    });
+      const restored = validateRestoredSession(rawSaved, { maxAgeMs: 30 * 60 * 1000 });
 
-    setActivityStartedAt(activityStart);
-    setElapsedMs(0);
-    setActivityStage(2);
-    void trackBridgeWrite(notifyBridgeSession(sessionId, activityStart, [], assentAgreedRef.current));
-    emitTimeline("phase_completed", { activity_stage: "1. Início" });
-    emitTimeline("phase_transition", {
-      activity_stage: "2. Oficina Prática",
-      details: { runtime: "browser_pwa", from_stage: "1. Início", to_stage: "2. Oficina Prática" }
-    });
-    emitTimeline("activity_started", {
-      activity_stage: "2. Oficina Prática",
-      details: { runtime: "browser_pwa", stage: "pratica" }
-    });
-    void captureSpikeTelemetry("pratica_start");
-    setScreen("activity");
-  }
-
-  async function handleDeclinePre() {
-    assentAgreedRef.current = false;
-    setAssentAgreedState(false);
-    setIsFreeMode(true);
-    try {
-      await purgeSession(sessionId);
-    } catch (e) {
-      console.warn("Erro ao expurgar sessão no IndexedDB:", e);
-    }
-    try {
-      localStorage.removeItem(INSTALLATION_KEY);
-      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-    } catch {}
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-    try {
-      await resetBridgeSession(sessionId, { reason: "ethical_refusal", purge: true });
-    } catch {
-      setStorageError("Nenhum dado novo será guardado. O computador ainda precisa confirmar a limpeza local; chamem o educador e mantenham o PulseLab aberto.");
-    }
-    setIsFreeMode(true);
-    assentAgreedRef.current = false;
-    setAssentAgreedState(false);
-    setTimeline([]);
-    setResponses([]);
-    setSpikeTelemetry(null);
-    const activityStart = Date.now();
-    setActivityStartedAt(activityStart);
-    setElapsedMs(0);
-    setActivityStage(2);
-    setScreen("activity");
-
-  }
-
-  function handleAdvanceToFinalChallenge() {
-    const activityElapsed = activityStartedAt ? Math.max(0, Date.now() - activityStartedAt) : 0;
-    setElapsedMs(activityElapsed);
-    if (!isFreeMode && assentAgreedRef.current) {
-      emitTimeline("phase_completed", {
-        activity_stage: "2. Oficina Prática",
-        details: { elapsed_ms: activityElapsed }
-      });
-      emitTimeline("phase_transition", {
-        activity_stage: "3. Desafio da Corrida",
-        details: {
-          runtime: "browser_pwa",
-          from_stage: "2. Oficina Prática",
-          to_stage: "3. Desafio da Corrida",
-          elapsed_ms: activityElapsed
+      if (restored && restored.sessionId && isSameTab && isFresh) {
+        // Reload idempotente da mesma bancada em andamento sem duplicar session_started
+        setSessionId(restored.sessionId);
+        setGroupId(restored.groupId || restored.sessionId);
+        setStartedAt(restored.startedAt);
+        startedAtRef.current = restored.startedAt;
+        setTimeline(Array.isArray(restored.timeline) ? restored.timeline : []);
+        sessionStartedEmittedRef.current = true;
+        if (restored.spikeTelemetry) {
+          setSpikeTelemetry(restored.spikeTelemetry);
+          telemetryRef.current = restored.spikeTelemetry;
         }
-      });
-      void captureSpikeTelemetry("final_challenge_start");
-    }
-    setScreen("post");
+        return;
+      }
 
-  }
+      // Se havia sessão antiga de outro grupo ou stale, descarta da superfície infantil e inicia estado neutro limpo
+      if (rawSaved) {
+        try {
+          localStorage.removeItem(ACTIVE_SESSION_KEY);
+        } catch {}
+      }
 
-  async function submitPost(answersOverride = null) {
-    if (isSubmittingRef.current) return;
-    isSubmittingRef.current = true;
-    setSubmitting(true);
-    const generation = generationRef.current;
-    const isSyntheticEvent = answersOverride && (
-      answersOverride.nativeEvent ||
-      typeof answersOverride.preventDefault === "function" ||
-      typeof answersOverride.stopPropagation === "function" ||
-      Boolean(answersOverride.target)
-    );
-    const answers = (!isSyntheticEvent && answersOverride) ? answersOverride : postAnswers;
+      // 4. Inicia sessão coletiva automaticamente se ainda não iniciada
+      if (!sessionStartedEmittedRef.current) {
+        const newSessionId = createUuid();
+        const newGroupId = createUuid();
+        const now = Date.now();
+        setSessionId(newSessionId);
+        setGroupId(newGroupId);
+        setStartedAt(now);
+        startedAtRef.current = now;
+        sessionStartedEmittedRef.current = true;
 
-    if (!assentAgreedRef.current || isFreeMode) {
-      localStorage.removeItem(ACTIVE_SESSION_KEY);
-      setScreen("finished");
-      return;
-    }
+        try {
+          localStorage.setItem(INSTALLATION_KEY, installationId);
+          if (typeof sessionStorage !== "undefined") {
+            sessionStorage.setItem("pulselab_tab_session_id", newSessionId);
+          }
+        } catch {}
 
-    const finalEvents = [];
-
-    const missionPerf = answers.raceResult === "success" ? 1 : (answers.raceResult === "partial" || answers.raceResult === "tech_failure" ? 0 : null);
-    const primaryIssue = answers.raceResult === "tech_failure" ? "technical" : (answers.raceResult === "not_observed" ? "not_observed" : "none");
-
-    const resolvedExperiences = resolveMemberExperiences(teamSize, memberAssents, answers.memberExperiences);
-
-    finalEvents.push(emitResponse("post", {
-      activity_stage: "3. Desafio da Corrida",
-      mission_performance: missionPerf,
-      primary_issue: primaryIssue,
-      knowledge_answers: {
-        target_constructs: ["experiencia_participacao", "resultados_praticos_bancada", "apoio_instrutor"],
-        member_experiences: resolvedExperiences,
-        race_result: answers.raceResult,
-        race_time_seconds: answers.raceTimeSeconds ? parseFloat(answers.raceTimeSeconds) : null,
-        assembly_result: answers.assemblyResult,
-        quiz_completed: answers.quizCompleted,
-        support_level: answers.supportLevel
-      },
-      response_status: "completed"
-    }));
-
-    // Eixo 1: Registra a experiência individual de cada aluno da bancada que avaliou ou optou por não responder a avaliação
-    for (const member of resolvedExperiences) {
-      if (member.rating !== null || member.skipped) {
-        finalEvents.push(emitTimeline("experience_recorded", {
-          activity_stage: "3. Desafio da Corrida",
+        const startEvent = {
+          event_id: createUuid(),
+          session_id: newSessionId,
+          dyad_id: newGroupId,
+          group_id: newGroupId,
+          installation_id: installationId,
+          site_id: cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE" ? cfg.site_id : (context.site_id || "Polo-Nordeste"),
+          regional_hub: cfg.regional_hub || context.regional || "Nordeste",
+          school_code: cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA" ? cfg.school_code : "geral",
+          workshop_code: cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA" ? cfg.workshop_code : "oficina-spike",
+          class_code: cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA" ? cfg.class_code : "turma-geral",
+          activity_id: cfg.activity_id || context.activity || "atividade-01-spike",
+          computer_id: getComputerId(installationId),
+          protocol_version: PROTOCOL_VERSION,
+          occurred_at: new Date(now).toISOString(),
+          elapsed_ms: 0,
+          client_version: CLIENT_VERSION,
+          config_version: "student-pwa-v2",
+          config_hash: CONFIG_HASH,
+          _delivery_state: "queued",
+          _sequence: 1,
+          _client_occurred_at: new Date(now).toISOString(),
+          _target_table: "research_session_events",
+          event_type: "session_started",
+          severity: "info",
+          interval_mark: null,
           participant_id: null,
+          participant_role: null,
+          activity_stage: "oficina_coletiva",
+          scheduled_at: null,
           details: {
             runtime: "browser_pwa",
-            member_index: member.memberIndex,
-            rating: member.rating,
-            skipped: Boolean(member.skipped)
+            group_size: cfg.group_size,
+            research_authorization_version: cfg.research_authorization_version,
+            collective_unit: "bancada",
+            ...(labMode ? { is_synthetic: true } : {})
           }
-        }));
+        };
+
+        sequenceRef.current = 1;
+        setTimeline([startEvent]);
+
+        void trackWrite(saveEvent(startEvent)).then(() => {
+          void refreshDeliveryCounts();
+        }).catch(reportStorageError);
+
+        void trackBridgeWrite(notifyBridgeSession(newSessionId, now, [], true));
+        void trackBridgeWrite(notifyBridgeEvent(startEvent, true));
+
+        const snapshot = {
+          sessionId: newSessionId,
+          session_id: newSessionId,
+          groupId: newGroupId,
+          group_id: newGroupId,
+          installation_id: installationId,
+          startedAt: now,
+          started_at: new Date(now).toISOString(),
+          group_size: cfg.group_size,
+          teamSize: cfg.group_size,
+          isFreeMode: false,
+          timeline: [startEvent],
+          status: "in_progress",
+          savedAt: new Date().toISOString()
+        };
+
+        try {
+          localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
+        } catch {}
+
+        void trackWrite(saveSession(snapshot)).catch(reportStorageError);
       }
     }
 
-    if (answers.raceResult !== null) {
-      finalEvents.push(emitTimeline("race_recorded", {
-        activity_stage: "3. Desafio da Corrida",
-        details: {
-          runtime: "browser_pwa",
-          race_result: answers.raceResult,
-          race_time_seconds: answers.raceTimeSeconds ? parseFloat(answers.raceTimeSeconds) : null
-        }
-      }));
-    }
+    resolveConfigAndSession();
 
-    finalEvents.push(emitTimeline("rubric_completed", {
-      activity_stage: "3. Desafio da Corrida",
-      details: {
-        runtime: "browser_pwa",
-        assembly_result: answers.assemblyResult,
-        quiz_completed: answers.quizCompleted,
-        support_level: answers.supportLevel
-      }
-    }));
-
-    finalEvents.push(emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" }));
-
-    // Ordem estrita: a telemetria terminal entra ANTES do encerramento final da sessão
-    const { metrics: rawFinalMetrics, event: finalTelemetryEvent } = await captureSpikeTelemetry("session_completed");
-    if (generation !== generationRef.current || !assentAgreedRef.current) return;
-    if (finalTelemetryEvent) {
-      finalEvents.push(finalTelemetryEvent);
-    }
-
-    finalEvents.push(emitTimeline("session_completed", {
-      activity_stage: "completed",
-      details: { runtime: "browser_pwa" }
-    }));
-
-    const { effectiveTelemetry, technicalStatus } = validateFinalTelemetry(rawFinalMetrics, spikeTelemetry);
-
-    const fullSession = {
-      session_id: sessionId,
-      group_id: groupId,
-      installation_id: installationId,
-      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
-      regional_hub: context.regional || "Nordeste",
-      school_code: context.school || "geral",
-      workshop_code: context.workshop || "oficina-spike",
-      class_code: context.class || "turma-geral",
-      activity_id: context.activity || "atividade-01-spike",
-      started_at: new Date(startedAt).toISOString(),
-      completed_at: new Date().toISOString(),
-      duration_seconds: Math.round(elapsedMs / 1000),
-      is_synthetic: isSyntheticSessionRef.current,
-      group_size: teamSize,
-      team_size: teamSize,
-      team_role: teamSize === 1 ? "individual" : "group",
-      status: "completed",
-      pre_answers: preAnswers,
-      post_answers: answers,
-      events: [...timeline, ...responses, ...finalEvents],
-      spike_telemetry: effectiveTelemetry,
-      telemetry_status: technicalStatus
-    };
-
-    await Promise.allSettled([...writesRef.current]);
-    if (generation !== generationRef.current || !assentAgreedRef.current) return;
-    await trackWrite(saveSession(fullSession)).catch(reportStorageError);
-    if (generation !== generationRef.current || !assentAgreedRef.current) return;
-    void trackBridgeWrite(notifyBridgeSessionSave(fullSession, assentAgreedRef.current));
-
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-    void runSync(false);
-    setScreen("finished");
-  }
-
-  async function handleDeclinePost() {
-    if (isSubmittingRef.current) return;
-    isSubmittingRef.current = true;
-    setSubmitting(true);
-    const generation = generationRef.current;
-    if (!assentAgreedRef.current || isFreeMode) {
-      try {
-        localStorage.removeItem(INSTALLATION_KEY);
-        localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-      } catch {}
-      localStorage.removeItem(ACTIVE_SESSION_KEY);
-      setScreen("finished");
-      return;
-    }
-
-    setPostAnswers(POST_DEFAULT);
-    const finalEvents = [];
-    finalEvents.push(emitResponse("post", {
-      activity_stage: "3. Desafio da Corrida",
-      response_status: "declined"
-    }));
-    finalEvents.push(emitTimeline("phase_completed", { activity_stage: "3. Desafio da Corrida" }));
-
-    // Ordem estrita: a telemetria terminal entra ANTES do encerramento final da sessão
-    const { metrics: rawFinalMetrics, event: finalTelemetryEvent } = await captureSpikeTelemetry("session_completed");
-    if (generation !== generationRef.current || !assentAgreedRef.current) return;
-    if (finalTelemetryEvent) {
-      finalEvents.push(finalTelemetryEvent);
-    }
-
-    finalEvents.push(emitTimeline("session_completed", {
-      activity_stage: "completed",
-      details: { runtime: "browser_pwa", response_status: "declined" }
-    }));
-
-    const { effectiveTelemetry, technicalStatus } = validateFinalTelemetry(rawFinalMetrics, spikeTelemetry);
-
-    const fullSession = {
-      session_id: sessionId,
-      group_id: groupId,
-      installation_id: installationId,
-      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
-      regional_hub: context.regional || "Nordeste",
-      school_code: context.school || "geral",
-      workshop_code: context.workshop || "oficina-spike",
-      class_code: context.class || "turma-geral",
-      activity_id: context.activity || "atividade-01-spike",
-      started_at: new Date(startedAt).toISOString(),
-      completed_at: new Date().toISOString(),
-      duration_seconds: Math.round(elapsedMs / 1000),
-      is_synthetic: isSyntheticSessionRef.current,
-      group_size: teamSize,
-      team_size: teamSize,
-      team_role: teamSize === 1 ? "individual" : "group",
-      status: "declined",
-      pre_answers: preAnswers,
-      post_answers: POST_DEFAULT,
-      events: [...timeline, ...responses, ...finalEvents],
-      spike_telemetry: effectiveTelemetry,
-      telemetry_status: technicalStatus
-    };
-
-    await Promise.allSettled([...writesRef.current]);
-    if (generation !== generationRef.current || !assentAgreedRef.current) return;
-    await trackWrite(saveSession(fullSession)).catch(reportStorageError);
-    if (generation !== generationRef.current || !assentAgreedRef.current) return;
-    void trackBridgeWrite(notifyBridgeSessionSave(fullSession, assentAgreedRef.current));
-
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-    void runSync(false);
-    setScreen("finished");
-  }
-
-  async function prepareNextWorkshop() {
-    isSubmittingRef.current = false;
-    setSubmitting(false);
-    setStorageError("");
-    generationRef.current += 1;
-    try {
-      localStorage.removeItem(INSTALLATION_KEY);
-      localStorage.removeItem(LEGACY_INSTALLATION_KEY);
-    } catch {}
-    localStorage.removeItem(ACTIVE_SESSION_KEY);
-    void resetBridgeSession(sessionId, { reason: "prepare_next", purge: false, completed: true });
-    const nextSessionId = createUuid();
-    const nextGroupId = createUuid();
-    setSessionId(nextSessionId);
-    setGroupId(nextGroupId);
-    setInstallationId(createUuid());
-    setStartedAt(Date.now());
-    setActivityStartedAt(null);
-    setElapsedMs(0);
-    setActivityStage(1);
-    setTimeline([]);
-    setResponses([]);
-    setSpikeTelemetry(null);
-    telemetryRef.current = null;
-    isSyntheticSessionRef.current = labMode;
-    setIsSyntheticSession(labMode);
-    setIsFreeMode(false);
-    setPreAnswers(PRE_DEFAULT);
-    setPostAnswers(POST_DEFAULT);
-    assentAgreedRef.current = false;
-    setAssentAgreedState(false);
-    const initialAssents = { 1: false, 2: false, 3: false, 4: false };
-    memberAssentsRef.current = initialAssents;
-    setMemberAssentsState(initialAssents);
-    setTeamSize(2);
-    sequenceRef.current = 0;
-    setScreen("pre");
-
-  }
-
-  function autoFillCurrentStep() {
-    if (!labMode) return;
-    isSyntheticSessionRef.current = true;
-    setIsSyntheticSession(true);
-    if (screen === "pre") {
-      setPreAnswers({ experience: 2 });
-      flash("Início preenchido com dados sintéticos de teste.");
-    } else if (screen === "activity") {
-      handleAdvanceToFinalChallenge();
-    } else if (screen === "post") {
-      const synthetic = {
-        experience: 5,
-        experienceSkipped: false,
-        raceResult: "success",
-        raceTimeSeconds: "12.4",
-        assemblyResult: "complete",
-        quizCompleted: "participated",
-        supportLevel: "occasional"
-      };
-      setPostAnswers(synthetic);
-      submitPost(synthetic);
-      flash("Avaliação preenchida com sucesso e oficina concluída!");
-    }
-  }
-
-  function downloadSession() {
-    const rawData = {
-      session_id: sessionId,
-      group_id: groupId,
-      installation_id: installationId,
-      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
-      regional_hub: context.regional || "Nordeste",
-      school_code: context.school || "geral",
-      workshop_code: context.workshop || "oficina-spike",
-      class_code: context.class || "turma-geral",
-      activity_id: context.activity || "atividade-01-spike",
-      started_at: new Date(startedAt).toISOString(),
-      completed_at: new Date().toISOString(),
-      duration_seconds: Math.round(elapsedMs / 1000),
-      is_synthetic: isSyntheticSessionRef.current,
-      team_size: teamSize,
-      team_role: teamSize === 1 ? "individual" : "group",
-      status: screen === "finished" ? "completed" : "in_progress",
-      pre_answers: preAnswers,
-      post_answers: postAnswers,
-      spike_telemetry: spikeTelemetry,
-      telemetry_status: spikeTelemetry ? (spikeTelemetry.project_saved !== false ? "ok" : "project_not_saved") : "no_telemetry",
-      events: allEvents
-    };
-
-    const validated = downloadSessionData(rawData, { isFreeMode, assentAgreed });
-    if (!validated) {
-      flash("Exportação de dados bloqueada no Modo Livre ou sem assentimento ético.");
-      return;
-    }
-
-    const payload = JSON.stringify(validated, null, 2);
-    const blob = new Blob([payload], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `sessao-${sessionId.slice(0, 8)}.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
-    flash("💾 Sessão exportada com sucesso em arquivo .json!");
-  }
-
-  async function runSync(showFeedback = false) {
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    try {
-      const result = await flushPendingEvents((syncedId) => {
-        updateEventDeliveryState(syncedId, "delivered");
-      });
-      await refreshPendingCount();
-      if (result.synced > 0 && showFeedback) {
-        flash(`Sincronizados ${result.synced} registro(s) com a nuvem da pesquisa.`);
-      }
-    } catch {
-      // Falha silenciosa de rede
-    }
-  }
-
-  useEffect(() => {
-    const handleOnline = () => {
-      void runSync(false);
-    };
-
-    window.addEventListener("online", handleOnline);
-
-    // Sincroniza eventos pendentes logo na inicialização
-    void runSync(false);
-
-    // Varredura periódica a cada 20 segundos
-    const syncTimer = window.setInterval(() => {
-      if (typeof navigator !== "undefined" && navigator.onLine) {
-        void runSync(false);
-      }
-    }, 20000);
+    // Expurgador periódico de hora em hora
+    const retentionInterval = setInterval(() => {
+      enforceAbsoluteRetention(7).catch(() => {});
+    }, 60 * 60 * 1000);
 
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.clearInterval(syncTimer);
+      isMounted = false;
+      clearInterval(retentionInterval);
     };
   }, []);
 
+  // Monitora e atualiza snapshot coletivo de sessão
   useEffect(() => {
-    if (screen !== "activity" || !activityStartedAt || isFreeMode || !assentAgreedRef.current) return undefined;
-    const tick = () => {
-      const nextElapsed = Math.max(0, Date.now() - activityStartedAt);
-      setElapsedMs(nextElapsed);
-    };
-    tick();
-    const timer = window.setInterval(tick, 1000);
+    if (
+      !configResolvedRef.current ||
+      !isResearchActiveRef.current ||
+      isFreeModeRef.current ||
+      isWithdrawnRef.current ||
+      !sessionId
+    ) return;
 
-    // Coleta silenciosa e periódica da telemetria do LEGO SPIKE a cada 10 segundos
+    const snapshot = {
+      sessionId,
+      session_id: sessionId,
+      groupId,
+      group_id: groupId,
+      installation_id: installationId,
+      startedAt,
+      started_at: startedAt ? new Date(startedAt).toISOString() : null,
+      group_size: groupSize,
+      teamSize: groupSize,
+      timeline,
+      spikeTelemetry,
+      isFreeMode: false,
+      status: "in_progress",
+      savedAt: new Date().toISOString()
+    };
+
+    try {
+      localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
+    } catch {}
+
+    void trackWrite(saveSession(snapshot)).catch(reportStorageError);
+    void trackBridgeWrite(notifyBridgeSessionSave(snapshot, isResearchActiveRef.current));
+  }, [timeline, spikeTelemetry, sessionId, groupId, startedAt, groupSize]);
+
+  // Coleta periódica de telemetria estrutural do robô LEGO SPIKE
+  useEffect(() => {
+    if (!configResolved || !isResearchActive || isFreeMode || !sessionId) return undefined;
+
     let cancelled = false;
     const generation = generationRef.current;
+
     const pollSpike = async () => {
-      if (isFreeMode || !assentAgreedRef.current || isSubmittingRef.current) return;
+      if (cancelled || generation !== generationRef.current || !isResearchActiveRef.current || isFreeModeRef.current || isWithdrawnRef.current || isSubmittingRef.current) return;
       const metrics = await fetchBridgeSpikeMetrics();
-      if (cancelled || generation !== generationRef.current || !assentAgreedRef.current || isSubmittingRef.current) return;
+      if (cancelled || generation !== generationRef.current || !isResearchActiveRef.current || isFreeModeRef.current || isWithdrawnRef.current || isSubmittingRef.current) return;
       if (metrics && metrics.project_saved !== false) {
         const previous = telemetryRef.current;
         const first = !previous || (!previous.executable_blocks && metrics.executable_blocks > 0);
@@ -1335,10 +672,13 @@ export default function StudentPage() {
             activity_stage: first ? "primeira_programacao_detectada" : "atualizacao_codigo_spike",
             details: {
               executable_blocks: metrics.executable_blocks,
+              top_level_stacks: metrics.top_level_stacks,
               uses_motor: metrics.uses_motor,
               uses_sensor: metrics.uses_sensor,
+              uses_loop: metrics.uses_loop,
+              uses_condition: metrics.uses_condition,
               first_coding_detected: first,
-              elapsed_ms: Math.max(0, Date.now() - activityStartedAt)
+              elapsed_ms: startedAtRef.current ? Math.max(0, Date.now() - startedAtRef.current) : 0
             }
           });
         }
@@ -1352,99 +692,187 @@ export default function StudentPage() {
 
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
       window.clearTimeout(firstCheck);
       window.clearInterval(spikeInterval);
     };
-  }, [activityStartedAt, screen, isFreeMode, assentAgreed]);
+  }, [configResolved, isResearchActive, isFreeMode, sessionId]);
 
+  // Sincronização em background store-and-forward fail-closed
   useEffect(() => {
-    if (screen === "finished" || screen === "pre" || !assentAgreedRef.current || isFreeMode || isSubmittingRef.current) return;
-    const snapshot = {
-      sessionId,
-      groupId,
-      installation_id: installationId,
-      context,
-      startedAt,
-      activityStartedAt,
-      elapsedMs,
-      activityStage,
-      screen,
-      timeline,
-      responses,
-      spikeTelemetry,
-      preAnswers,
-      postAnswers,
-      teamSize,
-      group_size: teamSize,
-      team_size: teamSize,
-      team_role: teamSize === 1 ? "individual" : "group",
-      currentRole,
-      assentAgreed,
-      memberAssents: memberAssentsRef.current,
-      sequence: sequenceRef.current,
-      isSyntheticSession: isSyntheticSessionRef.current,
-      savedAt: new Date().toISOString()
+    if (!configResolved || !isResearchActive || isFreeMode) {
+      return undefined;
+    }
+
+    const handleOnline = () => {
+      if (
+        !configResolvedRef.current ||
+        !isResearchActiveRef.current ||
+        isFreeModeRef.current ||
+        isWithdrawnRef.current
+      ) {
+        return;
+      }
+      void runSync();
     };
-    try { localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot)); } catch { reportStorageError(); }
-    void trackWrite(saveSession({ session_id: sessionId, status: "in_progress", ...snapshot })).catch(reportStorageError);
-  }, [activityStartedAt, activityStage, assentAgreed, context, currentRole, elapsedMs, groupId, installationId, isFreeMode, memberAssents, postAnswers, preAnswers, responses, screen, sessionId, spikeTelemetry, startedAt, teamSize, timeline]);
 
-  useEffect(() => {
-    document.querySelector("[data-stage-heading]")?.focus();
-  }, [screen, isFreeMode]);
+    window.addEventListener("online", handleOnline);
+    void runSync();
 
-  let content;
+    const syncTimer = window.setInterval(() => {
+      if (
+        configResolvedRef.current &&
+        isResearchActiveRef.current &&
+        !isFreeModeRef.current &&
+        !isWithdrawnRef.current &&
+        typeof navigator !== "undefined" &&
+        navigator.onLine
+      ) {
+        void runSync();
+      }
+    }, 20000);
 
-  if (screen === "pre") {
-    content = <PreScreen answers={preAnswers} setAnswers={setPreAnswers} onSubmit={submitPre} onDecline={handleDeclinePre}
-      teamSize={teamSize} setTeamSize={handleTeamSizeChange} memberAssents={memberAssents} setMemberAssents={setMemberAssents} />;
-  } else if (screen === "activity") {
-    content = <ActivityScreen onAdvanceToFinalChallenge={handleAdvanceToFinalChallenge} isFreeMode={isFreeMode} />;
-  } else if (screen === "post") {
-    content = <PostScreen answers={postAnswers} setAnswers={setPostAnswers} onSubmit={submitPost} onDecline={handleDeclinePost}
-      teamSize={teamSize} memberAssents={memberAssents} isFreeMode={isFreeMode} submitting={submitting} />;
-  } else {
-    content = <FinishedScreen onRestart={prepareNextWorkshop} isFreeMode={isFreeMode} />;
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.clearInterval(syncTimer);
+    };
+  }, [configResolved, isResearchActive, isFreeMode]);
+
+  async function runSync() {
+    if (
+      !configResolvedRef.current ||
+      !isResearchActiveRef.current ||
+      isFreeModeRef.current ||
+      isWithdrawnRef.current
+    ) {
+      return;
+    }
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
+    try {
+      await flushPendingEvents((syncedId) => {
+        updateEventDeliveryState(syncedId, "delivered");
+      });
+      await refreshDeliveryCounts();
+    } catch {
+      // Falha de rede silenciosa
+    }
   }
 
-  return (
-    <main className="app-shell student-app">
-      <header className="student-header">
-        <span className="student-brand">
-          <svg className="student-brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
-            <path d="M3 17h6l4-9 6 16 4-7h6" />
-            <circle cx="3" cy="17" r="2" /><circle cx="29" cy="17" r="2" />
-          </svg>
-          <span><strong>PulseLab</strong><span className="student-brand__caption">Oficina de robótica</span></span>
-        </span>
-        {screen !== "pre" && !isFreeMode && <button className="button button--ghost withdrawal-button" type="button" onClick={withdrawSession}>Parar de participar e apagar meus dados</button>}
-      </header>
-      {storageError && <div className="storage-notice" role="alert">{storageError}</div>}
-      <div className="student-content">{content}</div>
-      <aside className="educator-area" aria-label="Área do educador">
-        <details key={`${screen}-${sessionId}`}>
-          <summary>Área do educador</summary>
-          <div className="educator-tools">
-            <p>oficina de robótica · v2.2.2</p>
-            <p>Registros no dispositivo: {dbTotalStoredCount}. Pendentes: {dbPendingCount}. Em quarentena: {dbQuarantinedCount}.</p>
-            <p>A consolidação dos dados é feita pelo pesquisador. Internet não é necessária para a aula.</p>
-            <div className="action-row">
-              <button className="button button--ghost" onClick={() => setShowContextModal(true)} type="button">Configurar oficina</button>
-              {!isFreeMode && assentAgreed && screen !== "pre" && <button className="button button--ghost" onClick={downloadSession} type="button">Baixar cópia local (.json)</button>}
-              {isFreeMode && screen !== "finished" && <button className="button button--ghost" onClick={prepareNextWorkshop} type="button">Preparar nova oficina</button>}
-            </div>
-            {labMode && <section aria-label="Laboratório" className="lab-tools">
-              <h2>Laboratório · dados sintéticos</h2>
-              <button className="button button--ghost" onClick={autoFillCurrentStep} type="button">Preencher teste</button>
-              <EvidencePanel events={allEvents} />
-            </section>}
+  // Ações exclusivas para diagnóstico no Modo Laboratório (?lab=1)
+  function triggerSyntheticSpike() {
+    if (!labMode) return;
+    const synthMetrics = {
+      executable_blocks: Math.floor(Math.random() * 20) + 5,
+      top_level_stacks: 2,
+      uses_motor: true,
+      uses_sensor: true,
+      uses_loop: true,
+      uses_condition: false,
+      project_saved: true
+    };
+    setSpikeTelemetry(synthMetrics);
+    telemetryRef.current = synthMetrics;
+    emitTimeline("spike_telemetry", {
+      activity_stage: "simulacao_laboratorio",
+      details: synthMetrics
+    });
+    flash("Telemetria SPIKE sintética simulada com sucesso.");
+  }
+
+  function downloadSession() {
+    if (!labMode) return;
+    const rawData = {
+      session_id: sessionId,
+      group_id: groupId,
+      installation_id: installationId,
+      site_id: context.site_id,
+      regional_hub: context.regional,
+      school_code: context.school,
+      workshop_code: context.workshop,
+      class_code: context.class,
+      activity_id: context.activity,
+      started_at: startedAt ? new Date(startedAt).toISOString() : null,
+      group_size: groupSize,
+      is_free_mode: isFreeMode,
+      spike_telemetry: spikeTelemetry,
+      events: timeline
+    };
+
+    const validated = downloadSessionData(rawData, {
+      isFreeMode,
+      researchAuthorized: isResearchActive
+    });
+    if (!validated) {
+      flash("Exportação bloqueada no Modo Livre ou sem autorização válida.");
+      return;
+    }
+
+    const payload = JSON.stringify(validated, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `sessao-bancada-${(sessionId || "vazia").slice(0, 8)}.json`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    flash("Sessão exportada em JSON.");
+  }
+
+  // ROTA NORMAL SILENCIOSA DE ALUNOS:
+  // Não mostra formulários, perguntas, cartões de etapas, botões, Área do Educador, IDs, status técnicos ou avaliações.
+  // Renderiza somente o fallback não interativo: “Oficina de robótica em andamento. Use o aplicativo LEGO SPIKE.”
+  if (!labMode) {
+    return (
+      <main className="app-shell student-app student-app--silent">
+        <div className="silent-bench-container">
+          <div className="silent-bench-icon" aria-hidden="true">
+            <svg className="student-brand__mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false" width="48" height="48">
+              <path d="M3 17h6l4-9 6 16 4-7h6" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <circle cx="3" cy="17" r="2" fill="currentColor" />
+              <circle cx="29" cy="17" r="2" fill="currentColor" />
+            </svg>
           </div>
-        </details>
+          <h1 className="silent-bench-message">Oficina de robótica em andamento. Use o aplicativo LEGO SPIKE.</h1>
+          <p className="silent-bench-guidance">Monte, programe e teste o seu robô na bancada.</p>
+          <div className="silent-bench-status" role="status" aria-live="polite">
+            <span className="silent-bench-status__dot" aria-hidden="true" />
+            <span>Oficina pronta</span>
+          </div>
+          {storageError && <div className="silent-bench-notice" role="status">{storageError}</div>}
+        </div>
+      </main>
+    );
+  }
+
+  // DIAGNÓSTICO SINTÉTICO SEPARADO PARA LABORATÓRIO (?lab=1)
+  return (
+    <main className="app-shell student-app student-app--lab">
+      <div className="silent-bench-container">
+        <h1 className="silent-bench-message">Oficina de robótica em andamento. Use o aplicativo LEGO SPIKE.</h1>
+      </div>
+      <aside className="lab-diagnostic" aria-label="Diagnóstico Sintético">
+        <div className="lab-diagnostic__card">
+          <span className="eyebrow">Diagnóstico de Laboratório</span>
+          <h2>Modo de Inspeção Sintética (?lab=1)</h2>
+          <p>oficina de robótica · v2.2.3</p>
+          <div className="lab-diagnostic__status">
+            <div>Configuração: {configResolved ? (isResearchActive ? "Pesquisa autorizada" : "Modo Livre (sem pesquisa)") : "Resolvendo..."}</div>
+            <div>Bancada: Coletiva (Tamanho: {groupSize})</div>
+            <div>Sessão ID: {sessionId || "nenhuma"}</div>
+            <div>Eventos na sessão: {timeline.length}</div>
+            <div>IndexedDB: {dbTotalStoredCount} registros ({dbPendingCount} pendentes, {dbQuarantinedCount} quarentena)</div>
+            {spikeTelemetry && (
+              <div>SPIKE: {spikeTelemetry.executable_blocks ?? 0} blocos executáveis | Motores: {spikeTelemetry.uses_motor ? "Sim" : "Não"}</div>
+            )}
+          </div>
+          <div className="action-row">
+            <button className="button button--ghost" type="button" onClick={triggerSyntheticSpike}>Simular Telemetria SPIKE</button>
+            <button className="button button--ghost" type="button" onClick={() => void withdrawSession()}>Testar Retirada Ética</button>
+            {isResearchActive && <button className="button button--ghost" type="button" onClick={downloadSession}>Exportar Dados da Sessão (.json)</button>}
+          </div>
+          <EvidencePanel events={timeline} />
+        </div>
       </aside>
-      <RegionMetadataModal isOpen={showContextModal} onClose={() => setShowContextModal(false)} context={context}
-        onSave={handleSaveContext} computerId={getComputerId(installationId)} systemMetadata={getSystemMetadata()} />
       {toast && <div className="toast" role="status">{toast}</div>}
+      {storageError && <div className="storage-notice" role="alert">{storageError}</div>}
     </main>
   );
 }

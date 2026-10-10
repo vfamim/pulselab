@@ -64,7 +64,7 @@ test("Retenção absoluta 7 dias: student-page.jsx executa expurgo periódico e 
   );
 });
 
-test("Zero persistência antes do assentimento: student-page.jsx protege localStorage", () => {
+test("Zero persistência antes da autorização: student-page.jsx protege localStorage", () => {
   const pageContent = fs.readFileSync(studentPagePath, "utf-8");
 
   // getInstallationId não grava no localStorage
@@ -76,26 +76,28 @@ test("Zero persistência antes do assentimento: student-page.jsx protege localSt
     "getInstallationId NÃO deve chamar localStorage.setItem em seu corpo"
   );
 
-  // No mount, limpa resquício se não assentido
+  // Sem autorização válida ou config inválida, ativa Modo Livre sem apagar indiscriminadamente sessões ativas vigentes
   assert.match(
     pageContent,
-    /if \(!savedSession \|\| !isAllAssented\(savedSession\.teamSize, savedSession\.memberAssents\)\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
-    "Deve remover INSTALLATION_KEY no mount se não houver sessão assentida"
+    /if \(!authorized\)[\s\S]*?setIsFreeMode\(true\)[\s\S]*?return;/,
+    "Deve ativar Modo Livre e retornar sem apagar indiscriminadamente ACTIVE_SESSION_KEY se a configuração não for autorizada"
+  );
+  const unauthBlockMatch = pageContent.match(/if \(!authorized\)[\s\S]*?return;/);
+  assert.ok(unauthBlockMatch, "Bloco if (!authorized) deve ser encontrado");
+  assert.doesNotMatch(
+    unauthBlockMatch[0],
+    /localStorage\.removeItem\(ACTIVE_SESSION_KEY\)/,
+    "if (!authorized) NÃO deve apagar indiscriminadamente ACTIVE_SESSION_KEY sem decisão explícita"
   );
 
-  // Grava SOMENTE ao submeter pré-oficina com assentimento
+  // Grava SOMENTE após autorização estrita da configuração e inicialização da sessão coletiva
   assert.match(
     pageContent,
-    /function submitPre\(\)[\s\S]*?if\s*\(assentAgreedRef\.current\)[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*installationId\)/,
-    "Deve gravar INSTALLATION_KEY exclusivamente no submitPre após assentimento unânime"
+    /if \(!sessionStartedEmittedRef\.current\)[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*installationId\)/,
+    "Deve gravar INSTALLATION_KEY exclusivamente após autorização válida na inicialização da sessão"
   );
 
-  // Remove em recusa (handleDeclinePre e handleDeclinePost)
-  assert.match(
-    pageContent,
-    /async function handleDeclinePre\(\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
-    "Deve remover INSTALLATION_KEY em handleDeclinePre"
-  );
+  // Remove em retirada/revogação (withdrawSession)
   assert.match(
     pageContent,
     /async function withdrawSession\(broadcast = true\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
@@ -103,8 +105,53 @@ test("Zero persistência antes do assentimento: student-page.jsx protege localSt
   );
   assert.match(
     pageContent,
-    /async function prepareNextWorkshop\(\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
-    "Deve remover INSTALLATION_KEY em prepareNextWorkshop"
+    /async function withdrawSession\(broadcast = true\)[\s\S]*?localStorage\.removeItem\(ACTIVE_SESSION_KEY\)/,
+    "Deve remover ACTIVE_SESSION_KEY em withdrawSession"
+  );
+});
+
+test("Sincronização fail-closed: student-page.jsx impede flush incondicional antes da autorização", () => {
+  assert.ok(fs.existsSync(studentPagePath), "student-page.jsx deve existir");
+  const pageContent = fs.readFileSync(studentPagePath, "utf-8");
+
+  // runSync não pode executar antes de a configuração do Bridge ser resolvida nem fora do modo autorizado
+  const runSyncMatch = pageContent.match(/async function runSync\(\)\s*\{[\s\S]*?\n  \}/);
+  assert.ok(runSyncMatch, "Função runSync deve existir");
+  const runSyncBody = runSyncMatch[0];
+
+  assert.match(
+    runSyncBody,
+    /!configResolvedRef\.current/,
+    "runSync não pode executar antes de a configuração do Bridge ter sido resolvida"
+  );
+  assert.match(
+    runSyncBody,
+    /!isResearchActiveRef\.current/,
+    "runSync não pode executar quando pesquisa não estiver autorizada/ativa"
+  );
+  assert.match(
+    runSyncBody,
+    /isFreeModeRef\.current/,
+    "runSync não pode executar quando estiver em Modo Livre"
+  );
+  assert.match(
+    runSyncBody,
+    /isWithdrawnRef\.current/,
+    "runSync não pode executar após retirada/revogação da sessão"
+  );
+
+  // O useEffect de sincronização NÃO pode ter dependências vazias [] (evita flush incondicional no mount)
+  assert.doesNotMatch(
+    pageContent,
+    /useEffect\(\(\)\s*=>\s*\{[\s\S]*?void\s+runSync\(\);[\s\S]*?\},\s*\[\]\)/,
+    "useEffect de sincronização NÃO pode ter dependências vazias [] nem disparar flush incondicional no mount"
+  );
+
+  // O useEffect de sincronização deve depender de [configResolved, isResearchActive, isFreeMode]
+  assert.match(
+    pageContent,
+    /useEffect\(\(\)\s*=>\s*\{[\s\S]*?handleOnline[\s\S]*?\},\s*\[configResolved,\s*isResearchActive,\s*isFreeMode\]\)/,
+    "useEffect de sincronização deve depender estritamente de [configResolved, isResearchActive, isFreeMode]"
   );
 });
 

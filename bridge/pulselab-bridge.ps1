@@ -178,7 +178,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.2.2"
+$script:BridgeVersion = "2.2.3"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1198,8 +1198,11 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.2.2"
+                    protocol_version = "2.2.3"
                     group_size = 2
+                    research_collection_enabled = $false
+                    research_authorization_version = $null
+                    research_authorized_purposes = @()
                     site_id = "CONFIGURE_SEDE"
                     activity_id = "atividade-01-spike"
                     regional_hub = "Nordeste"
@@ -1213,7 +1216,10 @@ try {
                         $cfg = Get-Content -Path $candidateConfig -Raw -Encoding UTF8 | ConvertFrom-Json
                         if ($cfg.version) { $publicConfig.version = $cfg.version }
                         if ($cfg.protocol_version) { $publicConfig.protocol_version = $cfg.protocol_version }
-                        if ($cfg.group_size) { $publicConfig.group_size = $cfg.group_size }
+                        if ($null -ne $cfg.group_size) { $publicConfig.group_size = $cfg.group_size }
+                        if ($null -ne $cfg.research_collection_enabled) { $publicConfig.research_collection_enabled = $cfg.research_collection_enabled }
+                        if ($null -ne $cfg.research_authorization_version) { $publicConfig.research_authorization_version = $cfg.research_authorization_version }
+                        if ($null -ne $cfg.research_authorized_purposes) { $publicConfig.research_authorized_purposes = $cfg.research_authorized_purposes }
                         if ($cfg.site_id) { $publicConfig.site_id = $cfg.site_id }
                         if ($cfg.activity_id) { $publicConfig.activity_id = $cfg.activity_id }
                         if ($cfg.regional_hub) { $publicConfig.regional_hub = $cfg.regional_hub }
