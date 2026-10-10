@@ -79,3 +79,46 @@ test("calcula delta de blocos entre marcos de checkpoint", () => {
   assert.equal(metrics.blocks_added_since_previous, 3);
   assert.equal(metrics.blocks_removed_since_previous, 0);
 });
+
+test("suporta entrada em string JSON válida", () => {
+  const jsonStr = JSON.stringify({
+    targets: [{ blocks: { b1: { opcode: "spike_motor_run", shadow: false } } }]
+  });
+  const metrics = parseProjectJson(jsonStr);
+  assert.equal(metrics.executable_blocks, 1);
+  assert.equal(metrics.uses_motor, true);
+  assert.equal(metrics.format, "llsp3");
+});
+
+test("retorna erro legível perante string JSON corrompida ou malformada", () => {
+  const corrupted = "{ targets: [ invalid json";
+  const metrics = parseProjectJson(corrupted);
+  assert.equal(metrics.project_saved, false);
+  assert.equal(metrics.format, "corrupted_or_invalid_json");
+  assert.equal(metrics.error_code, "json_parse_error");
+  assert.equal(metrics.inferred_stage, "invalid");
+});
+
+test("identifica explicitamente projetos Python sem mascarar como vazios", () => {
+  const pythonProject = { projectType: "python", script: "import motor\nmotor.run(10)" };
+  const metrics = parseProjectJson(pythonProject);
+  assert.equal(metrics.format, "python");
+  assert.equal(metrics.language, "python");
+  assert.equal(metrics.error_code, "unsupported_block_parser_for_python");
+  assert.equal(metrics.inferred_stage, "unsupported_python");
+  assert.equal(metrics.executable_blocks, 0);
+});
+
+test("processa alvos com elementos nulos e blocos malformados de forma fail-safe", () => {
+  const malformed = {
+    targets: [
+      null,
+      "invalid_target",
+      { blocks: null },
+      { blocks: [null, { opcode: "sensing_touchingobject", shadow: false }] }
+    ]
+  };
+  const metrics = parseProjectJson(malformed);
+  assert.equal(metrics.executable_blocks, 1);
+  assert.equal(metrics.uses_sensor, true);
+});

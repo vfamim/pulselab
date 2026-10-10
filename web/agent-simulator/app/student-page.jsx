@@ -27,7 +27,7 @@ const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.2.3";
+const CLIENT_VERSION = "student-pwa/2.2.4";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -232,12 +232,22 @@ export default function StudentPage() {
   const sessionStartedEmittedRef = useRef(false);
   const sequenceRef = useRef(0);
   const startedAtRef = useRef(null);
+  const monotonicAnchorRef = useRef(null);
   const writesRef = useRef(new Set());
   const bridgeWritesRef = useRef(new Set());
   const generationRef = useRef(0);
   const withdrawalChannelRef = useRef(null);
   const telemetryRef = useRef(null);
   const isSubmittingRef = useRef(false);
+
+  function computeElapsedMs() {
+    if (monotonicAnchorRef.current && typeof performance !== "undefined" && typeof performance.now === "function") {
+      const delta = Math.round(performance.now() - monotonicAnchorRef.current.perfStart);
+      return Math.max(0, (monotonicAnchorRef.current.elapsedBase || 0) + delta);
+    }
+    const now = Date.now();
+    return startedAtRef.current ? Math.max(0, now - startedAtRef.current) : 0;
+  }
 
   function trackWrite(promise) {
     writesRef.current.add(promise);
@@ -284,6 +294,7 @@ export default function StudentPage() {
     setSpikeTelemetry(null);
     telemetryRef.current = null;
     startedAtRef.current = null;
+    monotonicAnchorRef.current = null;
 
     try {
       localStorage.removeItem(ACTIVE_SESSION_KEY);
@@ -348,7 +359,7 @@ export default function StudentPage() {
       computer_id: getComputerId(installationId),
       protocol_version: PROTOCOL_VERSION,
       occurred_at: new Date(now).toISOString(),
-      elapsed_ms: startedAtRef.current ? Math.max(0, now - startedAtRef.current) : 0,
+      elapsed_ms: overrides.elapsed_ms !== undefined ? overrides.elapsed_ms : computeElapsedMs(),
       client_version: CLIENT_VERSION,
       config_version: "student-pwa-v2",
       config_hash: CONFIG_HASH,
@@ -498,6 +509,12 @@ export default function StudentPage() {
         setGroupId(restored.groupId || restored.sessionId);
         setStartedAt(restored.startedAt);
         startedAtRef.current = restored.startedAt;
+        const lastElapsed = Array.isArray(restored.timeline) && restored.timeline.length > 0
+          ? Math.max(0, ...restored.timeline.map((ev) => Number(ev?.elapsed_ms) || 0))
+          : (Number(restored.elapsed_ms) || 0);
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+          monotonicAnchorRef.current = { perfStart: performance.now(), elapsedBase: lastElapsed };
+        }
         setTimeline(Array.isArray(restored.timeline) ? restored.timeline : []);
         sessionStartedEmittedRef.current = true;
         if (restored.spikeTelemetry) {
@@ -524,6 +541,9 @@ export default function StudentPage() {
         setStartedAt(now);
         startedAtRef.current = now;
         sessionStartedEmittedRef.current = true;
+        if (typeof performance !== "undefined" && typeof performance.now === "function") {
+          monotonicAnchorRef.current = { perfStart: performance.now(), elapsedBase: 0 };
+        }
 
         try {
           localStorage.setItem(INSTALLATION_KEY, installationId);
@@ -852,7 +872,7 @@ export default function StudentPage() {
         <div className="lab-diagnostic__card">
           <span className="eyebrow">Diagnóstico de Laboratório</span>
           <h2>Modo de Inspeção Sintética (?lab=1)</h2>
-          <p>oficina de robótica · v2.2.3</p>
+          <p>oficina de robótica · v2.2.4</p>
           <div className="lab-diagnostic__status">
             <div>Configuração: {configResolved ? (isResearchActive ? "Pesquisa autorizada" : "Modo Livre (sem pesquisa)") : "Resolvendo..."}</div>
             <div>Bancada: Coletiva (Tamanho: {groupSize})</div>

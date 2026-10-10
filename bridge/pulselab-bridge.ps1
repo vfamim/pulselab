@@ -178,7 +178,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.2.3"
+$script:BridgeVersion = "2.2.4"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1391,7 +1391,7 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.2.3"
+                    protocol_version = "2.2.4"
                     group_size = 2
                     research_collection_enabled = $false
                     research_authorization_version = $null

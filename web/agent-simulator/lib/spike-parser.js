@@ -94,7 +94,35 @@ export function inferStage(metrics) {
 }
 
 export function parseProjectJson(projectJson, previousMetrics = null) {
-  if (!projectJson || typeof projectJson !== "object") {
+  let parsed = projectJson;
+
+  // Se receber string, tenta fazer parse seguro de JSON
+  if (typeof projectJson === "string") {
+    try {
+      parsed = JSON.parse(projectJson);
+    } catch {
+      return {
+        source: "spike_project",
+        project_saved: false,
+        format: "corrupted_or_invalid_json",
+        error_code: "json_parse_error",
+        executable_blocks: 0,
+        top_level_stacks: 0,
+        uses_motor: false,
+        uses_sensor: false,
+        uses_loop: false,
+        uses_condition: false,
+        uses_variable: false,
+        uses_procedure: false,
+        blocks_added_since_previous: 0,
+        blocks_removed_since_previous: 0,
+        inferred_stage: "invalid",
+        inference_confidence: 0
+      };
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") {
     return {
       source: "spike_project",
       project_saved: false,
@@ -114,7 +142,42 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
     };
   }
 
-  const targets = Array.isArray(projectJson.targets) ? projectJson.targets : [];
+  // Detecção explícita de projetos Python do LEGO SPIKE Prime
+  const isPythonProject =
+    parsed.projectType === "python" ||
+    parsed.type === "python" ||
+    parsed.language === "python" ||
+    typeof parsed["main.py"] === "string" ||
+    (typeof parsed.script === "string" && !Array.isArray(parsed.targets));
+
+  if (isPythonProject) {
+    return {
+      source: "spike_project",
+      project_saved: true,
+      format: "python",
+      language: "python",
+      error_code: "unsupported_block_parser_for_python",
+      executable_blocks: 0,
+      top_level_stacks: 0,
+      uses_motor: false,
+      uses_sensor: false,
+      uses_loop: false,
+      uses_condition: false,
+      uses_variable: false,
+      uses_procedure: false,
+      blocks_added_since_previous: 0,
+      blocks_removed_since_previous: 0,
+      inferred_stage: "unsupported_python",
+      inference_confidence: 0
+    };
+  }
+
+  let targets = Array.isArray(parsed.targets) ? parsed.targets : [];
+  // Suporte a formatos planos com blocks diretamente no objeto raiz
+  if (targets.length === 0 && parsed.blocks && typeof parsed.blocks === "object") {
+    targets = [{ blocks: parsed.blocks }];
+  }
+
   let totalBlocks = 0;
   let executableBlocks = 0;
   let topLevelStacks = 0;
@@ -129,8 +192,16 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
   const currentBlockIds = new Set();
 
   for (const target of targets) {
-    const blocks = target.blocks || {};
-    for (const [blockId, blockData] of Object.entries(blocks)) {
+    if (!target || typeof target !== "object") continue;
+    const blocks = target.blocks;
+    if (!blocks || typeof blocks !== "object") continue;
+
+    // Suporta tanto objeto com chaves de ID quanto array de blocos
+    const entries = Array.isArray(blocks)
+      ? blocks.map((b, idx) => [b?.id || String(idx), b])
+      : Object.entries(blocks);
+
+    for (const [blockId, blockData] of entries) {
       if (!blockData || typeof blockData !== "object") continue;
 
       currentBlockIds.add(blockId);
