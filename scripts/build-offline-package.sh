@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT_DIR}/web/agent-simulator"
 npm run build
 cd "${ROOT_DIR}"
-python3 installer/build-installer.py --output instalador/downloads/PulseLab-2.2.6-Windows.zip
-cp -f instalador/downloads/PulseLab-2.2.6-Windows.zip instalador/downloads/PulseLab-Alunos-Offline-v2.2.6.zip
-cp -f instalador/downloads/PulseLab-2.2.6-Windows.zip.sha256 instalador/downloads/PulseLab-Alunos-Offline-v2.2.6.zip.sha256
-sed -i 's/PulseLab-2.2.6-Windows.zip/PulseLab-Alunos-Offline-v2.2.6.zip/' instalador/downloads/PulseLab-Alunos-Offline-v2.2.6.zip.sha256
+python3 installer/build-installer.py --output instalador/downloads/PulseLab-2.2.7-Windows.zip
+cp -f instalador/downloads/PulseLab-2.2.7-Windows.zip instalador/downloads/PulseLab-Alunos-Offline-v2.2.7.zip
+cp -f instalador/downloads/PulseLab-2.2.7-Windows.zip.sha256 instalador/downloads/PulseLab-Alunos-Offline-v2.2.7.zip.sha256
+sed -i 's/PulseLab-2.2.7-Windows.zip/PulseLab-Alunos-Offline-v2.2.7.zip/' instalador/downloads/PulseLab-Alunos-Offline-v2.2.7.zip.sha256

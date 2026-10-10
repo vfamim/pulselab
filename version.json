@@ -1,7 +1,7 @@
 {
-  "version": "2.2.6",
+  "version": "2.2.7",
   "environment": "production",
-  "auto_update_enabled": false,
-  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.6-Windows.zip",
-  "notes": "PulseLab v2.2.6 - Launcher silencioso VBScript, Edge em modo janela de app dedicada (--app) e provisionamento zero-touch."
+  "auto_update_enabled": true,
+  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.7-Windows.zip",
+  "notes": "PulseLab v2.2.7 - Atualização automática silenciosa e verificada via SHA-256 com fallback offline instantâneo."
 }

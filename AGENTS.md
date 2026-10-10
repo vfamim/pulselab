@@ -17,7 +17,7 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    A versão corrente deve estar rigorosamente idêntica em todas as superfícies operacionais do ecossistema PulseLab:
    - `VERSION` (arquivo canônico de referência na raiz do repositório);
    - `package.json` e `package-lock.json` pertinentes (raiz e `web/agent-simulator/`);
-   - `version.json` (com `auto_update_enabled: false`);
+   - `version.json` (com `auto_update_enabled: true`);
    - `config/defaults.json` (`client_version`) e `config/config.json` (`version`);
    - Interface do Usuário PWA (`web/agent-simulator/app/student-page.jsx` no cabeçalho/rodapé e constante `CLIENT_VERSION`);
    - Bridge Local Windows (`bridge/pulselab-bridge.ps1` na variável `$script:BridgeVersion` e rota `/v1/config`);
@@ -68,5 +68,7 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - Não utilize métodos incompatíveis do .NET Core como `[System.IO.File]::Replace($src, $dst, $null)` sem backup; utilize a rotina segura `Move-BridgeAtomicFile`.
    - Não atribua valores a variáveis automáticas reservadas do PowerShell como `$PID`.
 
-3. **Desativação de Auto-Update Remoto**:
-   - O PulseLab não executa auto-update remoto silencioso ou não assinado; atualizações são distribuídas exclusivamente por pacotes institucionais verificados.
+3. **Atualização Automática Verificada e Resiliente (SHA-256)**:
+   - O PulseLab executa verificação de atualização leve e silenciosa na inicialização quando houver conectividade com a internet, utilizando timeout fail-safe de 2 segundos para nunca travar em escolas offline.
+   - Todo pacote recebido é estritamente validado contra o checksum criptográfico SHA-256 oficial antes da extração.
+   - Preservação total de dados: a pasta `dados_locais/` é estritamente preservada contra sobrescrita durante qualquer atualização.

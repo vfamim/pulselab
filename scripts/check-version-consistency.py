@@ -71,8 +71,8 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         data = read_json(v_json)
         if data.get("version") != canonical:
             errors.append(f"version.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
-        if data.get("auto_update_enabled") is not False:
-            errors.append("version.json: auto_update_enabled deve ser false por política de segurança")
+        if data.get("auto_update_enabled") is not True:
+            errors.append("version.json: auto_update_enabled deve ser true para permitir atualizações automáticas verificadas")
         expected_pkg_url = f"PulseLab-{canonical}-Windows.zip"
         if expected_pkg_url not in data.get("package_url", ""):
             errors.append(f"version.json: package_url deve referenciar {expected_pkg_url}")

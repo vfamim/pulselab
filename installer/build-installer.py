@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "2.2.6"
+VERSION = "2.2.7"
 
 
 INSTRUCTIONS = """====================================================================
