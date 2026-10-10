@@ -546,7 +546,7 @@ function Sync-SessionSnapshotsToSupabase {
                     [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
                     [void]$script:QuarantinedSessionIds.Add($sid)
                     [System.IO.File]::AppendAllText($script:QuarantinedSessionsTrackerFile, "$sid`r`n", [System.Text.Encoding]::UTF8)
-                    Write-BridgeLog "[QUARENTENA] Sessao $sid rejeitada com HTTP $($statusCode): $errBody" "WARN"
+                    Write-BridgeLog "[QUARENTENA] Sessao $sid rejeitada com HTTP ${statusCode}: $errBody" "WARN"
                 } catch {}
                 continue
             }
@@ -935,7 +935,7 @@ function Check-SessionSchedule {
 
 function Read-BoundedRequestBody {
     param(
-        [System.Net.HttpListenerRequest]$Request,
+        $Request,
         [int]$MaxBytes = 5242880
     )
     if ($Request.ContentLength64 -lt 0) {
@@ -970,7 +970,7 @@ function Read-BoundedRequestBody {
 
 function Send-BridgeResponse {
     param(
-        [System.Net.HttpListenerResponse]$Response,
+        $Response,
         [int]$StatusCode = 200,
         [object]$Payload = $null
     )
@@ -994,13 +994,235 @@ try {
     Write-BridgeLog "Aviso na limpeza inicial de retencao: $($_.Exception.Message)" "WARN"
 }
 
-# 5. Iniciar Servidor HTTP Listener
-$listener = New-Object System.Net.HttpListener
+# 5. Transporte HTTP sobre TcpListener (loopback)
+# HttpListener depende do http.sys, que exige reserva de URL (netsh urlacl) ou administrador
+# para http://127.0.0.1:<porta>/ em contas padrao. TcpListener em loopback nao exige nada disso.
+# As classes abaixo expoem o subconjunto da API de HttpListenerRequest/Response usado pelas rotas.
+class PulseLabHttpRequest {
+    [string]$HttpMethod = ""
+    [string]$RawUrl = "/"
+    [Uri]$Url
+    [hashtable]$Headers = [hashtable]::new([System.StringComparer]::OrdinalIgnoreCase)
+    [long]$ContentLength64 = 0
+    [string]$ContentType
+    [System.Text.Encoding]$ContentEncoding = [System.Text.Encoding]::UTF8
+    [System.IO.Stream]$InputStream = [System.IO.MemoryStream]::new()
+}
+
+class PulseLabHttpResponse {
+    [int]$StatusCode = 200
+    [string]$ContentType
+    [long]$ContentLength64 = 0
+    [string]$RedirectLocation
+    [System.IO.MemoryStream]$OutputStream = [System.IO.MemoryStream]::new()
+    hidden [System.Collections.Generic.List[string]]$ExtraHeaders = [System.Collections.Generic.List[string]]::new()
+    hidden [System.Net.Sockets.TcpClient]$Client
+    hidden [bool]$SuppressBody = $false
+    hidden [bool]$IsClosed = $false
+
+    PulseLabHttpResponse([System.Net.Sockets.TcpClient]$client, [bool]$suppressBody) {
+        $this.Client = $client
+        $this.SuppressBody = $suppressBody
+    }
+
+    [void] AddHeader([string]$name, [string]$value) {
+        if ($name -match '[\r\n:]' -or $value -match '[\r\n]') { return }
+        $this.ExtraHeaders.Add("${name}: $value")
+    }
+
+    # Content-Length e sempre calculado a partir do corpo bufferizado; uma conexao por requisicao.
+    [void] Close() {
+        if ($this.IsClosed) { return }
+        $this.IsClosed = $true
+        try {
+            $body = $this.OutputStream.ToArray()
+            $reason = [System.Enum]::GetName([System.Net.HttpStatusCode], $this.StatusCode)
+            $reason = if ($reason) { $reason -creplace '([a-z])([A-Z])', '$1 $2' } else { "Status" }
+            $sb = [System.Text.StringBuilder]::new()
+            [void]$sb.Append("HTTP/1.1 $($this.StatusCode) $reason`r`n")
+            if ($this.ContentType) { [void]$sb.Append("Content-Type: $($this.ContentType)`r`n") }
+            if ($this.RedirectLocation) { [void]$sb.Append("Location: $($this.RedirectLocation)`r`n") }
+            foreach ($h in $this.ExtraHeaders) { [void]$sb.Append("$h`r`n") }
+            [void]$sb.Append("Content-Length: $($body.Length)`r`n")
+            [void]$sb.Append("Connection: close`r`n`r`n")
+            $head = [System.Text.Encoding]::ASCII.GetBytes($sb.ToString())
+            $stream = $this.Client.GetStream()
+            $stream.Write($head, 0, $head.Length)
+            if (-not $this.SuppressBody -and $body.Length -gt 0) {
+                $stream.Write($body, 0, $body.Length)
+            }
+            $stream.Flush()
+            try { $this.Client.Client.Shutdown([System.Net.Sockets.SocketShutdown]::Send) } catch {}
+        } catch {
+            # Cliente desconectou antes da resposta; nada a fazer.
+        } finally {
+            try { $this.OutputStream.Dispose() } catch {}
+            try { $this.Client.Close() } catch {}
+        }
+    }
+}
+
+function Read-PulseLabHttpContext {
+    param(
+        [System.Net.Sockets.TcpClient]$Client,
+        [int]$Port,
+        [int]$MaxHeaderBytes = 32768,
+        [long]$MaxBodyBytes = 5242880
+    )
+    $stream = $Client.GetStream()
+    $stream.ReadTimeout = 5000
+    $stream.WriteTimeout = 5000
+
+    # Latin-1 mapeia byte -> char 1:1, entao indices da string equivalem a indices do buffer.
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+    $buffer = [byte[]]::new(8192)
+    $acc = [System.IO.MemoryStream]::new()
+    $headerEnd = -1
+    while ($headerEnd -lt 0) {
+        $read = $stream.Read($buffer, 0, $buffer.Length)
+        if ($read -le 0) { return $null }
+        $acc.Write($buffer, 0, $read)
+        $headerEnd = $latin1.GetString($acc.GetBuffer(), 0, [int]$acc.Length).IndexOf("`r`n`r`n")
+        if ($headerEnd -lt 0 -and $acc.Length -gt $MaxHeaderBytes) { return $null }
+    }
+    $data = $acc.GetBuffer()
+    $dataLen = [int]$acc.Length
+
+    $req = [PulseLabHttpRequest]::new()
+    $valid = $false
+    $lines = $latin1.GetString($data, 0, $headerEnd) -split "`r`n"
+    if ($lines[0] -match '^([A-Z]+) (\S+) HTTP/1\.[01]$') {
+        $req.HttpMethod = $Matches[1]
+        $req.RawUrl = $Matches[2]
+        $valid = $true
+    }
+    for ($i = 1; $i -lt $lines.Count; $i++) {
+        $sep = $lines[$i].IndexOf(':')
+        if ($sep -le 0) { $valid = $false; continue }
+        $name = $lines[$i].Substring(0, $sep).Trim()
+        $value = $lines[$i].Substring($sep + 1).Trim()
+        if ($req.Headers.ContainsKey($name)) {
+            $req.Headers[$name] = "$($req.Headers[$name]), $value"
+        } else {
+            $req.Headers[$name] = $value
+        }
+    }
+
+    # Host estrito (como o http.sys fazia com os prefixos): bloqueia DNS rebinding.
+    $hostHeader = ([string]$req.Headers["Host"]).ToLowerInvariant()
+    if ($hostHeader -notin @("127.0.0.1:$Port", "localhost:$Port")) { $valid = $false }
+
+    if ($valid) {
+        if ($req.RawUrl.StartsWith("/") -and -not $req.RawUrl.StartsWith("//")) {
+            try { $req.Url = [Uri]::new("http://127.0.0.1:$Port$($req.RawUrl)") } catch { $valid = $false }
+        } else {
+            $valid = $false
+        }
+    }
+
+    $req.ContentType = [string]$req.Headers["Content-Type"]
+    if ($req.ContentType -match 'charset\s*=\s*"?([A-Za-z0-9._-]+)') {
+        try { $req.ContentEncoding = [System.Text.Encoding]::GetEncoding($Matches[1]) } catch {}
+    }
+
+    $clHeader = [string]$req.Headers["Content-Length"]
+    if ($req.Headers["Transfer-Encoding"]) {
+        $req.ContentLength64 = -1
+    } elseif ($clHeader) {
+        $parsedLength = [long]0
+        if ([long]::TryParse($clHeader, [ref]$parsedLength) -and $parsedLength -ge 0) {
+            $req.ContentLength64 = $parsedLength
+        } else {
+            $valid = $false
+        }
+    }
+
+    # Corpo acima do limite nao e lido; as rotas respondem 413 a partir de ContentLength64.
+    if ($valid -and $req.ContentLength64 -gt 0 -and $req.ContentLength64 -le $MaxBodyBytes) {
+        $bodyStart = $headerEnd + 4
+        $bodyMs = [System.IO.MemoryStream]::new()
+        $take = [int][Math]::Min([long]($dataLen - $bodyStart), $req.ContentLength64)
+        if ($take -gt 0) { $bodyMs.Write($data, $bodyStart, $take) }
+        $remaining = $req.ContentLength64 - $take
+        while ($remaining -gt 0) {
+            $read = $stream.Read($buffer, 0, [int][Math]::Min([long]$buffer.Length, $remaining))
+            if ($read -le 0) { break }
+            $bodyMs.Write($buffer, 0, $read)
+            $remaining -= $read
+        }
+        if ($remaining -gt 0) { $valid = $false }
+        $bodyMs.Position = 0
+        $req.InputStream = $bodyMs
+    }
+    $acc.Dispose()
+
+    $resp = [PulseLabHttpResponse]::new($Client, ($req.HttpMethod -eq "HEAD"))
+    return [PSCustomObject]@{ Request = $req; Response = $resp; IsValid = $valid }
+}
+
+$script:PendingClients = [System.Collections.Generic.List[object]]::new()
+$script:LastPeriodicTick = [DateTime]::MinValue
+
+function Invoke-BridgePeriodicTasks {
+    if (([DateTime]::UtcNow - $script:LastPeriodicTick).TotalMilliseconds -lt 1000) { return }
+    $script:LastPeriodicTick = [DateTime]::UtcNow
+    Check-SessionSchedule
+    if (([DateTime]::UtcNow - $script:LastRetentionCleanup).TotalHours -ge 1) {
+        $script:LastRetentionCleanup = [DateTime]::UtcNow
+        try { Invoke-BridgeRetentionCleanup -MaxAgeDays 7 } catch {}
+    }
+    if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
+        $script:LastSyncAttempt = [DateTime]::UtcNow
+        Sync-EventsToSupabase
+        Sync-SessionSnapshotsToSupabase
+        Sync-PendingWithdrawals
+    }
+}
+
+# Bloqueia ate haver uma requisicao completa. Conexoes abertas sem dados (preconnect do
+# navegador) ficam em espera sem travar as demais; ociosas por mais de 60s sao descartadas.
+function Get-NextBridgeContext {
+    param(
+        [System.Net.Sockets.TcpListener]$Listener,
+        [int]$Port
+    )
+    while ($true) {
+        # Saida descartada: tudo que a funcao emitir viraria parte do valor de retorno.
+        try { $null = Invoke-BridgePeriodicTasks } catch { Write-BridgeLog "Aviso em tarefa periodica: $($_.Exception.Message)" "WARN" }
+        while ($Listener.Pending()) {
+            $script:PendingClients.Add([PSCustomObject]@{ Client = $Listener.AcceptTcpClient(); Since = [DateTime]::UtcNow })
+        }
+        for ($i = 0; $i -lt $script:PendingClients.Count; $i++) {
+            $entry = $script:PendingClients[$i]
+            $ready = $false
+            $drop = $false
+            try {
+                if ($entry.Client.Client.Poll(0, [System.Net.Sockets.SelectMode]::SelectRead)) {
+                    if ($entry.Client.Client.Available -gt 0) { $ready = $true } else { $drop = $true }
+                } elseif (([DateTime]::UtcNow - $entry.Since).TotalSeconds -gt 60) {
+                    $drop = $true
+                }
+            } catch {
+                $drop = $true
+            }
+            if (-not $ready -and -not $drop) { continue }
+
+            $script:PendingClients.RemoveAt($i)
+            $i--
+            $ctx = $null
+            if ($ready) {
+                try { $ctx = Read-PulseLabHttpContext -Client $entry.Client -Port $Port } catch { $ctx = $null }
+            }
+            if ($ctx) { return $ctx }
+            try { $entry.Client.Close() } catch {}
+        }
+        Start-Sleep -Milliseconds 20
+    }
+}
+
+$listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
+$listener.ExclusiveAddressUse = $true
 $prefix = "http://127.0.0.1:$Port/"
-$listener.Prefixes.Add($prefix)
-try {
-    $listener.Prefixes.Add("http://localhost:$Port/")
-} catch {}
 
 try {
     $listener.Start()
@@ -1008,48 +1230,19 @@ try {
     Write-BridgeLog "Pasta da WebApp: $AppRoot" "INFO"
     Write-BridgeLog "Armazenamento:   $DataDir" "INFO"
 } catch {
-    $errInit = "Falha ao iniciar HttpListener na porta $Port`: $($_.Exception.Message)"
-    Write-BridgeLog $errInit "ERROR"
-    try { [Console]::Error.WriteLine($errInit) } catch {}
+    Write-BridgeLog "Falha ao iniciar servidor local na porta $Port`: $($_.Exception.ToString())" "ERROR"
     exit 1
 }
 
 # 6. Loop de Atendimento Resiliente
 try {
-    while ($listener.IsListening) {
-        $asyncResult = $null
-        try {
-            $asyncResult = $listener.BeginGetContext($null, $null)
-        } catch {
-            if (-not $listener.IsListening) { break }
-            Start-Sleep -Milliseconds 100
+    while ($true) {
+        $context = Get-NextBridgeContext -Listener $listener -Port $Port
+        if (-not $context.IsValid) {
+            $context.Response.StatusCode = 400
+            $context.Response.Close()
             continue
         }
-
-        while (-not $asyncResult.IsCompleted) {
-            $asyncResult.AsyncWaitHandle.WaitOne(1000) | Out-Null
-            Check-SessionSchedule
-            if (([DateTime]::UtcNow - $script:LastRetentionCleanup).TotalHours -ge 1) {
-                $script:LastRetentionCleanup = [DateTime]::UtcNow
-                try { Invoke-BridgeRetentionCleanup -MaxAgeDays 7 } catch {}
-            }
-            if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
-                $script:LastSyncAttempt = [DateTime]::UtcNow
-                Sync-EventsToSupabase
-                Sync-SessionSnapshotsToSupabase
-                Sync-PendingWithdrawals
-            }
-        }
-
-        $context = $null
-        try {
-            $context = $listener.EndGetContext($asyncResult)
-        } catch {
-            if (-not $listener.IsListening) { break }
-            continue
-        }
-
-        if ($null -eq $context) { continue }
 
         # Processar cada requisição com tratamento de erro individual para garantir 100% de estabilidade
         try {
@@ -1811,14 +2004,19 @@ try {
                     $context.Response.Close()
                 }
             } catch {}
+        } finally {
+            # Garante resposta e fechamento do socket mesmo se uma rota nao fechou a resposta.
+            try { $context.Response.Close() } catch {}
         }
     }
 } catch {
     Write-BridgeLog "Excecao no loop do Bridge: $($_.Exception.ToString())" "ERROR"
 } finally {
     Write-BridgeLog "Finalizando listener HTTP do PulseLab..." "INFO"
+    foreach ($entry in $script:PendingClients) {
+        try { $entry.Client.Close() } catch {}
+    }
     if ($listener) {
         try { $listener.Stop() } catch {}
-        try { $listener.Close() } catch {}
     }
 }

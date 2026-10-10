@@ -127,7 +127,7 @@ if (-not $running) {
     $bridgeProc = Start-Process powershell.exe -ArgumentList $bridgeArgs -PassThru -RedirectStandardError $startupErrLog
 
     $ready = $false
-    $maxAttempts = 40
+    $maxAttempts = 60
     for ($i = 0; $i -lt $maxAttempts; $i++) {
         # Deteccao antecipada de encerramento do processo filho
         if ($bridgeProc -and $bridgeProc.HasExited) {
@@ -161,6 +161,17 @@ if (-not $running) {
         } else {
             $pidInfo = if ($bridgeProc) { " (PID $($bridgeProc.Id))" } else { "" }
             $errDetail = "Servidor local$pidInfo em execucao, mas nao respondeu na porta $port dentro do tempo limite. Confira a janela do PowerShell."
+        }
+
+        # A janela do bridge fecha ao falhar; o log em dados_locais e a unica pista que sobra.
+        $logCandidates = @((Join-Path $scriptRoot "dados_locais\bridge.log"))
+        if ($env:LOCALAPPDATA) { $logCandidates += Join-Path $env:LOCALAPPDATA "PulseLab\dados_locais\bridge.log" }
+        foreach ($log in $logCandidates) {
+            if (Test-Path -LiteralPath $log) {
+                Write-Host "Ultimas linhas de ${log}:"
+                Get-Content -LiteralPath $log -Tail 15 | ForEach-Object { Write-Host "  $_" }
+                break
+            }
         }
 
         Write-Host "[ERRO CRITICO] $errDetail" -ForegroundColor Red
