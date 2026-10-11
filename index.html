@@ -372,14 +372,17 @@
                 <ul class="nav-links">
                     <li><a href="#projeto">Projeto-mãe</a></li>
                     <li><a href="#metodologia">Metodologia</a></li>
-                    <li><a href="#experiencia">PulseLab v2.3.1</a></li>
+                    <li><a href="#experiencia">Funcionamento</a></li>
                     <li><a href="#arquitetura">Arquitetura</a></li>
                     <li><a href="/tutorial/">Tutorial</a></li>
+                    <li><a href="/relatorio/">Relatório</a></li>
+                    <li><a href="/testes/">Testes</a></li>
+                    <li><a href="/instalador/">Instalador</a></li>
                 </ul>
             </nav>
             <div class="nav-actions">
-                <a class="button button--secondary" href="/tutorial/">Guia & Tutorial</a>
-                <a class="button button--primary" href="/instalador/">⬇️ Baixar Instalador</a>
+                <a class="button button--secondary" href="/tutorial/">📖 Tutorial</a>
+                <a class="button button--primary" href="/instalador/">⬇️ Baixar v2.3.2</a>
             </div>
         </div>
     </header>
@@ -398,7 +401,7 @@
                         <a class="button button--secondary" href="/tutorial/">📖 Ver Guia & Tutorial</a>
                     </div>
                     <div class="hero__tags" aria-label="Áreas do projeto">
-                        <span class="tag tag--blue">v2.3.1 Oficinas Rotativas</span>
+                        <span class="tag tag--blue">v2.3.2 Oficinas Rotativas</span>
 
                         <span class="tag tag--yellow">LEGO SPIKE 3</span>
                         <span class="tag tag--dark">Funciona offline</span>
@@ -567,60 +570,60 @@
                 <div class="section-heading section-heading--center">
                     <span class="eyebrow">O papel do PulseLab</span>
                     <h2>Da preparação ao encerramento da oficina.</h2>
-                    <p>A tela da bancada fica aberta no Microsoft Edge durante a oficina. As perguntas aparecem só quando a turma é encerrada.</p>
+                    <p>A tela da bancada fica aberta no Microsoft Edge em modo silencioso. A observação do SPIKE é contínua e as respostas da turma ocorrem de forma ágil no fechamento.</p>
                 </div>
 
                 <article class="experience-chapter">
                     <div class="chapter-copy">
                         <span class="chapter-number">01</span>
-                        <span class="chapter-kicker">Início da turma</span>
-                        <h3>A sessão começa sozinha.</h3>
-                        <p>A sessão da turma começa quando o app abre ou logo depois que a turma anterior é encerrada. Não há perguntas no início nem cadastro de crianças.</p>
+                        <span class="chapter-kicker">Início e Durante a Oficina</span>
+                        <h3>Tela Silenciosa da Bancada</h3>
+                        <p>A tela fica aberta no Microsoft Edge em modo aplicativo dedicado (--app), calma e sem distrações. As crianças montam e programam exclusivamente no aplicativo oficial LEGO SPIKE Prime, sem formulários, testes individuais ou popups intrusivos na tela.</p>
                         <ul class="chapter-points">
-                            <li>Sem nomes nem dados pessoais das crianças</li>
-                            <li>Um computador, uma bancada</li>
-                            <li>Coleta de pesquisa só com o pacote do polo (CAAE)</li>
+                            <li>Zero formulários infantis ou interrupções pedagógicas</li>
+                            <li>A bancada (2 a 8 estudantes) é a unidade coletiva de observação (LGPD Art. 14)</li>
+                            <li>Coleta desligada por padrão (Modo Livre sem provisionamento com CAAE)</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
-                        <img src="assets/images/app-context.jpg" alt="Preparação da oficina no simulador PulseLab" loading="lazy">
-                        <figcaption>Tela da bancada aberta no navegador</figcaption>
+                        <img src="assets/images/app-context.jpg" alt="Tela silenciosa de alunos no PulseLab v2.3.2 com status Oficina pronta" loading="lazy">
+                        <figcaption>Tela silenciosa de alunos no Microsoft Edge: "Oficina pronta"</figcaption>
                     </figure>
                 </article>
 
                 <article class="experience-chapter experience-chapter--reverse">
                     <div class="chapter-copy">
                         <span class="chapter-number">02</span>
-                        <span class="chapter-kicker">Durante a atividade</span>
-                        <h3>Leitura dos projetos do LEGO SPIKE 3.</h3>
-                        <p>Enquanto as crianças trabalham, o PulseLab lê os projetos salvos do LEGO SPIKE (.llsp3). Registra só contagens de blocos e o uso de motor, sensor, laço e condição.</p>
+                        <span class="chapter-kicker">Telemetria & Diagnóstico</span>
+                        <h3>Monitoramento Passivo e Modo Laboratório (?lab=1)</h3>
+                        <p>Enquanto a aula acontece, o Bridge local escuta a cada 10 segundos os projetos salvos no LEGO SPIKE (.llsp3). O Modo Laboratório (?lab=1) permite inspecionar métricas em tempo real, testar eventos sintéticos e acompanhar o outbox IndexedDB.</p>
                         <ul class="chapter-points">
-                            <li>Sem perguntas durante a atividade</li>
-                            <li>Lê apenas arquivos de projeto salvos</li>
-                            <li>Não captura tela nem teclado</li>
+                            <li>Lê contagens de blocos executáveis, motores, sensores, laços e condições</li>
+                            <li>Proibição absoluta de telemetria invasiva (sem áudio, tela ou teclado)</li>
+                            <li>Diagnóstico técnico em tempo real para engenharia e testes controlados (?lab=1)</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
-                        <img src="assets/images/app-workshop.jpg" alt="Atividade em andamento no PulseLab" loading="lazy">
-                        <figcaption>Atividade em andamento e leitura do SPIKE</figcaption>
+                        <img src="assets/images/app-workshop.jpg" alt="Painel de inspeção de laboratório (?lab=1) com telemetria SPIKE ao vivo" loading="lazy">
+                        <figcaption>Modo Laboratório (?lab=1): telemetria estrutural do SPIKE e outbox local</figcaption>
                     </figure>
                 </article>
 
                 <article class="experience-chapter">
                     <div class="chapter-copy">
                         <span class="chapter-number">03</span>
-                        <span class="chapter-kicker">Depois da oficina</span>
+                        <span class="chapter-kicker">Fechamento da Oficina</span>
                         <h3>Encerrar turma em poucos toques.</h3>
-                        <p>O instrutor toca em "Encerrar turma". A bancada responde: "Como foi a oficina para a sua bancada hoje?". Depois o instrutor registra o resultado e o apoio recebido. A próxima turma começa em seguida.</p>
+                        <p>Ao término das atividades, o educador toca em "Encerrar turma". A bancada responde à pergunta lúdica: "Como foi a oficina para a sua bancada hoje?" com 4 carinhas (ou opta por não responder). O instrutor registra o resultado e apoio pedagógico em 2 toques. A próxima turma começa em seguida.</p>
                         <ul class="chapter-points">
-                            <li>Bancada: 4 carinhas ou "Preferimos não responder"</li>
-                            <li>Instrutor: resultado (0 a 3) e apoio (Nenhum, Algum, Muito), com opção de pular</li>
-                            <li>Registros no computador por até 180 dias (prazo pendente de aprovação)</li>
+                            <li>Bancada: 4 carinhas lúdicas ou opção "Preferimos não responder" (recusa livre)</li>
+                            <li>Instrutor: resultado prático (0 a 3) e apoio recebido, com opção de pular</li>
+                            <li>Persistência atômica em dupla camada e retenção local configurável por polo</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
-                        <img src="assets/images/app-summary.jpg" alt="Resumo da oficina do PulseLab" loading="lazy">
-                        <figcaption>Encerramento da turma</figcaption>
+                        <img src="assets/images/app-summary.jpg" alt="Modal de encerramento da turma com avaliação da bancada por carinhas" loading="lazy">
+                        <figcaption>Encerramento da turma: avaliação rápida da experiência pela bancada</figcaption>
                     </figure>
                 </article>
             </div>
@@ -685,7 +688,7 @@
                     <div class="research-card__actions">
                         <a class="button button--primary" href="/relatorio/">📄 Ver relatório metodológico <span aria-hidden="true">→</span></a>
                         <a class="button button--secondary" href="/tutorial/">📖 Guia Operacional Ilustrado</a>
-                        <small>PulseLab v2.3.1 · Instrumento em preparação</small>
+                        <small>PulseLab v2.3.2 · Instrumento em preparação</small>
 
                     </div>
                 </article>
@@ -704,7 +707,13 @@
             </div>
             <div class="footer__meta">
                 <p>Vinicius Ferreira Amim · Universidade Federal do Vale do São Francisco</p>
-                <p><a href="https://robotica-educativa-univasf.vercel.app/" target="_blank" rel="noopener noreferrer">Site institucional</a> · Setor de Pesquisa da FADEX</p>
+                <p>
+                    <a href="/tutorial/">Tutorial</a> ·
+                    <a href="/relatorio/">Relatório Metodológico</a> ·
+                    <a href="/testes/">Portal de Testes</a> ·
+                    <a href="/instalador/">Instalador v2.3.2</a> ·
+                    <a href="https://robotica-educativa-univasf.vercel.app/" target="_blank" rel="noopener noreferrer">Site institucional</a> · FADEX
+                </p>
             </div>
         </div>
     </footer>

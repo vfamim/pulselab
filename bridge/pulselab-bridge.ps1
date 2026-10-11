@@ -181,7 +181,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.3.1"
+$script:BridgeVersion = "2.3.2"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -218,7 +218,7 @@ if (Test-Path $script:QuarantinedTrackerFile) {
     } catch {}
 }
 
-# Ate a versao 2.3.1 a URL de envio de eventos saia errada e todo envio recebia HTTP 404.
+# Ate a versao 2.3.2 a URL de envio de eventos saia errada e todo envio recebia HTTP 404.
 # Esses eventos nao foram rejeitados pelo servidor: voltam para a fila.
 $legacyQuarantine = Join-Path $DataDir "events_quarantine.jsonl"
 if ((Test-Path $legacyQuarantine) -and $script:QuarantinedEventIds.Count -gt 0) {
