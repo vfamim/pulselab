@@ -26,7 +26,10 @@ try:
     sql(ROOT/'supabase/tests/bootstrap.sql')
     for path in sorted((ROOT/'supabase/migrations').glob('*.sql')):
         sql(path)
-    print(sql(ROOT/'supabase/tests/research_access.sql'))
+    for test_file in sorted((ROOT/'supabase/tests').glob('*.sql')):
+        if test_file.name == 'bootstrap.sql':
+            continue
+        print(sql(test_file))
 finally:
     # Exact uniquely-created container; no shared DB or named volume is touched.
     subprocess.run(['docker','rm','-f',name],capture_output=True)

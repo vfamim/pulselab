@@ -5,6 +5,10 @@ O pacote genérico não registra dados de pesquisa. O pacote do polo leva a sede
 CAAE do parecer ético; ao rodar o Instalar-PulseLab.bat dele, a coleta é ativada
 naquele computador sem apagar a identificação da máquina nem os registros existentes.
 
+Com --token-cadastro (arquivo gerado por supabase/scripts/provision_device.py --token-polo),
+cada máquina se cadastra sozinha na nuvem no primeiro contato com a internet. O token vai
+dentro do ZIP: distribua o pacote só para o polo e revogue o token se o ZIP circular.
+
 Exemplo:
   python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234
   python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
@@ -31,6 +35,18 @@ def load_builder():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def read_enrollment_token(bundle_path: Path, polo: str) -> str:
+    bundle = json.loads(bundle_path.read_text(encoding="utf-8"))
+    if bundle.get("site_id") != polo:
+        raise ValueError(f"Token de cadastro é do polo {bundle.get('site_id')!r}, não de {polo!r}.")
+    if bundle.get("installation_id"):
+        raise ValueError("Token de cadastro é de uma máquina só; gere um token do polo com --token-polo.")
+    token = bundle.get("enrollment_token") or ""
+    if len(token) < 32:
+        raise ValueError("Arquivo de token de cadastro sem enrollment_token válido.")
+    return token
 
 
 def build_provisioning(polo: str, regional: str, caae: str | None, school: str | None, retention_days: int = 180) -> dict:
@@ -64,12 +80,15 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--caae", help="CAAE do parecer que autoriza a coleta neste polo")
     group.add_argument("--sem-pesquisa", action="store_true", help="Identifica o polo sem ligar a coleta")
+    parser.add_argument("--token-cadastro", default=None, help="Arquivo do token do polo (provision_device.py --token-polo)")
     parser.add_argument("--retencao-dias", type=int, default=180, help="Dias que os registros ficam no computador (1 a 365)")
     parser.add_argument("--out-dir", default=str(ROOT / "dist-polos"))
     args = parser.parse_args(argv)
 
     try:
         provisioning = build_provisioning(args.polo, args.regional, args.caae, args.escola, args.retencao_dias)
+        if args.token_cadastro:
+            provisioning["enrollment_token"] = read_enrollment_token(Path(args.token_cadastro), args.polo)
     except ValueError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 2
@@ -90,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     state = f"coleta ATIVA (CAAE {args.caae})" if args.caae else "coleta desligada"
+    if args.token_cadastro:
+        state += "; cadastro automático na nuvem"
     print(f"Pacote do polo {args.polo}: {output} — {state}")
     return 0
 

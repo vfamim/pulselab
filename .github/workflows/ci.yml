@@ -30,7 +30,7 @@ jobs:
         run: python3 scripts/check-version-consistency.py
 
       - name: Python tests
-        run: python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting
+        run: python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud
 
       - name: PowerShell syntax
         shell: pwsh
@@ -56,3 +56,12 @@ jobs:
           npm ci
           npm run test:unit
           npm run build
+
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Migrations and RLS tests (disposable Postgres container)
+        run: python3 scripts/check-database.py

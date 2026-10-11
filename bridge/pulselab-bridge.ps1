@@ -139,6 +139,7 @@ foreach ($c in $instCandidates) {
     }
 }
 
+$script:DeviceSession = $null
 if (-not $script:SupabaseOperationalJwt) {
     $sessionCandidates = @(
         (Join-Path $DataDir "device_session.json"),
@@ -154,6 +155,7 @@ if (-not $script:SupabaseOperationalJwt) {
                         $script:SupabaseOperationalJwt = [string]$devSess.access_token
                         if ($devSess.installation_id) { $script:InstallationId = [string]$devSess.installation_id }
                         if ($devSess.site_id) { $script:SiteId = [string]$devSess.site_id }
+                        $script:DeviceSession = $devSess
                         break
                     }
                 } else {
@@ -168,6 +170,7 @@ if (-not $script:SupabaseOperationalJwt) {
                                 $script:SupabaseOperationalJwt = [string]$devSess.access_token
                                 if ($devSess.installation_id) { $script:InstallationId = [string]$devSess.installation_id }
                                 if ($devSess.site_id) { $script:SiteId = [string]$devSess.site_id }
+                                $script:DeviceSession = $devSess
                                 break
                             }
                         }
@@ -178,13 +181,18 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.3.0"
+$script:BridgeVersion = "2.3.1"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
 }
 $script:LastSyncAttempt = [DateTime]::MinValue
 $script:LastRetentionCleanup = [DateTime]::MinValue
+$script:LastEnrollmentAttempt = [DateTime]::MinValue
+$script:SyncIntervalSeconds = 30
+if ($cfgJson -and $cfgJson.sync_interval_seconds) {
+    try { $script:SyncIntervalSeconds = [Math]::Max(1, [int]$cfgJson.sync_interval_seconds) } catch {}
+}
 $script:SyncedEventIds = [System.Collections.Generic.HashSet[string]]::new()
 $script:SyncedTrackerFile = Join-Path $DataDir "events_synced.txt"
 
@@ -206,6 +214,21 @@ if (Test-Path $script:QuarantinedTrackerFile) {
         Get-Content $script:QuarantinedTrackerFile | ForEach-Object {
             $tracked = $_.Trim()
             if ($tracked) { [void]$script:QuarantinedEventIds.Add($tracked) }
+        }
+    } catch {}
+}
+
+# Ate a versao 2.3.1 a URL de envio de eventos saia errada e todo envio recebia HTTP 404.
+# Esses eventos nao foram rejeitados pelo servidor: voltam para a fila.
+$legacyQuarantine = Join-Path $DataDir "events_quarantine.jsonl"
+if ((Test-Path $legacyQuarantine) -and $script:QuarantinedEventIds.Count -gt 0) {
+    try {
+        foreach ($qLine in [System.IO.File]::ReadAllLines($legacyQuarantine)) {
+            if ([string]::IsNullOrWhiteSpace($qLine)) { continue }
+            try {
+                $q = $qLine | ConvertFrom-Json
+                if ([int]$q.status_code -eq 404 -and $q.event_id) { [void]$script:QuarantinedEventIds.Remove([string]$q.event_id) }
+            } catch {}
         }
     } catch {}
 }
@@ -304,6 +327,136 @@ function Sync-PendingWithdrawals {
 
 $script:HasLoggedJwtWarning = $false
 
+function Get-BridgeHttpStatus($ErrorRecord) {
+    try { return [int]$ErrorRecord.Exception.Response.StatusCode } catch { return 0 }
+}
+
+function Save-BridgeJsonAtomic([string]$Path, $Data) {
+    $tmp = "$Path.tmp"
+    [System.IO.File]::WriteAllText($tmp, ($Data | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
+    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
+    Move-Item -LiteralPath $tmp -Destination $Path
+}
+
+# Grava a sessao do dispositivo: DPAPI no Windows; JSON so fora do Windows (testes em pwsh).
+function Save-BridgeDeviceSession($Session) {
+    $json = $Session | ConvertTo-Json -Depth 4 -Compress
+    $onWindows = (-not (Test-Path variable:IsWindows)) -or $IsWindows
+    if ($onWindows) {
+        Add-Type -AssemblyName System.Security -ErrorAction SilentlyContinue
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+        $enc = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+        $target = Join-Path $DataDir "device_session.dat"
+        [System.IO.File]::WriteAllBytes("$target.tmp", $enc)
+        if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+        Move-Item -LiteralPath "$target.tmp" -Destination $target
+    } else {
+        Save-BridgeJsonAtomic -Path (Join-Path $DataDir "device_session.json") -Data $Session
+    }
+}
+
+# Cadastro automatico: usa o token do polo (provisionamento.json) no primeiro contato com a internet.
+function Invoke-BridgeDeviceEnrollment {
+    if ($script:SupabaseOperationalJwt) { return }
+    if (([DateTime]::UtcNow - $script:LastEnrollmentAttempt).TotalSeconds -lt [Math]::Max(60, $script:SyncIntervalSeconds) -and $script:LastEnrollmentAttempt -ne [DateTime]::MinValue) { return }
+    $script:LastEnrollmentAttempt = [DateTime]::UtcNow
+
+    $installationFile = Join-Path $DataDir "installation.json"
+    if (-not (Test-Path -LiteralPath $installationFile)) { return }
+    $inst = $null
+    try { $inst = Get-Content -LiteralPath $installationFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { return }
+    if (-not $inst.enrollment_token -or -not $inst.installation_id -or -not $inst.site_id) { return }
+
+    $body = [ordered]@{
+        installation_id = [string]$inst.installation_id
+        site_id = [string]$inst.site_id
+        enrollment_token = [string]$inst.enrollment_token
+        machine_label = [string]$inst.machine_label
+    } | ConvertTo-Json -Compress
+    $headers = @{
+        apikey = $script:SupabaseAnonKey
+        Authorization = "Bearer $($script:SupabaseAnonKey)"
+        "Content-Type" = "application/json"
+    }
+
+    $resp = $null
+    try {
+        $resp = Invoke-RestMethod -Method Post -Uri "$($script:SupabaseUrl)/functions/v1/enroll-device" -Headers $headers -Body $body -TimeoutSec 15 -ErrorAction Stop
+    } catch {
+        $status = Get-BridgeHttpStatus $_
+        if ($status -in @(400, 401, 403, 409)) {
+            # Token invalido, esgotado, revogado ou maquina ja cadastrada: nao insiste.
+            $data = [ordered]@{}
+            foreach ($prop in $inst.PSObject.Properties) { if ($prop.Name -ne "enrollment_token") { $data[$prop.Name] = $prop.Value } }
+            $data["enrollment_error"] = "HTTP $status em $([DateTime]::UtcNow.ToString('o'))"
+            try { Save-BridgeJsonAtomic -Path $installationFile -Data $data } catch {}
+            Write-BridgeLog "Cadastro na nuvem recusado (HTTP $status). Gere um novo pacote do polo com token de cadastro." "WARN"
+        }
+        return
+    }
+    if (-not $resp -or -not $resp.access_token) { return }
+
+    $session = [ordered]@{
+        access_token = [string]$resp.access_token
+        refresh_token = [string]$resp.refresh_token
+        expires_at = $resp.expires_at
+        installation_id = [string]$inst.installation_id
+        site_id = [string]$inst.site_id
+        user_id = [string]$resp.user_id
+        enrolled_at = [DateTime]::UtcNow.ToString("o")
+    }
+    try {
+        Save-BridgeDeviceSession $session
+    } catch {
+        Write-BridgeLog "Cadastro concluido, mas a sessao do dispositivo nao foi salva: $($_.Exception.Message)" "WARN"
+    }
+    $script:DeviceSession = [pscustomobject]$session
+    $script:SupabaseOperationalJwt = $session.access_token
+    $script:InstallationId = $session.installation_id
+    $script:SiteId = $session.site_id
+
+    $data = [ordered]@{}
+    foreach ($prop in $inst.PSObject.Properties) { if ($prop.Name -notin @("enrollment_token", "enrollment_error")) { $data[$prop.Name] = $prop.Value } }
+    $data["enrolled_at"] = $session.enrolled_at
+    try { Save-BridgeJsonAtomic -Path $installationFile -Data $data } catch {}
+    Write-BridgeLog "Maquina cadastrada na nuvem (polo $($session.site_id))." "INFO"
+}
+
+# Renova o token de acesso (validade de 1 hora) com o refresh token do cadastro.
+function Update-BridgeDeviceToken([switch]$Force) {
+    $sess = $script:DeviceSession
+    if (-not $sess -or -not $sess.refresh_token) { return [bool]$script:SupabaseOperationalJwt }
+    $expiresAt = 0L
+    [void][long]::TryParse([string]$sess.expires_at, [ref]$expiresAt)
+    $nowEpoch = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    if (-not $Force -and $expiresAt -gt 0 -and ($expiresAt - $nowEpoch) -gt 300) { return $true }
+
+    $resp = $null
+    try {
+        $resp = Invoke-RestMethod -Method Post -Uri "$($script:SupabaseUrl)/auth/v1/token?grant_type=refresh_token" -Headers @{ apikey = $script:SupabaseAnonKey; "Content-Type" = "application/json" } -Body (@{ refresh_token = [string]$sess.refresh_token } | ConvertTo-Json -Compress) -TimeoutSec 10 -ErrorAction Stop
+    } catch {
+        $status = Get-BridgeHttpStatus $_
+        if ($status -in @(400, 401, 403)) {
+            Write-BridgeLog "Refresh token recusado (HTTP $status). Envio a nuvem suspenso ate novo cadastro da maquina." "WARN"
+            $script:SupabaseOperationalJwt = ""
+            $script:DeviceSession = $null
+        }
+        return $false
+    }
+    if (-not $resp -or -not $resp.access_token) { return $false }
+
+    $newExpires = if ($resp.expires_at) { $resp.expires_at } elseif ($resp.expires_in) { $nowEpoch + [int]$resp.expires_in } else { $nowEpoch + 3600 }
+    $updated = [ordered]@{}
+    foreach ($prop in $sess.PSObject.Properties) { $updated[$prop.Name] = $prop.Value }
+    $updated["access_token"] = [string]$resp.access_token
+    if ($resp.refresh_token) { $updated["refresh_token"] = [string]$resp.refresh_token }
+    $updated["expires_at"] = $newExpires
+    try { Save-BridgeDeviceSession $updated } catch {}
+    $script:DeviceSession = [pscustomobject]$updated
+    $script:SupabaseOperationalJwt = [string]$resp.access_token
+    return $true
+}
+
 function Sync-EventsToSupabase {
     # Falha 1: Bridge não deve sincronizar remotamente sem JWT autenticado operacional explícito.
     # Não trate anon key como autenticação suficiente (RLS revogou anon).
@@ -317,6 +470,7 @@ function Sync-EventsToSupabase {
 
     $eventsFile = Join-Path $DataDir "events.jsonl"
     if (-not (Test-Path $eventsFile)) { return }
+    if (-not (Update-BridgeDeviceToken)) { return }
 
     try {
         [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12 -bor [System.Net.SecurityProtocolType]::Tls11 -bor [System.Net.SecurityProtocolType]::Tls
@@ -358,7 +512,7 @@ function Sync-EventsToSupabase {
                     Prefer = "resolution=ignore-duplicates,return=minimal"
                 }
 
-                $uri = "$($script:SupabaseUrl)/rest/v1/$targetTable?on_conflict=event_id"
+                $uri = "$($script:SupabaseUrl)/rest/v1/$($targetTable)?on_conflict=event_id"
                 Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $bodyJson -TimeoutSec 6 -ErrorAction Stop | Out-Null
 
                 [void]$script:SyncedEventIds.Add($eventId)
@@ -376,6 +530,12 @@ function Sync-EventsToSupabase {
                         $sReader.Close()
                     }
                 } catch {}
+
+                if ($statusCode -eq 401) {
+                    # Token expirado ou invalido: renova e tenta de novo no proximo ciclo, sem quarentena.
+                    [void](Update-BridgeDeviceToken -Force)
+                    break
+                }
 
                 if ($statusCode -eq 409) {
                     # Falha 3: Conflito: aceita como idempotente SOMENTE se for comprovadamente unique_violation (23505) na chave primária esperada (event_id)
@@ -454,6 +614,7 @@ function Sync-EventsToSupabase {
 
 function Sync-SessionSnapshotsToSupabase {
     if (-not $script:SupabaseOperationalJwt) { return }
+    if (-not (Update-BridgeDeviceToken)) { return }
 
     $sessoesDir = Join-Path $DataDir "sessoes"
     if (-not (Test-Path $sessoesDir)) { return }
@@ -475,6 +636,11 @@ function Sync-SessionSnapshotsToSupabase {
             if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid) -or $script:WithdrawnSessionIds.Contains($sid)) {
                 continue
             }
+            # Snapshots sao so de insercao para o dispositivo: envia uma vez, com a turma encerrada
+            # ou abandonada ha mais de 12 horas, para nao congelar o estado inicial.
+            $isClosed = ($sdata.status -eq "completed")
+            $isStale = (([DateTime]::UtcNow - $sfile.LastWriteTimeUtc).TotalHours -ge 12)
+            if (-not $isClosed -and -not $isStale) { continue }
 
             $instId = if ($sdata.installation_id) { [string]$sdata.installation_id } elseif ($script:InstallationId) { $script:InstallationId } else { "10000000-0000-4000-8000-000000000001" }
             $siteVal = if ($sdata.site_id) { [string]$sdata.site_id } elseif ($script:SiteId) { $script:SiteId } else { "Polo-Nordeste" }
@@ -524,6 +690,11 @@ function Sync-SessionSnapshotsToSupabase {
                     $sReader.Close()
                 }
             } catch {}
+
+            if ($statusCode -eq 401) {
+                [void](Update-BridgeDeviceToken -Force)
+                break
+            }
 
             if ($statusCode -eq 409) {
                 $errLower = "$errBody".ToLower()
@@ -1188,8 +1359,9 @@ function Invoke-BridgePeriodicTasks {
         $script:LastRetentionCleanup = [DateTime]::UtcNow
         try { Invoke-BridgeRetentionCleanup -MaxAgeDays (Get-BridgeRetentionDays) } catch {}
     }
-    if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
+    if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge $script:SyncIntervalSeconds) {
         $script:LastSyncAttempt = [DateTime]::UtcNow
+        Invoke-BridgeDeviceEnrollment
         Sync-EventsToSupabase
         Sync-SessionSnapshotsToSupabase
         Sync-PendingWithdrawals
