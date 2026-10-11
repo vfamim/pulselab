@@ -178,7 +178,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.2.7"
+$script:BridgeVersion = "2.2.8"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1391,7 +1391,7 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.2.7"
+                    protocol_version = "2.2.8"
                     group_size = 2
                     research_collection_enabled = $false
                     research_authorization_version = $null
@@ -1420,6 +1420,30 @@ try {
                         if ($cfg.workshop_code) { $publicConfig.workshop_code = $cfg.workshop_code }
                         if ($cfg.class_code) { $publicConfig.class_code = $cfg.class_code }
                         if ($cfg.questions) { $publicConfig.questions = $cfg.questions }
+                    } catch {}
+                }
+
+                # A autorizacao de pesquisa vem somente do provisionamento do polo (dados_locais\installation.json).
+                # O config.json do pacote e igual para todas as maquinas e nunca liga a coleta.
+                $publicConfig.research_collection_enabled = $false
+                $publicConfig.research_authorization_version = $null
+                $publicConfig.research_authorized_purposes = @()
+                $publicConfig.installation_id = $script:InstallationId
+                $publicConfig.machine_label = $null
+                $installationFile = Join-Path $DataDir "installation.json"
+                if (Test-Path -LiteralPath $installationFile) {
+                    try {
+                        $inst = Get-Content -LiteralPath $installationFile -Raw -Encoding UTF8 | ConvertFrom-Json
+                        if ($inst.machine_label) { $publicConfig.machine_label = [string]$inst.machine_label }
+                        if (-not $publicConfig.installation_id -and $inst.installation_id) { $publicConfig.installation_id = [string]$inst.installation_id }
+                        if ($inst.site_id) { $publicConfig.site_id = [string]$inst.site_id }
+                        if ($inst.regional_hub) { $publicConfig.regional_hub = [string]$inst.regional_hub }
+                        if ($inst.school_code) { $publicConfig.school_code = [string]$inst.school_code }
+                        if ($inst.research_collection_enabled -eq $true -and $inst.research_authorization_version) {
+                            $publicConfig.research_collection_enabled = $true
+                            $publicConfig.research_authorization_version = [string]$inst.research_authorization_version
+                            $publicConfig.research_authorized_purposes = @($inst.research_authorized_purposes)
+                        }
                     } catch {}
                 }
                 $buf = [System.Text.Encoding]::UTF8.GetBytes(($publicConfig | ConvertTo-Json -Depth 5))

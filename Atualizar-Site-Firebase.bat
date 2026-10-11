@@ -10,11 +10,18 @@ cd web\agent-simulator
 call npm run build
 cd ..\..
 echo.
-python installer\build-installer.py --output instalador\downloads\PulseLab-2.2.7-Windows.zip
-copy /Y instalador\downloads\PulseLab-2.2.7-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.2.7.zip >nul 2>&1
-copy /Y instalador\downloads\PulseLab-2.2.7-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.2.7.zip.sha256 >nul 2>&1
+python installer\build-installer.py --output instalador\downloads\PulseLab-2.2.8-Windows.zip
+copy /Y instalador\downloads\PulseLab-2.2.8-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.2.8.zip >nul 2>&1
+copy /Y instalador\downloads\PulseLab-2.2.8-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.2.8.zip.sha256 >nul 2>&1
 
-echo [3/3] Publicando site e PWA no Firebase Hosting...
+echo [3/3] Montando pasta publica (somente arquivos permitidos)...
+python scripts\build-hosting.py
+if errorlevel 1 (
+    echo [ERRO] Falha ao montar hosting-dist. Deploy cancelado.
+    pause
+    exit /b 1
+)
+echo Publicando site e PWA no Firebase Hosting...
 call npx firebase-tools deploy --only hosting
 echo.
 echo ====================================================================

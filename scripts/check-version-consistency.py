@@ -219,6 +219,25 @@ def check_version_consistency(repo_root: Path) -> list[str]:
             if real_hash not in test_text:
                 errors.append(f"testes/index.html: não contém o checksum SHA-256 real do pacote ({real_hash})")
 
+    # 15. Atualizador assinado: sem a chave pública no pacote, as máquinas nunca mais se atualizam.
+    public_key = repo_root / "release-public-key.json"
+    if not public_key.is_file():
+        errors.append("release-public-key.json ausente: gere com scripts/publicar-release.py gerar-chave")
+    elif pkg_dist.is_file():
+        import zipfile
+
+        with zipfile.ZipFile(pkg_dist) as archive:
+            names = {name.split("/", 1)[-1] for name in archive.namelist()}
+            for required in ("release-public-key.json", "pulselab-update.ps1", "pulselab-installation.ps1"):
+                if required not in names:
+                    errors.append(f"{pkg_dist.name}: pacote sem {required}")
+            if "provisionamento.json" in names:
+                errors.append(f"{pkg_dist.name}: pacote genérico não pode conter provisionamento.json")
+            prefix = archive.namelist()[0].split("/", 1)[0]
+            packaged_key = archive.read(f"{prefix}/release-public-key.json") if "release-public-key.json" in names else b""
+            if packaged_key and json.loads(packaged_key) != read_json(public_key):
+                errors.append(f"{pkg_dist.name}: chave pública do pacote difere de release-public-key.json")
+
     return errors
 
 

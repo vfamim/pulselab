@@ -129,7 +129,19 @@ if (-not $destDrive -and -not $SaveToDesktop) {
 }
 
 # 4. Definir pasta destino
-$machineName = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { "PC-LAB" }
+# Identifica a maquina pelo rotulo do PulseLab (dados_locais\installation.json), nunca pelo nome do Windows.
+$machineName = "PC-SEM-ID"
+$installationId = ""
+$installationFile = Join-Path $dataDir "installation.json"
+if (Test-Path -LiteralPath $installationFile) {
+    try {
+        $installation = Get-Content -LiteralPath $installationFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($installation.machine_label) {
+            $machineName = ([string]$installation.machine_label -replace '[^A-Za-z0-9_-]', '-')
+        }
+        if ($installation.installation_id) { $installationId = [string]$installation.installation_id }
+    } catch {}
+}
 $timeTag = Get-Date -Format "yyyyMMdd_HHmmss"
 $exportFolderName = "Coleta_${machineName}_${timeTag}"
 
@@ -196,9 +208,8 @@ $manifestContent = [System.Text.StringBuilder]::new()
 [void]$manifestContent.AppendLine("PULSELAB - MANIFESTO DE COLETA DE DADOS EM CAMPO (OFFLINE)")
 [void]$manifestContent.AppendLine("====================================================================")
 [void]$manifestContent.AppendLine("Data e Hora da Coleta : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
-[void]$manifestContent.AppendLine("Computador Origem     : $machineName")
-[void]$manifestContent.AppendLine("Usuario Windows       : $env:USERNAME")
-[void]$manifestContent.AppendLine("Origem dos Dados      : $dataDir")
+[void]$manifestContent.AppendLine("Maquina (rotulo)      : $machineName")
+[void]$manifestContent.AppendLine("Instalacao            : $installationId")
 [void]$manifestContent.AppendLine("Total de Sessoes      : $sessCount")
 [void]$manifestContent.AppendLine("Total de Eventos      : $totalEvents")
 [void]$manifestContent.AppendLine("====================================================================")

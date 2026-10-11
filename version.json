@@ -1,7 +1,7 @@
 {
-  "version": "2.2.7",
+  "version": "2.2.8",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.7-Windows.zip",
-  "notes": "PulseLab v2.2.7 - Atualização automática silenciosa e verificada via SHA-256 com fallback offline instantâneo."
+  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.2.8-Windows.zip",
+  "notes": "PulseLab v2.2.8 - canal legado: migra máquinas até 2.2.7 para o atualizador assinado (releases do GitHub)."
 }

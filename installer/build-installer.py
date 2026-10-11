@@ -12,59 +12,55 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "2.2.7"
+VERSION = "2.2.8"
 
 
 INSTRUCTIONS = """====================================================================
-PULSELAB {version} — PACOTE PORTÁTIL E OFFLINE PARA WINDOWS
+PULSELAB {version} — PACOTE PARA WINDOWS
 ====================================================================
 
-O PulseLab é o ambiente de acompanhamento de oficinas de robótica escolar com LEGO SPIKE.
-Totalmente desacoplado: interface executada diretamente no navegador padrão (PWA 100% offline),
-servidor Bridge local mínimo em loopback (porta 43128), sincronização automática na nuvem (Store-and-Forward)
-e leitura contínua de projetos (.llsp3).
+O PulseLab acompanha oficinas de robótica com LEGO SPIKE. A tela das crianças
+roda no Microsoft Edge e um servidor local (porta 43128) guarda os registros
+neste computador.
 
-REQUISITOS:
-- Windows 10 ou 11 com Windows PowerShell 5.1 (já nativo no Windows).
-- Zero internet necessária durante a oficina (funciona 100% offline).
-- Envio automático para o banco da pesquisa assim que o computador conectar à internet.
-- Não requer privilégios de administrador.
+REQUISITOS
+- Windows 10 ou 11 (o PowerShell 5.1 já vem no Windows).
+- Não precisa de internet durante a oficina nem de privilégio de administrador.
 
-COMO USAR:
-
-OPÇÃO 1: EXECUÇÃO DIRETA (Recomendado — Sem instalação)
-1. Extraia todo o arquivo ZIP em qualquer pasta (ex: Área de Trabalho ou Pendrive).
-2. Dê dois cliques em "Iniciar-PulseLab.bat".
-3. O navegador padrão abrirá automaticamente em http://127.0.0.1:43128/alunos/.
-4. O Bridge opera silenciosamente em segundo plano registrando a telemetria do robô.
-
-OPÇÃO 2: INSTALAÇÃO NO SISTEMA (Com atalho na Área de Trabalho)
-1. Extraia todo o arquivo ZIP.
+INSTALAR (uma vez por computador)
+1. Extraia todo o ZIP.
 2. Dê dois cliques em "Instalar-PulseLab.bat".
-3. O atalho "PulseLab - Iniciar Oficina" será criado na Área de Trabalho.
-4. Para abrir nas próximas oficinas, basta dar dois cliques no atalho.
+3. Se quiser, digite um nome para esta máquina (ex.: PET-LAB1-PC03) e tecle Enter.
+   Anote o mesmo nome numa etiqueta no gabinete.
+4. Use o atalho "PulseLab - Iniciar Oficina" na Área de Trabalho.
 
-COMO DESINSTALAR:
+PACOTE DO POLO
+- A coleta de pesquisa só é ativada pelo pacote do seu polo, que traz o arquivo
+  provisionamento.json com a sede e o número do parecer ético (CAAE).
+- O pacote genérico abre a oficina normalmente, mas não registra dados de pesquisa.
+- Para ativar num computador já instalado, rode o "Instalar-PulseLab.bat" do pacote
+  do polo. A identificação da máquina e os registros já feitos são mantidos.
+
+ATUALIZAÇÕES
+- Ao abrir, o PulseLab procura uma versão nova (no máximo 2 segundos sem internet).
+- Só instala pacotes assinados pela equipe do projeto. Se a versão nova não abrir,
+  volta sozinho para a anterior.
+- Os registros em "dados_locais" nunca são apagados pela atualização.
+
+EXPORTAR OS DADOS PARA PENDRIVE
+1. Conecte o pendrive.
+2. Use o atalho "PulseLab - Exportar Dados" na Área de Trabalho
+   (ou dê dois cliques em "Exportar-Dados-Pendrive.bat").
+3. A pasta criada no pendrive leva o nome da máquina e a data, com manifesto SHA-256.
+
+DESINSTALAR
 - Dê dois cliques em "Desinstalar-PulseLab.bat".
 
-COLETA OFFLINE E EXPORTAÇÃO PARA PENDRIVE (SEM INTERNET NA ESCOLA):
-1. Todas as oficinas são salvas automaticamente em disco na pasta "dados_locais".
-2. Ao final do dia de oficinas, conecte um pendrive USB no computador.
-3. Dê dois cliques em "Exportar-Dados-Pendrive.bat".
-4. Todos os arquivos de sessões e eventos serão copiados para o pendrive com manifesto e hash SHA-256.
-5. Quando o pesquisador estiver em um local com internet, dê dois cliques em "Importar-Para-Supabase.bat"
-   para enviar os dados de forma consolidada para a base SQLite local e para o banco central Supabase.
-
-RECURSOS DO PULSELAB v{version}:
-- Foco total no robô: os alunos utilizam o app oficial LEGO SPIKE em tela cheia.
-- O professor/instrutor está presente fisicamente na sala para mediar e apoiar em pessoa.
-- Zero atrito e zero interrupções por pop-ups ou botões de ajuda virtuais.
-- Questionário pré e pós rápido (respondido na própria bancada).
-- Banco de dados local permanente em "dados_locais" (100% offline-first).
-- Exportação com 1 clique para pendrive USB ("Exportar-Dados-Pendrive.bat").
-- Consolidador SQLite e importador idempotente para o Supabase ("Importar-Para-Supabase.bat").
-- Leitura automática de blocos do LEGO SPIKE (.llsp3) para telemetria de código.
-- Privacidade total (LGPD) — sem captura de webcam, prints ou dados pessoais.
+PRIVACIDADE
+- Sem câmera, captura de tela, teclado ou nomes de crianças.
+- Do SPIKE são lidas apenas contagens de blocos dos projetos salvos.
+- O computador é identificado por um código aleatório e pelo nome que você escolher,
+  nunca pelo nome do Windows ou do usuário.
 """
 
 def sha256(path: Path) -> str:
@@ -108,7 +104,12 @@ def scan_sensitive_configs(data: object, path: str = "") -> list[str]:
     return violations
 
 
-def build_package(repo_root: Path, output: Path, folder_name: str | None = None) -> Path:
+def build_package(
+    repo_root: Path,
+    output: Path,
+    folder_name: str | None = None,
+    provisioning: Path | None = None,
+) -> Path:
     if folder_name is None:
         folder_name = f"PulseLab-{VERSION}-Windows"
 
@@ -174,6 +175,12 @@ def build_package(repo_root: Path, output: Path, folder_name: str | None = None)
         if (repo_root / "Importar-Para-Supabase.bat").is_file():
             shutil.copy2(repo_root / "Importar-Para-Supabase.bat", stage / "Importar-Para-Supabase.bat")
         shutil.copy2(repo_root / "pulselab.ps1", stage / "pulselab.ps1")
+        shutil.copy2(repo_root / "pulselab-update.ps1", stage / "pulselab-update.ps1")
+        shutil.copy2(repo_root / "pulselab-installation.ps1", stage / "pulselab-installation.ps1")
+        if (repo_root / "release-public-key.json").is_file():
+            shutil.copy2(repo_root / "release-public-key.json", stage / "release-public-key.json")
+        if provisioning is not None:
+            shutil.copy2(provisioning, stage / "provisionamento.json")
         shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
         if (repo_root / "pulselab.ico").is_file():
             shutil.copy2(repo_root / "pulselab.ico", stage / "pulselab.ico")
@@ -217,9 +224,15 @@ def main() -> int:
         default=f"PulseLab-{VERSION}-Windows.zip",
         help="Output ZIP path",
     )
+    parser.add_argument(
+        "--provisionamento",
+        default=None,
+        help="provisionamento.json do polo (gera o pacote que ativa a coleta)",
+    )
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parent.parent
-    package = build_package(repo_root, Path(args.output).resolve())
+    provisioning = Path(args.provisionamento).resolve() if args.provisionamento else None
+    package = build_package(repo_root, Path(args.output).resolve(), provisioning=provisioning)
     print(f"Package: {package}")
     print(f"SHA-256: {sha256(package)}")
     return 0
