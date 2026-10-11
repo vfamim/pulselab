@@ -1,4 +1,4 @@
-# Arquitetura da Aplicação de Alunos (PWA v2.3.2)
+# Arquitetura da Aplicação de Alunos (PWA v2.3.3)
 
 ## 1. Decisão Arquitetural e Visão Geral
 
@@ -11,7 +11,7 @@ Essa abordagem garante equivalência total entre ambientes: desenvolvimento no L
 e execução nas salas de aula Windows rodam exatamente o mesmo artefato web, a mesma máquina
 de estados, o mesmo armazenamento local e o mesmo Service Worker offline.
 
-## 2. Princípios de Experiência e Salvaguardas Éticas (v2.3.2)
+## 2. Princípios de Experiência e Salvaguardas Éticas (v2.3.3)
 
 ### 2.1 Experiência Silenciosa do Aluno
 - **Zero Interrupção Pedagógica**: Durante a atividade prática, a tela não exibe questionários,

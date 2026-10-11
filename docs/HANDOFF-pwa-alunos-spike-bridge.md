@@ -1,4 +1,4 @@
-# Handoff Técnico Consolidado — PWA dos Alunos, Bridge PowerShell e SPIKE (v2.3.2)
+# Handoff Técnico Consolidado — PWA dos Alunos, Bridge PowerShell e SPIKE (v2.3.3)
 
 > Versão Operacional: **2.3.2**
 > Status: **Implementado, Validado e em Produção**

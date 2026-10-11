@@ -5,7 +5,7 @@ A tela das crianças roda no navegador em modo silencioso; um servidor local em 
 (porta 43128) guarda os registros no próprio computador, analisa passivamente contagens
 estruturais de blocos dos projetos LEGO SPIKE Prime e exporta dados para pendrive ou nuvem.
 
-## Estado (v2.3.2)
+## Estado (v2.3.3)
 
 - **Experiência Silenciosa do Aluno**: Durante a oficina, a tela exibida para os estudantes
   é 100% silenciosa e sem atrito pedagógico. Não há questionários, formulários, escalas
