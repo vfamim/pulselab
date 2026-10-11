@@ -1,31 +1,10 @@
 {
   "hosting": {
-    "public": ".",
+    "public": "hosting-dist",
     "ignore": [
       "firebase.json",
       "**/.*",
-      "**/node_modules/**",
-      "agent/**",
-      "bridge/**",
-      "config/**",
-      "dashboard/**",
-      "dist-offline/**",
-      "docs/**",
-      "installer/**",
-      "schema/**",
-      "scripts/**",
-      "simulador/**",
-      "supabase/**",
-      "tests/**",
-      "tools/**",
-      "web/**",
-      "**/*.ps1",
-      "**/*.bat",
-      "**/*.cmd",
-      "**/*.sh",
-      "**/*.py",
-      "**/*.sql",
-      "**/*.exe"
+      "**/node_modules/**"
     ],
     "headers": [
       {

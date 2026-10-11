@@ -27,7 +27,7 @@ const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.2.7";
+const CLIENT_VERSION = "student-pwa/2.2.8";
 
 const DEFAULT_CONTEXT = {
   regional: "Nordeste",
@@ -147,6 +147,10 @@ function getInstallationId(fallbackId = null) {
   return getPersistedInstallationId() || fallbackId || createUuid();
 }
 
+function isUuid(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+}
+
 function getComputerId(installationId) {
   const id = installationId || getPersistedInstallationId() || "000000";
   return `PC-${id.slice(0, 6).toUpperCase()}`;
@@ -214,6 +218,7 @@ export default function StudentPage() {
   const [sessionId, setSessionId] = useState(null);
   const [groupId, setGroupId] = useState(null);
   const [installationId, setInstallationId] = useState(() => getInstallationId());
+  const [computerId, setComputerId] = useState(() => getComputerId(getPersistedInstallationId()));
   const [startedAt, setStartedAt] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [spikeTelemetry, setSpikeTelemetry] = useState(null);
@@ -356,7 +361,7 @@ export default function StudentPage() {
       workshop_code: context.workshop || "oficina-spike",
       class_code: context.class || "turma-geral",
       activity_id: context.activity || "atividade-01-spike",
-      computer_id: getComputerId(installationId),
+      computer_id: computerId,
       protocol_version: PROTOCOL_VERSION,
       occurred_at: new Date(now).toISOString(),
       elapsed_ms: overrides.elapsed_ms !== undefined ? overrides.elapsed_ms : computeElapsedMs(),
@@ -468,6 +473,15 @@ export default function StudentPage() {
       isResearchActiveRef.current = true;
       setGroupSize(cfg.group_size);
 
+      // Identidade da máquina vem do Bridge (dados_locais/installation.json), estável entre navegadores e usuários.
+      const machineInstallationId = isUuid(cfg.installation_id) ? cfg.installation_id : installationId;
+      const machineComputerId =
+        typeof cfg.machine_label === "string" && cfg.machine_label.trim()
+          ? cfg.machine_label.trim()
+          : getComputerId(machineInstallationId);
+      setInstallationId(machineInstallationId);
+      setComputerId(machineComputerId);
+
       if (cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE") {
         setContext((prev) => ({ ...prev, site_id: cfg.site_id }));
       }
@@ -546,7 +560,7 @@ export default function StudentPage() {
         }
 
         try {
-          localStorage.setItem(INSTALLATION_KEY, installationId);
+          localStorage.setItem(INSTALLATION_KEY, machineInstallationId);
           if (typeof sessionStorage !== "undefined") {
             sessionStorage.setItem("pulselab_tab_session_id", newSessionId);
           }
@@ -557,14 +571,14 @@ export default function StudentPage() {
           session_id: newSessionId,
           dyad_id: newGroupId,
           group_id: newGroupId,
-          installation_id: installationId,
+          installation_id: machineInstallationId,
           site_id: cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE" ? cfg.site_id : (context.site_id || "Polo-Nordeste"),
           regional_hub: cfg.regional_hub || context.regional || "Nordeste",
           school_code: cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA" ? cfg.school_code : "geral",
           workshop_code: cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA" ? cfg.workshop_code : "oficina-spike",
           class_code: cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA" ? cfg.class_code : "turma-geral",
           activity_id: cfg.activity_id || context.activity || "atividade-01-spike",
-          computer_id: getComputerId(installationId),
+          computer_id: machineComputerId,
           protocol_version: PROTOCOL_VERSION,
           occurred_at: new Date(now).toISOString(),
           elapsed_ms: 0,
@@ -606,7 +620,7 @@ export default function StudentPage() {
           session_id: newSessionId,
           groupId: newGroupId,
           group_id: newGroupId,
-          installation_id: installationId,
+          installation_id: machineInstallationId,
           startedAt: now,
           started_at: new Date(now).toISOString(),
           group_size: cfg.group_size,
@@ -872,7 +886,7 @@ export default function StudentPage() {
         <div className="lab-diagnostic__card">
           <span className="eyebrow">Diagnóstico de Laboratório</span>
           <h2>Modo de Inspeção Sintética (?lab=1)</h2>
-          <p>oficina de robótica · v2.2.7</p>
+          <p>oficina de robótica · v2.2.8</p>
           <div className="lab-diagnostic__status">
             <div>Configuração: {configResolved ? (isResearchActive ? "Pesquisa autorizada" : "Modo Livre (sem pesquisa)") : "Resolvendo..."}</div>
             <div>Bancada: Coletiva (Tamanho: {groupSize})</div>

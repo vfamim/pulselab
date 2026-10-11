@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: web/agent-simulator/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Version consistency
+        run: python3 scripts/check-version-consistency.py
+
+      - name: Python tests
+        run: python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting
+
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $failed = $false
+          Get-ChildItem -Recurse -Include *.ps1 -File | Where-Object { $_.FullName -notmatch 'node_modules' } | ForEach-Object {
+            $errors = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors)
+            if ($errors -and $errors.Count -gt 0) {
+              Write-Host "::error file=$($_.FullName)::$($errors[0].Message) (linha $($errors[0].Extent.StartLineNumber))"
+              $failed = $true
+            }
+          }
+          if ($failed) { exit 1 }
+
+      - name: PowerShell update and identity tests
+        shell: pwsh
+        run: ./scripts/test-launcher-update.ps1
+
+      - name: PWA unit tests and build
+        run: |
+          cd web/agent-simulator
+          npm ci
+          npm run test:unit
+          npm run build

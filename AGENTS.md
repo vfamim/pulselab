@@ -17,7 +17,7 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    A versão corrente deve estar rigorosamente idêntica em todas as superfícies operacionais do ecossistema PulseLab:
    - `VERSION` (arquivo canônico de referência na raiz do repositório);
    - `package.json` e `package-lock.json` pertinentes (raiz e `web/agent-simulator/`);
-   - `version.json` (com `auto_update_enabled: true`);
+   - `version.json` (canal legado com `auto_update_enabled: true`, usado só para máquinas até 2.2.7 migrarem ao atualizador assinado);
    - `config/defaults.json` (`client_version`) e `config/config.json` (`version`);
    - Interface do Usuário PWA (`web/agent-simulator/app/student-page.jsx` no cabeçalho/rodapé e constante `CLIENT_VERSION`);
    - Bridge Local Windows (`bridge/pulselab-bridge.ps1` na variável `$script:BridgeVersion` e rota `/v1/config`);
@@ -45,15 +45,20 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - Nunca capture, processe ou armazene nomes, fotos, vídeos, áudios, endereços IP externos ou identificadores individuais de crianças.
    - A unidade de análise da pesquisa é a **bancada coletiva** (`group_id`), nunca o estudante isolado.
 
-2. **Assentimento Livre e Não-Punitivo**:
+2. **Coleta Desligada por Padrão**:
+   - O pacote genérico e os arquivos `config/*.json` nunca ligam a coleta de pesquisa (`research_collection_enabled: false`).
+   - A coleta só é ativada por `provisionamento.json` do polo, gerado por `scripts/gerar-pacote-polo.py` com CAAE no formato oficial, e gravado em `dados_locais/installation.json`.
+   - Máquinas são identificadas por `installation_id` aleatório e rótulo escolhido na instalação; nome do computador, usuário do Windows e caminhos pessoais não são gravados nem exportados.
+
+3. **Assentimento Livre e Não-Punitivo**:
    - Os termos de assentimento na tela inicial iniciam desmarcados.
    - A recusa de qualquer membro ativa o **Modo Livre**, garantindo acesso pedagógico integral às ferramentas de robótica sem gravação de pesquisa e sem envio de dados.
 
-3. **Retenção Estrita de 7 Dias e Retirada Imediata**:
+4. **Retenção Estrita de 7 Dias e Retirada Imediata**:
    - Dados locais no IndexedDB e no Bridge expiram em no máximo 7 dias (`enforceAbsoluteRetention` e `Invoke-BridgeRetentionCleanup`).
    - O botão "Parar de participar e apagar meus dados" executa o expurgo definitivo e imediato dos dados locais, registra tombstone contra reenvio e executa exclusão remota autenticada com retry.
 
-4. **Proibição de Telemetria Invasiva**:
+5. **Proibição de Telemetria Invasiva**:
    - Captura de tela (screenshots) e interceptação global de teclas (`GetAsyncKeyState`) são terminantemente proibidas e abolidas.
 
 ---
@@ -68,7 +73,13 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - Não utilize métodos incompatíveis do .NET Core como `[System.IO.File]::Replace($src, $dst, $null)` sem backup; utilize a rotina segura `Move-BridgeAtomicFile`.
    - Não atribua valores a variáveis automáticas reservadas do PowerShell como `$PID`.
 
-3. **Atualização Automática Verificada e Resiliente (SHA-256)**:
-   - O PulseLab executa verificação de atualização leve e silenciosa na inicialização quando houver conectividade com a internet, utilizando timeout fail-safe de 2 segundos para nunca travar em escolas offline.
-   - Todo pacote recebido é estritamente validado contra o checksum criptográfico SHA-256 oficial antes da extração.
-   - Preservação total de dados: a pasta `dados_locais/` é estritamente preservada contra sobrescrita durante qualquer atualização.
+3. **Atualização Automática Assinada**:
+   - O launcher consulta apenas o manifesto `pulselab-update.json` da última release publicada no GitHub, com timeout de 2 segundos, e só quando o servidor local não está em execução.
+   - O manifesto deve estar assinado (RSA-SHA256) pela chave privada do projeto, guardada fora do repositório. Sem `release-public-key.json` ou com assinatura inválida, não há atualização.
+   - O ZIP é conferido pelo SHA-256 do manifesto assinado, validado (sintaxe dos scripts) e instalado por troca de pastas com backup em `_update_backup`. Se o servidor local não iniciar, a versão anterior é restaurada e a nova fica bloqueada naquela máquina.
+   - `dados_locais/` e `provisionamento.json` nunca são movidos, apagados ou sobrescritos.
+   - Releases são publicadas com `scripts/publicar-release.py`; pré-releases não chegam às máquinas.
+
+4. **Governança de Mudanças**:
+   - Toda mudança entra na `main` por pull request com o CI verde (`.github/workflows/ci.yml`).
+   - Agentes de IA não fazem push direto na `main` nem alteram este arquivo, `release-public-key.json`, o launcher, o atualizador ou `config/` sem revisão humana.

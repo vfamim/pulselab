@@ -73,3 +73,9 @@ dados_locais/*.sqlite
 dados_locais/*.txt
 dados_locais/sessoes/*.json
 !dados_locais/sessoes/.gitkeep
+
+# Pasta montada por scripts/build-hosting.py para o Firebase Hosting
+hosting-dist/
+dist-polos/
+dist-release/
+*.pem

@@ -1,84 +1,71 @@
-# PulseLab — teste do protocolo v2
+# PulseLab
 
-Esta branch é uma versão isolada para testar as mudanças da revisão adversarial.
-Use somente dados fictícios. Não está liberada para pesquisa com crianças.
+Camada de observação das oficinas do projeto Robótica Educativa (UNIVASF). A tela das
+crianças roda no Microsoft Edge; um servidor local em PowerShell (porta 43128) guarda
+os registros no próprio computador, lê contagens de blocos dos projetos LEGO SPIKE e
+exporta para pendrive.
 
-## Experimentar
+## Estado
 
-No Windows, baixe [PulseLab-TESTE-v2-Windows.zip](test-packages/PulseLab-TESTE-v2-Windows.zip)
-nesta branch (botão de download do arquivo), extraia todo o ZIP e execute
-**Iniciar-PulseLab.bat**. A página abre em
-http://127.0.0.1:43128/alunos/. A janela do servidor deve permanecer aberta.
+- A coleta de pesquisa vem **desligada** no pacote genérico. Ela só liga com o pacote
+  do polo, que traz `provisionamento.json` com a sede e o CAAE do parecer ético.
+- A unidade de análise é a bancada. Não há nomes, fotos, câmera, captura de tela nem teclado.
+- Os itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica.
+  Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md) e
+  [plano de validação](docs/plano-validacao-v2.md).
 
-No desenvolvimento:
+## Para os polos
 
-```sh
-cd web/agent-simulator
-npm ci
-npm run dev -- --host 127.0.0.1 --port 4179
-```
+1. Baixe o pacote do seu polo e extraia o ZIP.
+2. Rode `Instalar-PulseLab.bat` e, se quiser, informe o nome da máquina (ex.: `PET-LAB1-PC03`).
+3. Use os atalhos **PulseLab - Iniciar Oficina** e **PulseLab - Exportar Dados**.
 
-Abra http://127.0.0.1:4179/alunos/. Veja o [roteiro de teste](docs/roteiro-teste-v2.md).
+Reinstalar com um pacote de polo mais novo mantém a identificação da máquina e os registros.
 
-O teste usa banco local próprio, porta distinta da instalação principal,
-sem chaves de produção, envio à nuvem, atualização automática ou leitura de pastas.
-A PWA armazena registros no navegador por sete dias desde o início da sessão.
-A limpeza ocorre ao abrir o app e durante sessões ativas. Exportações ficam sob
-responsabilidade de quem as baixou. O pacote é portátil, sem instalação.
+## Identificação da máquina
 
-## O que mudou
+`dados_locais/installation.json` guarda um `installation_id` aleatório, o rótulo escolhido
+na instalação e os dados do polo. A pasta `dados_locais` nunca é sobrescrita por
+atualização ou reinstalação. Exportações usam o rótulo, nunca o nome do Windows ou do usuário.
 
-- Assentimento separado de cada integrante, inicialmente desmarcado.
-- Recusa inicia atividade livre, sem sessão, respostas, eventos ou telemetria.
-- Retirada apaga todos os registros locais da sessão.
-- Bancada como unidade de análise, com identidade estável e tamanho real do grupo.
-- Instrumento único versionado, incluído na exportação com seu hash SHA-256.
-- Itens de esforço, confiança, participação e intenção com dimensões separadas;
-  recusa por item e ausência de consenso são preservadas.
-- Contexto institucional obrigatório por códigos; papéis confirmados manualmente.
-- Checkpoints com horários reais e indicação de antecipação/atraso.
-- Ajuda com pedido, reconhecimento, início e resolução.
-- Rubrica separa três tentativas de execução, explicação e quantidade de apoio.
-- Devolutiva registra a próxima ação pedagógica.
-- Artefato selecionado manualmente; apenas contagens e categorias de blocos.
-  Não há classificação automática de missão nem probabilidade de aprendizagem.
-- Completude operacional, cobertura de respostas e disponibilidade de resultado
-  aparecem separadamente.
-- Migração preparada para revogar acesso anônimo, restringir leitura por sede e
-  permitir descarte somente mediante política institucional explícita.
+## Atualização automática
 
-## Pesquisa e limites
+Ao abrir, o launcher consulta a última release publicada no GitHub (até 2 s sem internet).
 
-A pergunta do piloto é a viabilidade e validade de uma coleta mínima em oficinas,
-não o efeito causal da robótica. Os itens, rubricas e adaptações por faixa escolar
-ainda precisam de validação humana. Não há resultados empíricos de aprendizagem
-ou equidade produzidos por esta branch.
+- O manifesto `pulselab-update.json` precisa estar assinado pela chave do projeto.
+  A chave pública vai no pacote (`release-public-key.json`). Sem ela, não há atualização.
+- O ZIP é conferido pelo SHA-256 do manifesto assinado e instalado com troca de pastas.
+  A versão anterior fica em `_update_backup`.
+- Se o servidor local não subir depois da troca, a versão anterior volta e a nova fica bloqueada
+  naquela máquina.
+- Com o servidor já em execução, a atualização fica para a próxima abertura.
 
-- [Protocolo v2 e decisões pendentes](docs/protocolo-pesquisa-v2-teste.md)
-- [Inventário de dados e limitações](docs/inventario-dados-v2.md)
-- [Plano de validação acadêmica e social](docs/plano-validacao-v2.md)
-- [Matriz de resposta à revisão](docs/matriz-revisao-v2.md)
-
-Documentos v1/v1.4, o agente WPF e o portal antigo são referências históricas:
-não descrevem o executável deste pacote. A avaliação do instrutor está integrada
-ao novo fluxo local. O backend remoto não recebe os novos exports v2.
-
-## Verificação e pacote
+## Publicar uma versão
 
 ```sh
-cd web/agent-simulator
-npm run check
-cd ../..
-python3 scripts/check-database.py
-./scripts/build-offline-package.sh
+python3 scripts/publicar-release.py gerar-chave       # uma vez; chave privada em ~/.pulselab
+./scripts/build-offline-package.sh                    # gera o ZIP da versão em VERSION
+python3 scripts/publicar-release.py publicar --pre    # pré-release: não chega às máquinas
+gh release edit vX.Y.Z --prerelease=false --latest    # promove: máquinas atualizam
 ```
 
-Os testes de banco criam um container descartável próprio com dados sintéticos.
-Nenhuma migração é aplicada a Supabase remoto. O pacote e seu SHA-256 estão
-versionados na branch. A credencial disponível não permite alterar workflows;
-a automação proposta está em `docs/ci/research-v2-test.workflow.yml`, ainda
-inativa. O build bloqueia publicação pelo workflow live da main.
+Pacote de polo:
 
-Os testes foram executados localmente. O servidor tem smoke test executável
-com `powershell -File scripts/test-portable-server.ps1` no Windows; o teste
-manual do inicializador no seu Windows continua parte deste PR experimental.
+```sh
+python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234
+python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
+```
+
+## Desenvolvimento
+
+```sh
+cd web/agent-simulator && npm ci && npm run test:unit && npm run build
+python3 scripts/check-version-consistency.py
+python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting
+pwsh -File scripts/test-launcher-update.ps1
+```
+
+O site no Firebase publica apenas a lista de pastas de `scripts/build-hosting.py`
+(montada em `hosting-dist/`). Toda mudança passa por PR com o CI verde.
+
+Documentos v1/v1.4, o agente WPF (`agent/`) e o portal antigo são referências históricas.

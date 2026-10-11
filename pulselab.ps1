@@ -22,143 +22,53 @@ if (-not (Test-Path -LiteralPath $bridge) -or -not (Test-Path -LiteralPath (Join
 }
 
 # --- VERIFICA VERSAO LOCAL ---
-$localVersion = "2.2.7"
+$localVersion = "2.2.8"
 $verFile = Join-Path $scriptRoot "VERSION"
 if (Test-Path -LiteralPath $verFile) {
     try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
 }
 
-# --- ROTINA DE ATUALIZACAO AUTOMATICA VERIFICADA (SHA-256) E RESILIENTE A FALHAS ---
-function Update-PulseLabIfOnline {
-    param(
-        [string]$CurrentVersion,
-        [string]$TargetDir
-    )
+# --- IDENTIDADE DA MAQUINA E ATUALIZACAO ASSINADA ---
+$dataDir = Join-Path $scriptRoot "dados_locais"
+if (-not (Test-Path -LiteralPath $dataDir)) {
+    try { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null } catch {}
+}
 
-    $versionUrl = "https://raw.githubusercontent.com/vfamim/pulselab/main/version.json"
+try {
+    . (Join-Path $scriptRoot "pulselab-installation.ps1")
+    [void](Initialize-PulseLabInstallation -InstallRoot $scriptRoot)
+} catch {
+    Write-Host "[AVISO] Identidade da maquina nao inicializada: $($_.Exception.Message)" -ForegroundColor Yellow
+}
 
+$updateModule = Join-Path $scriptRoot "pulselab-update.ps1"
+$updateLoaded = $false
+if (Test-Path -LiteralPath $updateModule) {
     try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-    } catch {}
-
-    # Probe rápido (timeout 2000ms). Se estiver offline na escola, sai instantaneamente.
-    $remoteMeta = $null
-    try {
-        $req = [System.Net.WebRequest]::Create($versionUrl)
-        $req.Timeout = 2000
-        $req.Method = "GET"
-        $resp = $req.GetResponse()
-        $reader = New-Object System.IO.StreamReader($resp.GetResponseStream(), [System.Text.Encoding]::UTF8)
-        $jsonText = $reader.ReadToEnd()
-        $reader.Close()
-        $resp.Close()
-        if ($jsonText) {
-            $remoteMeta = $jsonText | ConvertFrom-Json
-        }
+        . $updateModule
+        $updateLoaded = $true
     } catch {
-        # Sem internet ou timeout -> segue direto com o modelo vigente sem erro
-        return
-    }
-
-    if (-not $remoteMeta -or -not $remoteMeta.version -or $remoteMeta.auto_update_enabled -eq $false) {
-        return
-    }
-
-    # Comparar versões SemVer
-    $cleanLocal = ($CurrentVersion -replace '[^0-9\.]', '').Trim('.')
-    $cleanRemote = ($remoteMeta.version -replace '[^0-9\.]', '').Trim('.')
-    try {
-        $vLocal = [System.Version]::Parse($cleanLocal)
-        $vRemote = [System.Version]::Parse($cleanRemote)
-        if ($vRemote -le $vLocal) {
-            return
-        }
-    } catch {
-        if ($cleanRemote -eq $cleanLocal) {
-            return
-        }
-    }
-
-    Write-Host "[ATUALIZACAO] Nova versao detectada ($($remoteMeta.version)). Baixando pacote verificado..."
-    $pkgUrl = $remoteMeta.package_url
-    if (-not $pkgUrl) {
-        $pkgUrl = "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-$($remoteMeta.version)-Windows.zip"
-    }
-    $shaUrl = "$pkgUrl.sha256"
-
-    $tempDir = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "PulseLabUpdate_$([Guid]::NewGuid().ToString('N'))")
-    try {
-        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-        $tempZip = Join-Path $tempDir "package.zip"
-        $tempSha = Join-Path $tempDir "package.zip.sha256"
-
-        $webClient = New-Object System.Net.WebClient
-
-        # 1. Baixar .sha256 oficial
-        $webClient.DownloadFile($shaUrl, $tempSha)
-        $expectedShaRaw = Get-Content -LiteralPath $tempSha -Raw
-        $shaRegex = '\b([a-f0-9]{64})\b'
-        if ($expectedShaRaw -notmatch $shaRegex) {
-            Write-Host "[ATUALIZACAO] Checksum SHA-256 remoto invalido. Mantendo versao vigente."
-            return
-        }
-        $expectedSha = $matches[1].ToLower()
-
-        # 2. Baixar pacote ZIP
-        $webClient.DownloadFile($pkgUrl, $tempZip)
-
-        # 3. Validar SHA-256 localmente
-        $hasher = [System.Security.Cryptography.SHA256]::Create()
-        $fs = [System.IO.File]::OpenRead($tempZip)
-        $hashBytes = $hasher.ComputeHash($fs)
-        $fs.Close()
-        $hasher.Dispose()
-        $actualSha = ([BitConverter]::ToString($hashBytes) -replace '-', '').ToLower()
-
-        if ($actualSha -ne $expectedSha) {
-            Write-Host "[ATUALIZACAO] Checksum SHA-256 divergente. Abortando atualizacao para seguranca."
-            return
-        }
-
-        # 4. Extrair arquivos verificados
-        Add-Type -AssemblyName System.IO.Compression.FileSystem
-        $extractDir = Join-Path $tempDir "extracted"
-        [System.IO.Compression.ZipFile]::ExtractToDirectory($tempZip, $extractDir)
-
-        $payloadRoot = $extractDir
-        $subDirs = Get-ChildItem -LiteralPath $extractDir -Directory
-        if ($subDirs.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $subDirs[0].FullName "pulselab.ps1"))) {
-            $payloadRoot = $subDirs[0].FullName
-        }
-
-        # Copiar sobre o TargetDir preservando dados_locais intacto
-        $items = Get-ChildItem -LiteralPath $payloadRoot
-        foreach ($item in $items) {
-            if ($item.Name -eq "dados_locais") {
-                continue
-            }
-            $dest = Join-Path $TargetDir $item.Name
-            if ($item.PSIsContainer) {
-                Copy-Item -LiteralPath $item.FullName -Destination $dest -Recurse -Force
-            } else {
-                Copy-Item -LiteralPath $item.FullName -Destination $dest -Force
-            }
-        }
-
-        Write-Host "[OK] Atualizado com sucesso para a versao $($remoteMeta.version)!"
-    } catch {
-        Write-Host "[ATUALIZACAO] Falha ao aplicar atualizacao ($($_.Exception.Message)). Mantendo versao vigente."
-    } finally {
-        if (Test-Path -LiteralPath $tempDir) {
-            try { Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue } catch {}
-        }
+        Write-Host "[AVISO] Modulo de atualizacao indisponivel: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 }
 
-if (-not $NoUpdate) {
-    Update-PulseLabIfOnline -CurrentVersion $localVersion -TargetDir $scriptRoot
-    if (Test-Path -LiteralPath $verFile) {
-        try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
+if ($updateLoaded) {
+    try { [void](Repair-PulseLabNestedFolders -InstallRoot $scriptRoot) } catch {}
+}
+
+# So atualiza com o servidor local parado: com ele no ar, os arquivos em uso seriam trocados no meio da oficina.
+$bridgeAlreadyRunning = $false
+try {
+    $probe = Invoke-RestMethod -Uri "http://127.0.0.1:43128/health" -TimeoutSec 1
+    if ($probe -and $probe.status -eq "ok") { $bridgeAlreadyRunning = $true }
+} catch {}
+
+if ($updateLoaded -and -not $NoUpdate -and -not $bridgeAlreadyRunning) {
+    $updateResult = Update-PulseLabIfOnline -CurrentVersion $localVersion -InstallRoot $scriptRoot
+    if ($updateResult -eq "installed") {
+        # A versao nova entra em vigor numa nova execucao do launcher, que confirma ou reverte.
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $scriptRoot 'pulselab.ps1')`" -NoUpdate" -WindowStyle Hidden
+        exit 0
     }
 }
 
@@ -239,10 +149,6 @@ if (-not $running) {
     }
 
     # --- 3. INICIALIZACAO DO BRIDGE COM MONITORAMENTO E LOG DE ERRO ---
-    $dataDir = Join-Path $scriptRoot "dados_locais"
-    if (-not (Test-Path -LiteralPath $dataDir)) {
-        try { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null } catch {}
-    }
     $startupErrLog = if (Test-Path -LiteralPath $dataDir) {
         Join-Path $dataDir "bridge-startup-error.log"
     } else {
@@ -303,6 +209,13 @@ if (-not $running) {
             }
         }
 
+        if ($updateLoaded -and (Test-Path -LiteralPath (Join-Path $dataDir "update-pending.json"))) {
+            if (Restore-PulseLabUpdate -InstallRoot $scriptRoot -Reason "servidor local nao iniciou") {
+                Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $scriptRoot 'pulselab.ps1')`" -NoUpdate" -WindowStyle Hidden
+                exit 1
+            }
+        }
+
         Write-Host "[ERRO CRITICO] $errDetail" -ForegroundColor Red
         throw $errDetail
     }
@@ -316,6 +229,10 @@ if (-not $running) {
             }
         } catch {}
     }
+}
+
+if ($updateLoaded) {
+    try { [void](Complete-PulseLabUpdate -InstallRoot $scriptRoot) } catch {}
 }
 
 Write-Host "[OK] Servidor ativo em http://127.0.0.1:$port/alunos/"

@@ -93,7 +93,7 @@ test("Zero persistência antes da autorização: student-page.jsx protege localS
   // Grava SOMENTE após autorização estrita da configuração e inicialização da sessão coletiva
   assert.match(
     pageContent,
-    /if \(!sessionStartedEmittedRef\.current\)[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*installationId\)/,
+    /if \(!sessionStartedEmittedRef\.current\)[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*machineInstallationId\)/,
     "Deve gravar INSTALLATION_KEY exclusivamente após autorização válida na inicialização da sessão"
   );
 
