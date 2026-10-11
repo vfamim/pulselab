@@ -2812,3 +2812,155 @@ select:focus-visible {
   font-family: monospace;
   font-size: 0.9rem;
 }
+
+/* Encerramento de turma: botão discreto do instrutor, pergunta da bancada e avaliação em 2 toques */
+.turma-close-trigger {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.turma-close-trigger:hover,
+.turma-close-trigger:focus-visible {
+  color: var(--ink);
+  border-color: var(--violet-700);
+}
+
+.turma-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 16, 38, 0.55);
+}
+
+.turma-card {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 18px;
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.turma-card h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  text-wrap: balance;
+}
+
+.turma-card p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.turma-card--bancada {
+  width: min(760px, 100%);
+  text-align: center;
+}
+
+.turma-card--bancada h2 {
+  font-size: 2rem;
+}
+
+.face-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 560px) {
+  .face-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.face-option {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  padding: 18px 8px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.05rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.face-option:hover,
+.face-option:focus-visible {
+  border-color: var(--violet-700);
+  background: var(--violet-100);
+}
+
+.face-option__face {
+  font-size: 3rem;
+  line-height: 1;
+}
+
+.turma-skip {
+  justify-self: center;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.choice-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice-group legend {
+  width: 100%;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.choice {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.choice--selected {
+  border-color: var(--violet-700);
+  background: var(--violet-100);
+  font-weight: 600;
+}
+
+.turma-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.turma-actions .button[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

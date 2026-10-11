@@ -10,6 +10,13 @@ exporta para pendrive.
 - A coleta de pesquisa vem **desligada** no pacote genérico. Ela só liga com o pacote
   do polo, que traz `provisionamento.json` com a sede e o CAAE do parecer ético.
 - A unidade de análise é a bancada. Não há nomes, fotos, câmera, captura de tela nem teclado.
+- A sessão de uma turma vai da abertura do app (ou do fim da turma anterior) até o toque em
+  **Encerrar turma**. No encerramento, a bancada responde uma pergunta com 4 carinhas e o
+  instrutor registra resultado (0 a 3) e apoio (nenhum, algum, muito). Os itens estão em
+  `web/agent-simulator/lib/contracts.js` como rascunho até validação do pesquisador.
+- Escola, oficina e turma não informadas ficam como `nao_informado`, nunca com valores genéricos.
+- Os registros ficam no computador por `retention_days` do pacote do polo (padrão 180 dias),
+  mesmo depois de exportados ou enviados. O prazo precisa constar no protocolo e no TCLE.
 - Os itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica.
   Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md) e
   [plano de validação](docs/plano-validacao-v2.md).
@@ -52,7 +59,7 @@ gh release edit vX.Y.Z --prerelease=false --latest    # promove: máquinas atual
 Pacote de polo:
 
 ```sh
-python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234
+python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234 --retencao-dias 180
 python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
 ```
 

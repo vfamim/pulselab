@@ -136,9 +136,71 @@ test("authorized research: automatic silent background session and spike polling
   expect(startEvent.details.group_size).toBe(3);
   expect(startEvent.details.collective_unit).toBe("bancada");
 
-  // Verify child screen remained completely silent throughout
-  await expect(page.getByRole("button")).toHaveCount(0);
+  // Child screen stays silent: the only control is the instructor's "Encerrar turma"
+  await expect(page.getByRole("button")).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Encerrar turma" })).toBeVisible();
   await expect(page.locator(".silent-bench-status")).toHaveText("Oficina pronta");
+});
+
+test("encerrar turma: bancada responde, instrutor avalia e a próxima turma começa", async ({ page }) => {
+  await page.route("**/v1/config", (route) =>
+    route.fulfill({
+      status: 200,
+      headers: corsHeaders,
+      body: JSON.stringify({
+        research_collection_enabled: true,
+        research_authorization_version: "12345678.9.0000.1234",
+        research_authorized_purposes: ["academic_research"],
+        group_size: 3,
+        site_id: "PET",
+        regional_hub: "Petrolina",
+        school_code: "CONFIGURE_ESCOLA",
+        installation_id: "11111111-2222-4333-8444-555555555555",
+        machine_label: "PET-LAB1-PC03"
+      })
+    })
+  );
+  await page.route("**/v1/spike/metrics", (route) => route.fulfill({ status: 200, headers: corsHeaders, body: JSON.stringify({ project_saved: false }) }));
+  await page.route("**/v1/sessions**", (route) => route.fulfill({ status: 200, headers: corsHeaders, body: JSON.stringify({ ok: true, purged: false }) }));
+  await page.route("**/v1/events**", (route) => route.fulfill({ status: 200, headers: corsHeaders, body: JSON.stringify({ ok: true }) }));
+  await page.reload();
+
+  await expect.poll(async () => (await getStoredRecords(page, "events")).filter((e) => e.event_type === "session_started").length).toBe(1);
+
+  await page.getByRole("button", { name: "Encerrar turma" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Encerrar turma" }).click();
+  await expect(page.getByRole("heading", { name: "Como foi a oficina para a sua bancada hoje?" })).toBeVisible();
+  await page.getByRole("button", { name: /Gostamos/ }).first().click();
+
+  const register = page.getByRole("button", { name: "Registrar" });
+  await expect(register).toBeDisabled();
+  await page.getByRole("button", { name: "Concluiu a missão" }).click();
+  await page.getByRole("button", { name: "Algum" }).click();
+  await register.click();
+  await expect(page.getByText("Turma encerrada.")).toBeVisible();
+
+  await expect.poll(async () => (await getStoredRecords(page, "events")).filter((e) => e.event_type === "session_started").length).toBe(2);
+  const events = await getStoredRecords(page, "events");
+  const [first, second] = events.filter((e) => e.event_type === "session_started").sort((a, b) => a.occurred_at.localeCompare(b.occurred_at));
+  const experience = events.find((e) => e.event_type === "experience_recorded");
+  const rubric = events.find((e) => e.event_type === "rubric_completed");
+  const completed = events.find((e) => e.event_type === "session_completed");
+
+  expect(experience.session_id).toBe(first.session_id);
+  expect(experience.details).toMatchObject({ item_id: "experiencia_bancada_v1", value: 3, refused: false });
+  expect(rubric.details).toMatchObject({ result_level: 2, support_level: "algum", skipped: false });
+  expect(completed.session_id).toBe(first.session_id);
+  expect(second.session_id).not.toBe(first.session_id);
+  expect(second.details.start_mode).toBe("apos_encerramento");
+  expect(first.details.start_mode).toBe("abertura_app");
+  expect(first.installation_id).toBe("11111111-2222-4333-8444-555555555555");
+  expect(first.computer_id).toBe("PET-LAB1-PC03");
+  expect(first.school_code).toBe("nao_informado");
+  expect(first.details.context_missing).toContain("school_code");
+
+  const sessions = await getStoredRecords(page, "sessions");
+  const closed = sessions.find((s) => (s.session_id || s.sessionId) === first.session_id);
+  expect(closed.status).toBe("completed");
 });
 
 test("idempotent in-tab reload vs discard of old session for a new group", async ({ page }) => {

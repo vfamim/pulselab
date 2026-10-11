@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   CONFIG_HASH,
+  INSTRUMENT_MANIFEST,
+  INSTRUMENT_VERSION,
   PROTOCOL_VERSION,
   createUuid,
   formatEventName
@@ -17,7 +19,10 @@ import {
   syncSingleEvent
 } from "../lib/sync-engine.js";
 import {
+  DEFAULT_RETENTION_DAYS,
   isResearchAuthorized,
+  resolveRetentionDays,
+  resolveSessionContext,
   validateRestoredSession,
   downloadSessionData,
   structuralSpikeMetrics
@@ -27,16 +32,11 @@ const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.2.8";
+const CLIENT_VERSION = "student-pwa/2.3.0";
 
-const DEFAULT_CONTEXT = {
-  regional: "Nordeste",
-  site_id: "Polo-Nordeste",
-  school: "geral",
-  workshop: "oficina-spike",
-  class: "turma-geral",
-  activity: "atividade-01-spike"
-};
+const BANCADA_ITEM = INSTRUMENT_MANIFEST.items.bancada.experiencia;
+const RESULT_ITEM = INSTRUMENT_MANIFEST.items.instrutor.resultado;
+const SUPPORT_ITEM = INSTRUMENT_MANIFEST.items.instrutor.apoio;
 
 const BRIDGE_PORT = 43128;
 const BRIDGE_URL = `http://127.0.0.1:${BRIDGE_PORT}`;
@@ -204,6 +204,109 @@ function EvidencePanel({ events }) {
   );
 }
 
+function TurmaClosing({ step, assessment, onAssessmentChange, onStart, onCancel, onBancadaAnswer, onFinish }) {
+  if (step === null) {
+    return (
+      <button className="turma-close-trigger" type="button" onClick={onStart}>
+        Encerrar turma
+      </button>
+    );
+  }
+
+  if (step === "concluido") {
+    return (
+      <div className="turma-overlay" role="status" aria-live="polite">
+        <div className="turma-card">
+          <h2>Turma encerrada.</h2>
+          <p>A próxima turma já pode usar esta bancada.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "confirmar") {
+    return (
+      <div className="turma-overlay" role="dialog" aria-modal="true" aria-labelledby="turma-confirm-title">
+        <div className="turma-card">
+          <h2 id="turma-confirm-title">Encerrar a turma desta bancada?</h2>
+          <p>Use ao final da oficina. A próxima turma começa em seguida.</p>
+          <div className="turma-actions">
+            <button className="button button--primary" type="button" onClick={() => onBancadaAnswer("abrir")}>Encerrar turma</button>
+            <button className="button button--ghost" type="button" onClick={onCancel}>Voltar</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (step === "bancada") {
+    return (
+      <div className="turma-overlay" role="dialog" aria-modal="true" aria-labelledby="turma-bancada-title">
+        <div className="turma-card turma-card--bancada">
+          <h2 id="turma-bancada-title">{BANCADA_ITEM.legend}</h2>
+          <div className="face-options">
+            {BANCADA_ITEM.options.map((option) => (
+              <button key={option[0]} className="face-option" type="button" onClick={() => onBancadaAnswer(option)}>
+                <span className="face-option__face" aria-hidden="true">{option[1]}</span>
+                <span>{option[2]}</span>
+              </button>
+            ))}
+          </div>
+          <button className="turma-skip" type="button" onClick={() => onBancadaAnswer(null)}>
+            {BANCADA_ITEM.action_skip}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const ready = assessment.result !== null && assessment.support !== null;
+  return (
+    <div className="turma-overlay" role="dialog" aria-modal="true" aria-labelledby="turma-instrutor-title">
+      <div className="turma-card">
+        <span className="eyebrow">Para o instrutor</span>
+        <h2 id="turma-instrutor-title">Como foi esta bancada?</h2>
+        <fieldset className="choice-group">
+          <legend>{RESULT_ITEM.legend}</legend>
+          {RESULT_ITEM.options.map((option) => (
+            <button
+              key={option[0]}
+              type="button"
+              className={`choice${assessment.result === option[0] ? " choice--selected" : ""}`}
+              aria-pressed={assessment.result === option[0]}
+              onClick={() => onAssessmentChange({ ...assessment, result: option[0] })}
+            >
+              {option[1]}
+            </button>
+          ))}
+        </fieldset>
+        <fieldset className="choice-group">
+          <legend>{SUPPORT_ITEM.legend}</legend>
+          {SUPPORT_ITEM.options.map((option) => (
+            <button
+              key={option[0]}
+              type="button"
+              className={`choice${assessment.support === option[0] ? " choice--selected" : ""}`}
+              aria-pressed={assessment.support === option[0]}
+              onClick={() => onAssessmentChange({ ...assessment, support: option[0] })}
+            >
+              {option[1]}
+            </button>
+          ))}
+        </fieldset>
+        <div className="turma-actions">
+          <button className="button button--primary" type="button" disabled={!ready} onClick={() => onFinish({ skipped: false })}>
+            Registrar
+          </button>
+          <button className="button button--ghost" type="button" onClick={() => onFinish({ skipped: true })}>
+            {INSTRUMENT_MANIFEST.items.instrutor.action_skip}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentPage() {
   const labMode = useMemo(() => {
     if (typeof window === "undefined") return false;
@@ -222,7 +325,9 @@ export default function StudentPage() {
   const [startedAt, setStartedAt] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [spikeTelemetry, setSpikeTelemetry] = useState(null);
-  const [context, setContext] = useState(() => readJson(CONTEXT_KEY, DEFAULT_CONTEXT));
+  const [context, setContext] = useState(() => resolveSessionContext(null));
+  const [closingStep, setClosingStep] = useState(null);
+  const [assessment, setAssessment] = useState({ result: null, support: null });
 
   const [toast, setToast] = useState("");
   const [storageError, setStorageError] = useState("");
@@ -243,6 +348,11 @@ export default function StudentPage() {
   const generationRef = useRef(0);
   const withdrawalChannelRef = useRef(null);
   const telemetryRef = useRef(null);
+  const configRef = useRef(null);
+  const contextRef = useRef(resolveSessionContext(null));
+  const machineRef = useRef({ installationId: null, computerId: null });
+  const retentionDaysRef = useRef(DEFAULT_RETENTION_DAYS);
+  const timelineRef = useRef([]);
   const isSubmittingRef = useRef(false);
 
   function computeElapsedMs() {
@@ -355,12 +465,12 @@ export default function StudentPage() {
       dyad_id: groupId,
       group_id: groupId,
       installation_id: installationId,
-      site_id: context.site_id || `Polo-${context.regional || "Nordeste"}`,
-      regional_hub: context.regional || "Nordeste",
-      school_code: context.school || "geral",
-      workshop_code: context.workshop || "oficina-spike",
-      class_code: context.class || "turma-geral",
-      activity_id: context.activity || "atividade-01-spike",
+      site_id: context.site_id,
+      regional_hub: context.regional_hub,
+      school_code: context.school_code,
+      workshop_code: context.workshop_code,
+      class_code: context.class_code,
+      activity_id: context.activity_id,
       computer_id: computerId,
       protocol_version: PROTOCOL_VERSION,
       occurred_at: new Date(now).toISOString(),
@@ -439,12 +549,204 @@ export default function StudentPage() {
     return event;
   }
 
+  function buildSnapshot(currentTimeline, status, extra = {}) {
+    const ctx = contextRef.current;
+    return {
+      sessionId,
+      session_id: sessionId,
+      groupId,
+      group_id: groupId,
+      installation_id: installationId,
+      computer_id: computerId,
+      site_id: ctx.site_id,
+      regional_hub: ctx.regional_hub,
+      school_code: ctx.school_code,
+      workshop_code: ctx.workshop_code,
+      class_code: ctx.class_code,
+      activity_id: ctx.activity_id,
+      protocol_version: PROTOCOL_VERSION,
+      instrument_version: INSTRUMENT_VERSION,
+      config_hash: CONFIG_HASH,
+      startedAt,
+      started_at: startedAt ? new Date(startedAt).toISOString() : null,
+      group_size: groupSize,
+      teamSize: groupSize,
+      timeline: currentTimeline,
+      spikeTelemetry,
+      isFreeMode: false,
+      status,
+      phase: status === "completed" ? "completed" : "in_progress",
+      savedAt: new Date().toISOString(),
+      ...(labMode ? { is_synthetic: true } : {}),
+      ...extra
+    };
+  }
+
+  // Abre a sessão de uma turma nesta bancada. startMode registra se ela começou com a abertura
+  // do app ou logo após o encerramento da turma anterior.
+  function beginSession(startMode) {
+    const cfg = configRef.current;
+    if (!cfg || !isResearchActiveRef.current || isWithdrawnRef.current) return;
+    const ctx = contextRef.current;
+    const { installationId: machineInstallationId, computerId: machineComputerId } = machineRef.current;
+    const newSessionId = createUuid();
+    const newGroupId = createUuid();
+    const now = Date.now();
+    setSessionId(newSessionId);
+    setGroupId(newGroupId);
+    setStartedAt(now);
+    setSpikeTelemetry(null);
+    telemetryRef.current = null;
+    startedAtRef.current = now;
+    sessionStartedEmittedRef.current = true;
+    if (typeof performance !== "undefined" && typeof performance.now === "function") {
+      monotonicAnchorRef.current = { perfStart: performance.now(), elapsedBase: 0 };
+    }
+
+    try {
+      localStorage.setItem(INSTALLATION_KEY, machineInstallationId);
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem("pulselab_tab_session_id", newSessionId);
+      }
+    } catch {}
+
+    const startEvent = {
+      event_id: createUuid(),
+      session_id: newSessionId,
+      dyad_id: newGroupId,
+      group_id: newGroupId,
+      installation_id: machineInstallationId,
+      site_id: ctx.site_id,
+      regional_hub: ctx.regional_hub,
+      school_code: ctx.school_code,
+      workshop_code: ctx.workshop_code,
+      class_code: ctx.class_code,
+      activity_id: ctx.activity_id,
+      computer_id: machineComputerId,
+      protocol_version: PROTOCOL_VERSION,
+      occurred_at: new Date(now).toISOString(),
+      elapsed_ms: 0,
+      client_version: CLIENT_VERSION,
+      config_version: INSTRUMENT_VERSION,
+      config_hash: CONFIG_HASH,
+      _delivery_state: "queued",
+      _sequence: 1,
+      _client_occurred_at: new Date(now).toISOString(),
+      _target_table: "research_session_events",
+      event_type: "session_started",
+      severity: "info",
+      interval_mark: null,
+      participant_id: null,
+      participant_role: null,
+      activity_stage: "oficina_coletiva",
+      scheduled_at: null,
+      details: {
+        runtime: "browser_pwa",
+        group_size: cfg.group_size,
+        research_authorization_version: cfg.research_authorization_version,
+        collective_unit: "bancada",
+        start_mode: startMode,
+        context_missing: ctx.missing,
+        instrument_version: INSTRUMENT_VERSION,
+        ...(labMode ? { is_synthetic: true } : {})
+      }
+    };
+
+    sequenceRef.current = 1;
+    timelineRef.current = [startEvent];
+    setTimeline([startEvent]);
+
+    void trackWrite(saveEvent(startEvent)).then(() => {
+      void refreshDeliveryCounts();
+    }).catch(reportStorageError);
+
+    void trackBridgeWrite(notifyBridgeSession(newSessionId, now, [], true));
+    void trackBridgeWrite(notifyBridgeEvent(startEvent, true));
+  }
+
+  function handleBancadaAnswer(option) {
+    if (option === "abrir") {
+      setClosingStep("bancada");
+      return;
+    }
+    recordBancadaAnswer(option);
+  }
+
+  function recordBancadaAnswer(option) {
+    emitTimeline("experience_recorded", {
+      activity_stage: "encerramento",
+      participant_id: "BANCADA",
+      participant_role: "group",
+      details: {
+        item_id: BANCADA_ITEM.item_id,
+        instrument_version: INSTRUMENT_VERSION,
+        value: option ? option[0] : null,
+        label: option ? option[2] : null,
+        refused: !option
+      }
+    });
+    setAssessment({ result: null, support: null });
+    setClosingStep("instrutor");
+  }
+
+  function finishTurma({ skipped }) {
+    const rubricEvent = emitTimeline("rubric_completed", {
+      activity_stage: "encerramento",
+      participant_id: "INSTRUTOR",
+      participant_role: "instructor",
+      details: {
+        result_item_id: RESULT_ITEM.item_id,
+        support_item_id: SUPPORT_ITEM.item_id,
+        instrument_version: INSTRUMENT_VERSION,
+        result_level: skipped ? null : assessment.result,
+        support_level: skipped ? null : assessment.support,
+        skipped
+      }
+    });
+    const completedEvent = emitTimeline("session_completed", {
+      activity_stage: "encerramento",
+      details: {
+        ended_by: "instrutor",
+        assessment_skipped: skipped
+      }
+    });
+
+    const seen = new Set();
+    const finalTimeline = [...timelineRef.current, rubricEvent, completedEvent].filter((event) => {
+      if (!event || seen.has(event.event_id)) return false;
+      seen.add(event.event_id);
+      return true;
+    });
+    const finalSnapshot = buildSnapshot(finalTimeline, "completed", {
+      completed_at: new Date().toISOString()
+    });
+    const closedSessionId = sessionId;
+
+    try {
+      localStorage.removeItem(ACTIVE_SESSION_KEY);
+    } catch {}
+    void trackWrite(saveSession(finalSnapshot)).catch(reportStorageError);
+    void trackBridgeWrite(
+      notifyBridgeSessionSave(finalSnapshot, isResearchActiveRef.current).then(() =>
+        resetBridgeSession(closedSessionId, { completed: true, reason: "prepare_next" }).catch(() => {})
+      )
+    );
+
+    setClosingStep("concluido");
+    window.setTimeout(() => setClosingStep((step) => (step === "concluido" ? null : step)), 4000);
+    beginSession("apos_encerramento");
+  }
+
+  useEffect(() => {
+    timelineRef.current = timeline;
+  }, [timeline]);
+
   useEffect(() => {
     let isMounted = true;
 
     async function resolveConfigAndSession() {
-      // 1. Retenção absoluta de 7 dias executada no mount
-      enforceAbsoluteRetention(7).catch(() => {});
+      // 1. Retenção absoluta executada no mount (prazo padrão até a configuração chegar)
+      enforceAbsoluteRetention(retentionDaysRef.current).catch(() => {});
       void refreshDeliveryCounts();
 
       // 2. Busca configuração institucional do Bridge
@@ -482,23 +784,19 @@ export default function StudentPage() {
       setInstallationId(machineInstallationId);
       setComputerId(machineComputerId);
 
-      if (cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE") {
-        setContext((prev) => ({ ...prev, site_id: cfg.site_id }));
-      }
-      if (cfg.regional_hub) {
-        setContext((prev) => ({ ...prev, regional: cfg.regional_hub }));
-      }
-      if (cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA") {
-        setContext((prev) => ({ ...prev, school: cfg.school_code }));
-      }
-      if (cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA") {
-        setContext((prev) => ({ ...prev, workshop: cfg.workshop_code }));
-      }
-      if (cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA") {
-        setContext((prev) => ({ ...prev, class: cfg.class_code }));
-      }
-      if (cfg.activity_id) {
-        setContext((prev) => ({ ...prev, activity: cfg.activity_id }));
+      const sessionContext = resolveSessionContext(cfg);
+      setContext(sessionContext);
+      contextRef.current = sessionContext;
+      configRef.current = cfg;
+      machineRef.current = { installationId: machineInstallationId, computerId: machineComputerId };
+      try {
+        localStorage.removeItem(CONTEXT_KEY);
+      } catch {}
+
+      const retentionDays = resolveRetentionDays(cfg);
+      if (retentionDays !== retentionDaysRef.current) {
+        retentionDaysRef.current = retentionDays;
+        enforceAbsoluteRetention(retentionDays).catch(() => {});
       }
 
       // 3. Verifica sessão ativa salva para manter idempotência após reload na mesma aba
@@ -545,97 +843,9 @@ export default function StudentPage() {
         } catch {}
       }
 
-      // 4. Inicia sessão coletiva automaticamente se ainda não iniciada
+      // 4. Inicia a sessão da turma ao abrir o app (a próxima começa ao encerrar esta)
       if (!sessionStartedEmittedRef.current) {
-        const newSessionId = createUuid();
-        const newGroupId = createUuid();
-        const now = Date.now();
-        setSessionId(newSessionId);
-        setGroupId(newGroupId);
-        setStartedAt(now);
-        startedAtRef.current = now;
-        sessionStartedEmittedRef.current = true;
-        if (typeof performance !== "undefined" && typeof performance.now === "function") {
-          monotonicAnchorRef.current = { perfStart: performance.now(), elapsedBase: 0 };
-        }
-
-        try {
-          localStorage.setItem(INSTALLATION_KEY, machineInstallationId);
-          if (typeof sessionStorage !== "undefined") {
-            sessionStorage.setItem("pulselab_tab_session_id", newSessionId);
-          }
-        } catch {}
-
-        const startEvent = {
-          event_id: createUuid(),
-          session_id: newSessionId,
-          dyad_id: newGroupId,
-          group_id: newGroupId,
-          installation_id: machineInstallationId,
-          site_id: cfg.site_id && cfg.site_id !== "CONFIGURE_SEDE" ? cfg.site_id : (context.site_id || "Polo-Nordeste"),
-          regional_hub: cfg.regional_hub || context.regional || "Nordeste",
-          school_code: cfg.school_code && cfg.school_code !== "CONFIGURE_ESCOLA" ? cfg.school_code : "geral",
-          workshop_code: cfg.workshop_code && cfg.workshop_code !== "CONFIGURE_OFICINA" ? cfg.workshop_code : "oficina-spike",
-          class_code: cfg.class_code && cfg.class_code !== "CONFIGURE_TURMA" ? cfg.class_code : "turma-geral",
-          activity_id: cfg.activity_id || context.activity || "atividade-01-spike",
-          computer_id: machineComputerId,
-          protocol_version: PROTOCOL_VERSION,
-          occurred_at: new Date(now).toISOString(),
-          elapsed_ms: 0,
-          client_version: CLIENT_VERSION,
-          config_version: "student-pwa-v2",
-          config_hash: CONFIG_HASH,
-          _delivery_state: "queued",
-          _sequence: 1,
-          _client_occurred_at: new Date(now).toISOString(),
-          _target_table: "research_session_events",
-          event_type: "session_started",
-          severity: "info",
-          interval_mark: null,
-          participant_id: null,
-          participant_role: null,
-          activity_stage: "oficina_coletiva",
-          scheduled_at: null,
-          details: {
-            runtime: "browser_pwa",
-            group_size: cfg.group_size,
-            research_authorization_version: cfg.research_authorization_version,
-            collective_unit: "bancada",
-            ...(labMode ? { is_synthetic: true } : {})
-          }
-        };
-
-        sequenceRef.current = 1;
-        setTimeline([startEvent]);
-
-        void trackWrite(saveEvent(startEvent)).then(() => {
-          void refreshDeliveryCounts();
-        }).catch(reportStorageError);
-
-        void trackBridgeWrite(notifyBridgeSession(newSessionId, now, [], true));
-        void trackBridgeWrite(notifyBridgeEvent(startEvent, true));
-
-        const snapshot = {
-          sessionId: newSessionId,
-          session_id: newSessionId,
-          groupId: newGroupId,
-          group_id: newGroupId,
-          installation_id: machineInstallationId,
-          startedAt: now,
-          started_at: new Date(now).toISOString(),
-          group_size: cfg.group_size,
-          teamSize: cfg.group_size,
-          isFreeMode: false,
-          timeline: [startEvent],
-          status: "in_progress",
-          savedAt: new Date().toISOString()
-        };
-
-        try {
-          localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
-        } catch {}
-
-        void trackWrite(saveSession(snapshot)).catch(reportStorageError);
+        beginSession("abertura_app");
       }
     }
 
@@ -643,7 +853,7 @@ export default function StudentPage() {
 
     // Expurgador periódico de hora em hora
     const retentionInterval = setInterval(() => {
-      enforceAbsoluteRetention(7).catch(() => {});
+      enforceAbsoluteRetention(retentionDaysRef.current).catch(() => {});
     }, 60 * 60 * 1000);
 
     return () => {
@@ -662,22 +872,7 @@ export default function StudentPage() {
       !sessionId
     ) return;
 
-    const snapshot = {
-      sessionId,
-      session_id: sessionId,
-      groupId,
-      group_id: groupId,
-      installation_id: installationId,
-      startedAt,
-      started_at: startedAt ? new Date(startedAt).toISOString() : null,
-      group_size: groupSize,
-      teamSize: groupSize,
-      timeline,
-      spikeTelemetry,
-      isFreeMode: false,
-      status: "in_progress",
-      savedAt: new Date().toISOString()
-    };
+    const snapshot = buildSnapshot(timeline, "in_progress");
 
     try {
       localStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(snapshot));
@@ -819,11 +1014,11 @@ export default function StudentPage() {
       group_id: groupId,
       installation_id: installationId,
       site_id: context.site_id,
-      regional_hub: context.regional,
-      school_code: context.school,
-      workshop_code: context.workshop,
-      class_code: context.class,
-      activity_id: context.activity,
+      regional_hub: context.regional_hub,
+      school_code: context.school_code,
+      workshop_code: context.workshop_code,
+      class_code: context.class_code,
+      activity_id: context.activity_id,
       started_at: startedAt ? new Date(startedAt).toISOString() : null,
       group_size: groupSize,
       is_free_mode: isFreeMode,
@@ -853,6 +1048,19 @@ export default function StudentPage() {
   // ROTA NORMAL SILENCIOSA DE ALUNOS:
   // Não mostra formulários, perguntas, cartões de etapas, botões, Área do Educador, IDs, status técnicos ou avaliações.
   // Renderiza somente o fallback não interativo: “Oficina de robótica em andamento. Use o aplicativo LEGO SPIKE.”
+  const canCloseTurma = configResolved && isResearchActive && !isFreeMode && Boolean(sessionId);
+  const closingUi = (
+    <TurmaClosing
+      step={closingStep}
+      assessment={assessment}
+      onAssessmentChange={setAssessment}
+      onStart={() => setClosingStep("confirmar")}
+      onCancel={() => setClosingStep(null)}
+      onBancadaAnswer={handleBancadaAnswer}
+      onFinish={finishTurma}
+    />
+  );
+
   if (!labMode) {
     return (
       <main className="app-shell student-app student-app--silent">
@@ -872,6 +1080,7 @@ export default function StudentPage() {
           </div>
           {storageError && <div className="silent-bench-notice" role="status">{storageError}</div>}
         </div>
+        {canCloseTurma && closingUi}
       </main>
     );
   }
@@ -886,7 +1095,7 @@ export default function StudentPage() {
         <div className="lab-diagnostic__card">
           <span className="eyebrow">Diagnóstico de Laboratório</span>
           <h2>Modo de Inspeção Sintética (?lab=1)</h2>
-          <p>oficina de robótica · v2.2.8</p>
+          <p>oficina de robótica · v2.3.0</p>
           <div className="lab-diagnostic__status">
             <div>Configuração: {configResolved ? (isResearchActive ? "Pesquisa autorizada" : "Modo Livre (sem pesquisa)") : "Resolvendo..."}</div>
             <div>Bancada: Coletiva (Tamanho: {groupSize})</div>
@@ -905,6 +1114,7 @@ export default function StudentPage() {
           <EvidencePanel events={timeline} />
         </div>
       </aside>
+      {canCloseTurma && closingUi}
       {toast && <div className="toast" role="status">{toast}</div>}
       {storageError && <div className="storage-notice" role="alert">{storageError}</div>}
     </main>

@@ -166,3 +166,36 @@ export function structuralSpikeMetrics(raw) {
   }
   return metrics;
 }
+
+export const NOT_INFORMED = "nao_informado";
+export const DEFAULT_RETENTION_DAYS = 180;
+const CONTEXT_FIELDS = ["site_id", "regional_hub", "school_code", "workshop_code", "class_code"];
+
+function isInformed(value) {
+  return typeof value === "string" && value.trim() !== "" && !value.trim().startsWith("CONFIGURE_");
+}
+
+/**
+ * Contexto institucional da sessão a partir da configuração do Bridge.
+ * Campos ausentes ou com marcador CONFIGURE_* viram "nao_informado" e são listados em
+ * missing, em vez de receber valores genéricos que se confundem com dados reais.
+ */
+export function resolveSessionContext(config) {
+  const cfg = config && typeof config === "object" ? config : {};
+  const context = { activity_id: isInformed(cfg.activity_id) ? cfg.activity_id.trim() : "atividade-01-spike", missing: [] };
+  for (const field of CONTEXT_FIELDS) {
+    if (isInformed(cfg[field])) {
+      context[field] = cfg[field].trim();
+    } else {
+      context[field] = NOT_INFORMED;
+      context.missing.push(field);
+    }
+  }
+  return context;
+}
+
+/** Prazo de retenção local em dias: configurado no provisionamento do polo (1 a 365) ou 180. */
+export function resolveRetentionDays(config) {
+  const days = Number(config?.retention_days);
+  return Number.isInteger(days) && days >= 1 && days <= 365 ? days : DEFAULT_RETENTION_DAYS;
+}

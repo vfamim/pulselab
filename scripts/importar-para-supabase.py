@@ -612,19 +612,19 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "regional_hub" not in payload:
             payload["regional_hub"] = event.get("regional_hub") or "Nordeste"
         if "school_code" not in payload:
-            payload["school_code"] = event.get("school_code") or "geral"
+            payload["school_code"] = event.get("school_code") or "nao_informado"
         if "workshop_code" not in payload:
-            payload["workshop_code"] = event.get("workshop_code") or "oficina-spike"
+            payload["workshop_code"] = event.get("workshop_code") or "nao_informado"
         if "class_code" not in payload:
-            payload["class_code"] = event.get("class_code") or "turma-geral"
+            payload["class_code"] = event.get("class_code") or "nao_informado"
         if "activity_id" not in payload:
             payload["activity_id"] = event.get("activity_id") or "atividade-01-spike"
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.2.8"
+            payload["config_version"] = event.get("config_version") or "2.3.0"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.2.8"
+            payload["client_version"] = event.get("client_version") or "2.3.0"
         if "response_status" not in payload:
             payload["response_status"] = event.get("response_status") or "completed"
 
@@ -642,23 +642,25 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "regional_hub" not in payload:
             payload["regional_hub"] = event.get("regional_hub") or "Nordeste"
         if "school_code" not in payload:
-            payload["school_code"] = event.get("school_code") or "geral"
+            payload["school_code"] = event.get("school_code") or "nao_informado"
         if "workshop_code" not in payload:
-            payload["workshop_code"] = event.get("workshop_code") or "oficina-spike"
+            payload["workshop_code"] = event.get("workshop_code") or "nao_informado"
         if "class_code" not in payload:
-            payload["class_code"] = event.get("class_code") or "turma-geral"
+            payload["class_code"] = event.get("class_code") or "nao_informado"
         if "activity_id" not in payload:
             payload["activity_id"] = event.get("activity_id") or "atividade-01-spike"
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "protocol_version" not in payload:
-            payload["protocol_version"] = event.get("protocol_version") or "v2.2"
+            payload["protocol_version"] = event.get("protocol_version")
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.2.8"
+            payload["config_version"] = event.get("config_version") or "2.3.0"
         if "config_hash" not in payload or not payload["config_hash"]:
-            payload["config_hash"] = "3c3662c7306d64236b0f7f26da183cc59a36c00061a2077d93fb0272876b2468"
+            # Proveniência não é imputada: sem o hash do instrumento aplicado, o evento vai para quarentena.
+            payload["_is_quarantine"] = True
+            payload["_quarantine_reason"] = "config_hash ausente: instrumento aplicado não identificado"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.2.8"
+            payload["client_version"] = event.get("client_version") or "2.3.0"
 
 
         # Invariante metodológica: NUNCA converter silenciosamente tipo desconhecido em phase_completed

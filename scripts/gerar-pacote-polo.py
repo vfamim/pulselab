@@ -33,12 +33,14 @@ def load_builder():
     return module
 
 
-def build_provisioning(polo: str, regional: str, caae: str | None, school: str | None) -> dict:
+def build_provisioning(polo: str, regional: str, caae: str | None, school: str | None, retention_days: int = 180) -> dict:
     if not POLO_PATTERN.match(polo):
         raise ValueError("Código do polo deve ter 2 a 24 caracteres: letras maiúsculas, números, - ou _.")
     research = caae is not None
     if research and not CAAE_PATTERN.match(caae):
         raise ValueError("CAAE deve seguir o formato 12345678.9.0000.1234.")
+    if not 1 <= retention_days <= 365:
+        raise ValueError("Retenção local deve ficar entre 1 e 365 dias.")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     data = {
         "provisioning_id": f"{polo}-{stamp}",
@@ -47,6 +49,7 @@ def build_provisioning(polo: str, regional: str, caae: str | None, school: str |
         "research_collection_enabled": research,
         "research_authorization_version": caae,
         "research_authorized_purposes": ["academic_research"] if research else [],
+        "retention_days": retention_days,
     }
     if school:
         data["school_code"] = school
@@ -61,11 +64,12 @@ def main(argv: list[str] | None = None) -> int:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--caae", help="CAAE do parecer que autoriza a coleta neste polo")
     group.add_argument("--sem-pesquisa", action="store_true", help="Identifica o polo sem ligar a coleta")
+    parser.add_argument("--retencao-dias", type=int, default=180, help="Dias que os registros ficam no computador (1 a 365)")
     parser.add_argument("--out-dir", default=str(ROOT / "dist-polos"))
     args = parser.parse_args(argv)
 
     try:
-        provisioning = build_provisioning(args.polo, args.regional, args.caae, args.escola)
+        provisioning = build_provisioning(args.polo, args.regional, args.caae, args.escola, args.retencao_dias)
     except ValueError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 2

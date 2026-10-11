@@ -54,8 +54,9 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - Os termos de assentimento na tela inicial iniciam desmarcados.
    - A recusa de qualquer membro ativa o **Modo Livre**, garantindo acesso pedagógico integral às ferramentas de robótica sem gravação de pesquisa e sem envio de dados.
 
-4. **Retenção Estrita de 7 Dias e Retirada Imediata**:
-   - Dados locais no IndexedDB e no Bridge expiram em no máximo 7 dias (`enforceAbsoluteRetention` e `Invoke-BridgeRetentionCleanup`).
+4. **Retenção Local Configurável e Retirada Imediata**:
+   - Dados locais no IndexedDB e no Bridge expiram no prazo `retention_days` do provisionamento do polo (1 a 365 dias), com padrão de 180 dias (`enforceAbsoluteRetention`, `Invoke-BridgeRetentionCleanup`). O prazo deve constar no protocolo e no TCLE aprovados pelo CEP.
+   - A cópia local permanece no computador durante todo o prazo, mesmo depois do envio à nuvem ou da exportação.
    - O botão "Parar de participar e apagar meus dados" executa o expurgo definitivo e imediato dos dados locais, registra tombstone contra reenvio e executa exclusão remota autenticada com retry.
 
 5. **Proibição de Telemetria Invasiva**:

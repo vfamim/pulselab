@@ -178,7 +178,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.2.8"
+$script:BridgeVersion = "2.3.0"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -484,14 +484,16 @@ function Sync-SessionSnapshotsToSupabase {
             $sessRecord["group_id"] = if ($sdata.group_id) { [string]$sdata.group_id } else { [Guid]::Empty.ToString() }
             $sessRecord["installation_id"] = $instId
             $sessRecord["site_id"] = $siteVal
-            $sessRecord["school_code"] = if ($sdata.school_code) { [string]$sdata.school_code } else { "geral" }
-            $sessRecord["workshop_code"] = if ($sdata.workshop_code) { [string]$sdata.workshop_code } else { "oficina-spike" }
-            $sessRecord["class_code"] = if ($sdata.class_code) { [string]$sdata.class_code } else { "turma-geral" }
+            # Sem valor informado, registra "nao_informado" em vez de um codigo generico que pareca real.
+            $sessRecord["school_code"] = if ($sdata.school_code) { [string]$sdata.school_code } else { "nao_informado" }
+            $sessRecord["workshop_code"] = if ($sdata.workshop_code) { [string]$sdata.workshop_code } else { "nao_informado" }
+            $sessRecord["class_code"] = if ($sdata.class_code) { [string]$sdata.class_code } else { "nao_informado" }
             $sessRecord["environment"] = if ($sdata.is_synthetic) { "test" } else { "production" }
-            $sessRecord["protocol_version"] = if ($sdata.protocol_version) { [string]$sdata.protocol_version } else { $script:BridgeVersion }
-            $sessRecord["instrument_version"] = if ($sdata.instrument_version) { [string]$sdata.instrument_version } else { "bancada-$($script:BridgeVersion)" }
+            # Proveniencia vem do snapshot da PWA; versao do software nao substitui versao do protocolo.
+            $sessRecord["protocol_version"] = if ($sdata.protocol_version) { [string]$sdata.protocol_version } else { $null }
+            $sessRecord["instrument_version"] = if ($sdata.instrument_version) { [string]$sdata.instrument_version } else { $null }
             $sessRecord["group_size"] = if ($sdata.group_size) { [int]$sdata.group_size } else { 2 }
-            $sessRecord["phase"] = if ($sdata.phase) { [string]$sdata.phase } else { "completed" }
+            $sessRecord["phase"] = if ($sdata.phase) { [string]$sdata.phase } elseif ($sdata.status -eq "completed") { "completed" } else { "in_progress" }
             $sessRecord["session_payload"] = $sdata
             $sessRecord["created_at"] = if ($sdata.started_at) { [string]$sdata.started_at } else { $nowIso }
             $sessRecord["updated_at"] = if ($sdata.completed_at) { [string]$sdata.completed_at } else { $nowIso }
@@ -618,9 +620,24 @@ function Move-BridgeAtomicFile {
     }
 }
 
+# Prazo de retencao local: retention_days do provisionamento do polo (1 a 365) ou 180 dias.
+function Get-BridgeRetentionDays {
+    $installationFile = Join-Path $DataDir "installation.json"
+    if (Test-Path -LiteralPath $installationFile) {
+        try {
+            $inst = Get-Content -LiteralPath $installationFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $days = 0
+            if ($null -ne $inst.retention_days -and [int]::TryParse([string]$inst.retention_days, [ref]$days) -and $days -ge 1 -and $days -le 365) {
+                return $days
+            }
+        } catch {}
+    }
+    return 180
+}
+
 function Invoke-BridgeRetentionCleanup {
     [CmdletBinding()]
-    param([int]$MaxAgeDays = 7)
+    param([int]$MaxAgeDays = 180)
 
     $cutoffUtc = [DateTime]::UtcNow.AddDays(-$MaxAgeDays)
     $expiredSessionIds = [System.Collections.Generic.HashSet[string]]::new()
@@ -840,7 +857,7 @@ function Invoke-BridgeRetentionCleanup {
         }
     }
 
-    Write-BridgeLog "Limpeza de retencao concluida: $($expiredSessionIds.Count) sessao(oes) expirada(s) e $purgedEventsCount evento(s) expurgados (limite 7 dias)." "INFO"
+    Write-BridgeLog "Limpeza de retencao concluida: $($expiredSessionIds.Count) sessao(oes) expirada(s) e $purgedEventsCount evento(s) expurgados (limite $MaxAgeDays dias)." "INFO"
 }
 
 # 4. Funções de Suporte
@@ -987,9 +1004,9 @@ function Send-BridgeResponse {
     $Response.Close()
 }
 
-# Executar limpeza de retencao absoluta de 7 dias na inicializacao
+# Executar limpeza de retencao absoluta na inicializacao
 try {
-    Invoke-BridgeRetentionCleanup -MaxAgeDays 7
+    Invoke-BridgeRetentionCleanup -MaxAgeDays (Get-BridgeRetentionDays)
 } catch {
     Write-BridgeLog "Aviso na limpeza inicial de retencao: $($_.Exception.Message)" "WARN"
 }
@@ -1169,7 +1186,7 @@ function Invoke-BridgePeriodicTasks {
     Check-SessionSchedule
     if (([DateTime]::UtcNow - $script:LastRetentionCleanup).TotalHours -ge 1) {
         $script:LastRetentionCleanup = [DateTime]::UtcNow
-        try { Invoke-BridgeRetentionCleanup -MaxAgeDays 7 } catch {}
+        try { Invoke-BridgeRetentionCleanup -MaxAgeDays (Get-BridgeRetentionDays) } catch {}
     }
     if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge 30) {
         $script:LastSyncAttempt = [DateTime]::UtcNow
@@ -1391,7 +1408,7 @@ try {
             if ($path -eq "/config" -or $path -eq "/v1/config") {
                 $publicConfig = [ordered]@{
                     version = $script:BridgeVersion
-                    protocol_version = "2.2.8"
+                    protocol_version = $null
                     group_size = 2
                     research_collection_enabled = $false
                     research_authorization_version = $null
@@ -1439,6 +1456,7 @@ try {
                         if ($inst.site_id) { $publicConfig.site_id = [string]$inst.site_id }
                         if ($inst.regional_hub) { $publicConfig.regional_hub = [string]$inst.regional_hub }
                         if ($inst.school_code) { $publicConfig.school_code = [string]$inst.school_code }
+                        $publicConfig.retention_days = Get-BridgeRetentionDays
                         if ($inst.research_collection_enabled -eq $true -and $inst.research_authorization_version) {
                             $publicConfig.research_collection_enabled = $true
                             $publicConfig.research_authorization_version = [string]$inst.research_authorization_version
