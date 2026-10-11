@@ -32,7 +32,7 @@ const ACTIVE_SESSION_KEY = "pulselab_student_active_session_v1";
 const CONTEXT_KEY = "pulselab_student_context_v1";
 const INSTALLATION_KEY = "pulselab_installation_id_v1";
 const LEGACY_INSTALLATION_KEY = "pulselab_student_installation_id_v1";
-const CLIENT_VERSION = "student-pwa/2.3.1";
+const CLIENT_VERSION = "student-pwa/2.3.2";
 
 const BANCADA_ITEM = INSTRUMENT_MANIFEST.items.bancada.experiencia;
 const RESULT_ITEM = INSTRUMENT_MANIFEST.items.instrutor.resultado;
@@ -1095,7 +1095,7 @@ export default function StudentPage() {
         <div className="lab-diagnostic__card">
           <span className="eyebrow">Diagnóstico de Laboratório</span>
           <h2>Modo de Inspeção Sintética (?lab=1)</h2>
-          <p>oficina de robótica · v2.3.1</p>
+          <p>oficina de robótica · v2.3.2</p>
           <div className="lab-diagnostic__status">
             <div>Configuração: {configResolved ? (isResearchActive ? "Pesquisa autorizada" : "Modo Livre (sem pesquisa)") : "Resolvendo..."}</div>
             <div>Bancada: Coletiva (Tamanho: {groupSize})</div>

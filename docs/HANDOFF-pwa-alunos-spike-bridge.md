@@ -1,611 +1,145 @@
-# Handoff técnico — PWA dos alunos, Bridge PowerShell e integração com SPIKE
+# Handoff Técnico Consolidado — PWA dos Alunos, Bridge PowerShell e SPIKE (v2.3.2)
 
-> Data do handoff: 7 de setembro de 2026  
-> Branch de trabalho: `feat/student-pwa-linux-first`  
-> Estado: protótipo da PWA implementado e validado; Bridge e adaptador SPIKE ainda não implementados.
+> Versão Operacional: **2.3.2**
+> Status: **Implementado, Validado e em Produção**
+> Componentes Principais: PWA React (`web/agent-simulator/` compilada em `alunos/`), Bridge Loopback (`bridge/pulselab-bridge.ps1`), Parser SPIKE (`spike-parser.js` e `spike-parser.ps1`) e Sincronização Cloud/Offline.
 
-## 1. Objetivo atual
+---
 
-Construir a experiência de coleta do PulseLab com foco exclusivo nos alunos das
-oficinas de robótica. O produto precisa funcionar em escolas sem internet ou com
-conexões muito lentas, interromper pouco a atividade e alertar de forma confiável
-nos checkpoints de 20 e 40 minutos.
+## 1. Visão Geral da Arquitetura
 
-A arquitetura definida durante esta sessão é híbrida:
+O PulseLab é uma plataforma de observabilidade pedagógica para oficinas de robótica escolar com kits LEGO SPIKE Prime (UNIVASF). O sistema opera de forma híbrida e não invasiva:
 
 ```text
-Bridge PowerShell mínimo, executado no Windows
-├── serve a webapp empacotada pelo endereço local
-├── mantém o relógio da sessão
-├── alerta nos checkpoints mesmo com o navegador oculto
-└── abre a webapp na etapa correta
-                    ↕
-PWA dos alunos, React/Vite
-├── preparação da aula
-├── assentimento individual
-├── pré, checkpoints e pós
-├── passagem privada entre participantes
-├── outbox em IndexedDB
-└── sincronização futura quando houver internet
-                    ↓
-Fireclaw/API de ingestão/Supabase, quando disponíveis
+Bridge Local Windows (PowerShell 5.1 na porta 43128)
+├── Servidor HTTP loopback seguro (TcpListener em 127.0.0.1:43128)
+├── Servidor de arquivos estáticos da PWA (pasta alunos/)
+├── Monitoramento de arquivos LEGO SPIKE (spike-parser.ps1)
+├── Persistência dupla em disco (dados_locais/events.jsonl e sessions.jsonl)
+├── Gerenciamento de tokens de polo e auto-cadastro
+└── Limpeza atômica periódica por retenção (Invoke-BridgeRetentionCleanup)
+                    ↕ (HTTP Loopback)
+PWA dos Alunos (React/Vite em /alunos/)
+├── Interface silenciosa dos estudantes (student-page.jsx)
+├── Coleta passiva periódica da telemetria SPIKE a cada 10s (/v1/spike/metrics)
+├── Encerramento de turma (avaliação de bancada + rubrica do educador)
+├── Persistência em IndexedDB (pulselab-student-runner)
+├── Painel de diagnóstico de engenharia no Modo Laboratório (?lab=1)
+└── Motor de envio em lote para Supabase a cada 30s (sync-engine.js)
 ```
 
-O PowerShell não deve conter questionários nem ser a implementação da interface.
-Ele funciona como companion/bridge local. A PWA é a única referência para a
-jornada dos alunos.
+---
 
-## 2. Estado da branch
+## 2. Princípios Operacionais e Salvaguardas Éticas
 
-Todas as alterações estão na branch:
+### 2.1 Experiência Silenciosa do Aluno
+- A rota padrão dos alunos (`http://127.0.0.1:43128/alunos/`) é **100% silenciosa**.
+- **Sem interrupções**: não há formulários, questionários de autoeficácia, escalas Likert nem alertas intrusivos durante a oficina.
+- A tela exibe uma mensagem tranquila e neutra:
+  > *“Oficina de robótica em andamento. Use o aplicativo LEGO SPIKE. Monte, programe e teste o seu robô na bancada.”*
+- Todo o foco cognitivo das crianças permanece na montagem física e na programação no aplicativo oficial do robô.
 
+### 2.2 Bancada Coletiva como Unidade de Análise (LGPD Art. 14)
+- A unidade analítica da pesquisa é a **bancada colaborativa** (`group_size` entre 2 e 8 integrantes).
+- **Proteção a menores**: não são coletados nomes, fotos, vídeos, áudios, endereços IP externos, e-mails, matrículas ou identificadores individuais de crianças.
+- Interceptação global de teclado (`GetAsyncKeyState`) e capturas de tela (screenshots) foram totalmente abolidas do projeto.
+- Dispositivos são identificados por um `installation_id` aleatório gravado em `dados_locais/installation.json` e por um rótulo amigável escolhido na instalação (ex.: `PET-LAB1-PC03`). O nome do usuário do Windows ou da máquina não são expostos.
+
+### 2.3 Coleta Passiva de Telemetria SPIKE
+- A cada 10 segundos, a PWA consulta `/v1/spike/metrics` do Bridge.
+- O Bridge monitora a pasta de projetos em `Documents\LEGO Education\SPIKE 3` (e equivalentes) e lê arquivos `.llsp3`, Scratch `.sb3` ou scripts Python recém-salvos.
+- O parser (`spike-parser.js` no frontend e `spike-parser.ps1` no Bridge) extrai apenas contagens estruturais agregadas:
+  - `executable_blocks`: total de blocos funcionais;
+  - `top_level_stacks`: pilhas de execução independentes;
+  - `uses_motor`, `uses_sensor`, `uses_loop`, `uses_condition`: flags booleanas de categorias utilizadas;
+  - `inferred_stage`: estágio técnico deduzido da estrutura do código.
+- **Privacidade total**: variáveis criadas pelos alunos, comentários, textos livres, arquivos de áudio ou identificadores Bluetooth do Hub nunca são extraídos ou persistidos.
+
+### 2.4 Encerramento de Turma pelo Educador e Bancada
+- A sessão da turma vai da abertura do app (ou encerramento da turma anterior) até o clique no botão discreto **"Encerrar turma"**.
+- Ao final da oficina, o modal exibe:
+  1. **Avaliação da Bancada**: Uma pergunta com 4 carinhas (*"Como foi a oficina para a sua bancada hoje?"*, opções de 1 a 4 ou *"Preferimos não responder"*).
+  2. **Registro do Educador**: Avaliação rápida de resultado (0 a 3: *Não concluiu*, *Concluiu em parte*, *Concluiu a missão*, *Concluiu e foi além*) e apoio recebido (*nenhum*, *algum*, *muito*, ou *Pular avaliação*).
+- Os contratos formais e hashes canônicos residem em `web/agent-simulator/lib/contracts.js` (`INSTRUMENT_MANIFEST`, `CONFIG_HASH`).
+
+### 2.5 Modo Laboratório (`?lab=1`)
+- Acessível adicionando o parâmetro `?lab=1` na URL da aplicação.
+- Exclusivo para inspeção de engenharia e simulação:
+  - Painel de status da conexão com o Bridge e contadores de eventos;
+  - Visualização em tempo real das métricas da telemetria SPIKE;
+  - Disparo de eventos simulados e testes de carga;
+  - Gatilho manual para teste de retirada ética com expurgo de dados.
+
+---
+
+## 3. Persistência em Dupla Camada e Governança
+
+### 3.1 Armazenamento Duplo
+1. **IndexedDB do Navegador**: O banco `pulselab-student-runner` gerencia os object stores `events` e `sessions` via `lib/student-store.js`.
+2. **Arquivos Locais em Disco no Bridge**: Toda mutação enviada para o Bridge é persistida em formato append-only seguro em `dados_locais/events.jsonl` e `dados_locais/sessions.jsonl`.
+- Essa arquitetura garante imunidade a crashes do navegador, reinicializações acidentais ou sistemas com congelamento de disco (como Deep Freeze com exclusão de pastas).
+
+### 3.2 Política de Retenção Configurável
+- Registros locais expiram de acordo com o parâmetro `retention_days` do pacote do polo (padrão de 180 dias, configurável de 1 a 365 dias).
+- O navegador executa `enforceAbsoluteRetention` ao iniciar e o Bridge executa `Invoke-BridgeRetentionCleanup` a cada hora, expurgando registros antigos de forma atômica.
+
+### 3.3 Retirada Ética Imediata
+- O botão "Parar de participar e apagar meus dados" executa a exclusão definitiva imediata de todos os dados locais no IndexedDB e no Bridge.
+- Registra um tombstone durável que impede que eventos daquela sessão sejam ressincronizados ou exportados posteriormente.
+
+---
+
+## 4. Distribuição Portátil, Atualização e Sincronização
+
+### 4.1 Estrutura 100% Portátil
+O PulseLab é distribuído em um pacote ZIP autônomo que não requer instalação com privilégios de administrador:
 ```text
-feat/student-pwa-linux-first
-```
-
-As alterações ainda não foram commitadas. Não executar `git reset`, `git clean`
-ou trocar de branch descartando o worktree antes de revisar e preservar os
-arquivos.
-
-No momento do handoff, o `git status --short` continha:
-
-```text
- M .gitignore
- M README.md
- M firebase.json
- M web/agent-simulator/README.md
- M web/agent-simulator/app/globals.css
- M web/agent-simulator/index.html
- M web/agent-simulator/package-lock.json
- M web/agent-simulator/package.json
- M web/agent-simulator/src/main.jsx
- M web/agent-simulator/vite.config.js
-?? alunos/
-?? docs/HANDOFF-pwa-alunos-spike-bridge.md
-?? docs/arquitetura-aplicacao-alunos.md
-?? web/agent-simulator/app/student-page.jsx
-?? web/agent-simulator/e2e/
-?? web/agent-simulator/lib/student-store.js
-?? web/agent-simulator/playwright.config.js
-?? web/agent-simulator/public/
-```
-
-O agente PowerShell legado não foi alterado nesta branch.
-
-## 3. O que já foi implementado
-
-### 3.1 Jornada exclusiva dos alunos
-
-O ponto de entrada React agora utiliza:
-
-- `web/agent-simulator/app/student-page.jsx`;
-- `web/agent-simulator/lib/student-store.js`;
-- `web/agent-simulator/app/globals.css`.
-
-Fluxo implementado:
-
-```text
-Preparação por adulto
-        ↓
-Assentimento A → passagem → B → passagem → C, quando houver
-        ↓
-Pré A → passagem → B → passagem → C
-        ↓
-Atividade com cronômetro absoluto
-        ↓ 20 min
-Checkpoint individual → troca de papéis → atividade
-        ↓ 40 min
-Checkpoint individual → encerramento
-        ↓
-Pós A → passagem → B → passagem → C
-        ↓
-Sessão concluída e mantida na outbox local
-```
-
-Grupos de uma, duas ou três pessoas percorrem a mesma máquina de estados. Em
-atividade individual, as passagens de dispositivo e a troca de papéis são
-omitidas.
-
-### 3.2 Privacidade e experiência
-
-O protótipo dos alunos:
-
-- não solicita nome, e-mail ou matrícula;
-- não captura a tela;
-- não detecta nem registra outros aplicativos;
-- não possui rubrica ou trilha do instrutor;
-- mostra uma tela neutra antes de entregar o dispositivo a outra pessoa;
-- não cria evento quando algum participante recusa o assentimento;
-- informa o estado verdadeiro: salvo localmente e aguardando sincronização;
-- possui modo normal limpo e modo técnico por `?lab=1`.
-
-O modo de laboratório permite abrir imediatamente os checkpoints de 20 e 40
-minutos e inspecionar a outbox, sem alterar o fluxo de produção.
-
-### 3.3 Offline e retomada
-
-- O snapshot da tela atual permite retomar após fechar ou recarregar a página.
-- Eventos append-only são armazenados em IndexedDB.
-- O relógio usa timestamps absolutos; fechar a página não pausa a atividade.
-- Um service worker mantém o shell e os assets versionados para abertura offline.
-- O build é publicado no caminho `/alunos/`.
-- `firebase.json` possui rewrite de `/alunos/**` para `/alunos/index.html`.
-
-O envio real ainda não foi implementado. Todos os eventos ficam em estado
-`queued`. O botão de envio simulado existe somente em `?lab=1` e está rotulado
-como simulação.
-
-### 3.4 Build e dependências
-
-O build atual está no diretório `alunos/` e ocupa aproximadamente 276 KB:
-
-```text
-alunos/
-├── assets/index-CEtnE08Y.css
-├── assets/index-D9lUpdQM.js
-├── icon.svg
-├── index.html
-├── manifest.webmanifest
-└── sw.js
-```
-
-A árvore herdada do simulador foi reduzida. A aplicação utiliza React, ReactDOM,
-Vite e Playwright. A última auditoria retornou zero vulnerabilidades conhecidas.
-
-### 3.5 Testes executados
-
-Comando principal:
-
-```bash
-cd /home/vfamim/Dev/pulselab/web/agent-simulator
-npm run check
-```
-
-Último resultado registrado:
-
-- 3 testes unitários aprovados;
-- 4 testes end-to-end aprovados no Google Chrome do Linux;
-- build Vite aprovado;
-- `npm audit --audit-level=high`: zero vulnerabilidades;
-- `git diff --check`: sem erros.
-
-Os testes end-to-end cobrem:
-
-1. jornada completa de dois alunos e dois checkpoints;
-2. recusa sem criação de eventos;
-3. retomada depois de reload;
-4. abertura da aplicação sem internet pelo service worker.
-
-## 4. Como executar na próxima sessão
-
-Instalar dependências de desenvolvimento:
-
-```bash
-cd /home/vfamim/Dev/pulselab/web/agent-simulator
-npm install
-```
-
-Executar localmente:
-
-```bash
-npm run dev -- --host 127.0.0.1
-```
-
-Usar o caminho apresentado pelo Vite com `/alunos/`. Para testes acelerados:
-
-```text
-/alunos/?lab=1
-```
-
-Gerar o artefato de produção:
-
-```bash
-npm run build
-```
-
-## 5. Arquitetura de distribuição offline definida
-
-A entrega para as escolas deve ser um único ZIP portátil baixado pelo site
-Fireclaw, transportável por pendrive e utilizável sem Node, npm ou banco local.
-
-Estrutura pretendida:
-
-```text
-PulseLab-Alunos-<versão>.zip
+PulseLab-2.3.2-Windows/
 ├── Instalar-PulseLab.bat
 ├── Iniciar-PulseLab.bat
+├── pulselab.ps1
 ├── bridge/
-│   └── pulselab-bridge.ps1
-├── app/
-│   └── alunos/               # saída exata do Vite
+│   ├── pulselab-bridge.ps1
+│   └── spike-parser.ps1
+├── alunos/               # PWA React compilada pelo Vite
 ├── config/
-│   └── defaults.json
-├── Desinstalar-PulseLab.bat
-├── VERSION
-└── SHA256SUMS
+│   ├── defaults.json
+│   └── config.json
+├── dados_locais/         # Preservada entre atualizações
+│   ├── installation.json
+│   ├── events.jsonl
+│   └── sessions.jsonl
+├── release-public-key.json
+└── VERSION
 ```
 
-Instalação planejada:
-
-1. baixar e extrair o ZIP;
-2. executar `Instalar-PulseLab.bat`;
-3. copiar arquivos para `%LOCALAPPDATA%\PulseLab`;
-4. criar um atalho para iniciar a oficina;
-5. executar o Bridge e abrir `http://127.0.0.1:43127/alunos/`.
-
-A porta deve ser fixa. IndexedDB e service workers são vinculados à origem,
-incluindo a porta; usar uma porta aleatória faria uma instalação perder acesso
-às sessões salvas por outra origem.
-
-Dados e agenda do Bridge devem ficar fora da pasta substituída por atualizações:
-
-```text
-%LOCALAPPDATA%\PulseLab\
-├── app\       # atualizável
-├── bridge\    # atualizável
-└── data\      # preservado
-```
-
-### Pendência antes de declarar o ZIP totalmente offline
-
-`web/agent-simulator/index.html` ainda referencia Google Fonts. O layout possui
-fontes de sistema como fallback e o teste offline passa, mas essas referências
-devem ser removidas ou as fontes devem ser empacotadas antes da distribuição.
-
-## 6. Responsabilidades planejadas do Bridge
-
-O Bridge PowerShell deverá:
-
-1. iniciar um servidor HTTP vinculado somente a `127.0.0.1:43127`;
-2. servir exclusivamente os arquivos estáticos compilados;
-3. aceitar agenda de sessão com `session_id`, `started_at` e marcas `[20, 40]`;
-4. persistir a agenda em `%LOCALAPPDATA%\PulseLab\data`;
-5. detectar checkpoints vencidos depois de suspensão ou reinício;
-6. tocar um som e mostrar um alerta nativo compacto;
-7. abrir a webapp diretamente no checkpoint ao confirmar o alerta;
-8. repetir o alerta, com limite, enquanto não houver confirmação;
-9. aceitar o ACK da webapp depois da resposta;
-10. expor um endpoint `/health` para diagnóstico.
-
-O Bridge não deverá receber respostas, código do projeto, nomes, imagens ou
-telemetria geral de mouse/teclado.
-
-Protocolo mínimo proposto:
-
-```text
-GET  /health
-POST /v1/sessions
-GET  /v1/sessions/{id}/schedule
-POST /v1/sessions/{id}/checkpoints/{mark}/ack
-```
-
-Segurança mínima:
-
-- bind somente em loopback;
-- origem e `Content-Type` estritamente validados;
-- token temporário por execução para comandos mutáveis;
-- proteção contra path traversal no servidor estático;
-- limites de payload e frequência;
-- nenhuma chave administrativa dentro da PWA ou do ZIP.
-
-## 7. Alertas: o que existe e o que falta
-
-O agente legado já possui peças reaproveitáveis:
-
-- `Get-SpikeWindowHandle`, linha aproximada 925;
-- `Get-ActiveTelemetry`, linha aproximada 941;
-- `NotifyIcon`, linha aproximada 2765;
-- `ShowBalloonTip`, linha aproximada 2803.
-
-O alerta robusto planejado combina:
-
-1. som curto;
-2. notificação na área do Windows;
-3. destaque do ícone na barra de tarefas;
-4. janela pequena “Hora do check-in”, sem tela cheia;
-5. botão “Responder agora” que abre a webapp;
-6. repetição controlada se for ignorado.
-
-Não depender somente de notificações do navegador. Elas exigem permissão, podem
-ser suprimidas e não fornecem um agendamento offline confiável com o navegador
-completamente encerrado.
-
-## 8. Investigação realizada sobre metadados do SPIKE
-
-### 8.1 Estado atual do agente
-
-O código atual não interpreta o projeto. `Get-LastSpikeFileSize` procura o
-arquivo mais recente em `Documents\LEGO SPIKE` e devolve apenas seu tamanho.
-
-Problema encontrado: a função procura `*.llsp` e `*.spk`, mas não `*.llsp3`, que
-é o formato atual do SPIKE App 3.
-
-### 8.2 Estrutura do `.llsp3` verificada empiricamente
-
-Foi baixado e inspecionado um projeto público `.llsp3`. O arquivo é um contêiner
-ZIP com:
-
-```text
-manifest.json
-scratch.sb3
-icon.svg
-monitors.json
-```
-
-O `scratch.sb3` também é um ZIP e contém `project.json`. Esse JSON possui os
-targets do Scratch, blocos, opcodes, inputs, fields, comentários, variáveis e
-extensões.
-
-No arquivo analisado foi possível obter, sem renderizar imagens:
-
-- tipo `word-blocks`;
-- data de criação e último salvamento;
-- extensões utilizadas;
-- quantidade total de blocos;
-- quantidade de stacks de nível superior;
-- blocos de sombra e executáveis;
-- categorias como eventos, controle, motores, sensores e luzes;
-- presença de loops, condicionais e procedimentos.
-
-O manifesto também continha nome e identificadores do Hub. Esses campos não
-devem sair do parser nem ser persistidos.
-
-### 8.3 Métricas seguras propostas
-
-```json
-{
-  "source": "spike_project",
-  "project_saved": true,
-  "format": "llsp3",
-  "language": "word-blocks",
-  "executable_blocks": 31,
-  "top_level_stacks": 4,
-  "uses_motor": true,
-  "uses_sensor": true,
-  "uses_loop": true,
-  "uses_condition": false,
-  "blocks_added_since_previous": 8,
-  "blocks_removed_since_previous": 2,
-  "inferred_stage": "integration",
-  "inference_confidence": 0.82
-}
-```
-
-Não persistir:
-
-- código bruto;
-- textos, comentários e strings;
-- nome ou caminho completo do projeto;
-- preview SVG;
-- dados de áudio;
-- nome, UUID ou identificador Bluetooth do Hub;
-- valores que não sejam necessários à atividade definida.
-
-### 8.4 Como inferir a etapa
-
-Não usar somente contagem de blocos. Cada atividade deve possuir um adaptador
-versionado com marcos técnicos esperados, por exemplo:
-
-```text
-Atividade 01
-├── evento inicial
-├── configuração de motores
-├── movimento básico
-├── leitura de sensor
-├── condição ou repetição
-└── integração e testes
-```
-
-Snapshots no início, 20 minutos, 40 minutos e final permitem observar a evolução
-estrutural. A saída deve ser tratada como inferência, sempre com fonte e nível de
-confiança.
-
-### 8.5 Limites confirmados
-
-- O arquivo representa o último estado salvo, não necessariamente o canvas vivo.
-- Ausência de mudança pode significar montagem física, discussão ou arquivo não
-  salvo; não significa automaticamente inatividade.
-- O protocolo público oficial do Hub documenta upload, controle de execução e
-  notificações dos dispositivos, mas não uma leitura do projeto aberto no
-  editor.
-- Conectar o Bridge diretamente ao Hub pode disputar USB/Bluetooth com o SPIKE e
-  não é recomendado.
-- A montagem física do robô não pode ser conhecida sem câmera ou instrumentação
-  adicional.
-
-## 9. Investigação pendente: canvas vivo pela UI Automation
-
-A aplicação SPIKE nativa declara suporte a acessibilidade e leitores de tela.
-Isso torna plausível consultar sua árvore de acessibilidade do Windows por
-UI Automation, sem screenshot.
-
-Sinais desejados:
-
-- SPIKE aberto e em primeiro plano;
-- solução Prime ou Essential;
-- projeto, lição ou tela inicial;
-- canvas de programação, instruções de montagem ou painel do Hub;
-- modo Word Blocks, Icon Blocks ou Python;
-- executar/parar, quando exposto;
-- categoria do bloco focado;
-- categorias dos blocos visíveis;
-- confirmação de que o aluno está no quadro esperado da atividade.
-
-Isso ainda não foi verificado em uma instalação real do SPIKE no Windows. O
-resultado depende do que o aplicativo expõe na árvore UIA e pode variar entre
-versões.
-
-### Spike Probe proposto
-
-Criar `tools/spike-probe.ps1`, somente leitura, que:
-
-1. localiza o HWND do SPIKE;
-2. enumera as árvores UIA Control, Content e Raw;
-3. coleta `ControlType`, `AutomationId`, nome acessível normalizado, foco e
-   bounding rectangle;
-4. nunca invoca, clica ou altera controles;
-5. substitui textos livres e identificadores por categorias ou hashes locais;
-6. exporta um JSON sanitizado para análise;
-7. permite comparar SPIKE 3.x, Prime/Essential e blocos/Python.
-
-Uma execução curta em um computador Windows com o SPIKE instalado é inevitável
-para confirmar essa superfície. O desenvolvimento pode continuar no Linux; o
-probe pode ser executado uma única vez por alguém na máquina escolar e o JSON
-sanitizado retornado ao repositório como fixture. Depois disso, testes de parser
-e classificação podem rodar normalmente no Linux.
-
-## 10. Redução proposta dos questionários
-
-Metadados técnicos não substituem experiências subjetivas. Eles podem substituir
-ou confirmar apenas a pergunta de progresso técnico.
-
-Proposta inicial para piloto:
-
-```text
-Checkpoint de 20 minutos
-├── esforço mental
-└── necessidade de ajuda
-
-Checkpoint de 40 minutos
-├── esforço mental
-└── colaboração
-
-Coleta automática
-├── etapa técnica inferida do projeto
-├── papel planejado pela troca da webapp
-└── presença no canvas/quadro, se UIA for validada
-```
-
-Continuam necessariamente autorrelatados:
-
-- esforço mental;
-- frustração/afeto;
-- colaboração;
-- compreensão percebida;
-- intenção de participar novamente;
-- contribuição individual, quando isso fizer parte da pergunta de pesquisa.
-
-## 11. Próximas tarefas em ordem recomendada
-
-### P0 — Preservar e consolidar o protótipo
-
-1. revisar `git status` e esta documentação;
-2. remover Google Fonts ou empacotar fontes locais;
-3. executar novamente `npm run check` e `npm audit`;
-4. realizar um commit do corte PWA antes de iniciar o Bridge.
-
-### P1 — Implementar o Bridge mínimo
-
-1. servidor estático em `127.0.0.1:43127`;
-2. endpoint `/health`;
-3. agenda persistente de sessão;
-4. alerta acelerado em modo de teste, por exemplo 20 e 40 segundos;
-5. ACK enviado pela PWA;
-6. retomada de checkpoint vencido;
-7. abertura da rota correta no navegador.
-
-### P2 — Empacotar o ZIP offline
-
-1. criar o layout portátil;
-2. criar instalador por usuário, sem administrador;
-3. preservar `data/` em atualizações;
-4. gerar `VERSION` e SHA-256;
-5. testar descompactação e inicialização em pasta limpa;
-6. publicar o ZIP versionado no Fireclaw.
-
-### P3 — Adaptador de arquivo SPIKE
-
-1. aceitar `.llsp`, `.llsp3` e, se necessário, `.spk`;
-2. selecionar explicitamente o projeto da sessão, evitando “arquivo mais
-   recente” de outra turma;
-3. ler ZIP com `System.IO.Compression` do próprio .NET/PowerShell;
-4. suportar blocos e Python;
-5. gerar apenas métricas agregadas;
-6. aplicar limites contra arquivos corrompidos ou ZIP bombs;
-7. usar retry ao ler um arquivo durante salvamento;
-8. criar fixtures anonimizadas para testes no Linux.
-
-### P4 — Executar o Spike Probe no Windows
-
-1. gerar diagnóstico UIA sanitizado;
-2. verificar canvas, quadro, modo, execução e bloco focado;
-3. testar com SPIKE minimizado e em primeiro plano;
-4. comparar versões disponíveis nas escolas;
-5. decidir se UIA entra no produto ou permanece apenas experimental.
-
-### P5 — Sincronização real
-
-1. API de ingestão autenticada e idempotente por `event_id`;
-2. envio em lote com retry e confirmação parcial;
-3. marcação de evento como sincronizado somente após ACK do servidor;
-4. RLS e validação do dispositivo no backend;
-5. política de retenção e exclusão local;
-6. nenhuma chave secreta na PWA ou no Bridge.
-
-## 12. Critérios de aceite do próximo corte
-
-- a aula inicia e termina sem internet;
-- nenhuma dependência é baixada durante instalação ou execução;
-- o mesmo build web testado no Linux é servido pelo Bridge no Windows;
-- alertas funcionam com a janela da webapp minimizada;
-- checkpoint ignorado é lembrado novamente e pode ser retomado;
-- reinício ou suspensão não perde a agenda;
-- respostas nunca passam pelo processo PowerShell;
-- recusa não cria eventos;
-- atualizações não apagam dados pendentes;
-- parser SPIKE nunca persiste código ou identificadores do Hub;
-- inferências técnicas sempre incluem origem, versão e confiança;
-- falha de leitura do SPIKE não impede o questionário ou a atividade.
-
-## 13. Questões que ainda exigem decisão
-
-1. O projeto SPIKE será salvo em uma pasta padronizada pelo PulseLab ou escolhido
-   uma vez no início da sessão?
-2. Quantas vezes o alerta será repetido e em qual intervalo?
-3. A troca de papéis será somente orientada ou confirmada por cada aluno?
-4. Quais blocos constituem cada marco das atividades 01, 02 e 03?
-5. O modo Python fará parte do piloto inicial?
-6. Qual versão do SPIKE está instalada na maioria das escolas?
-7. As políticas escolares permitem PowerShell assinado e execução por usuário?
-8. Qual navegador e versão estão disponíveis nos computadores?
-9. O envio será feito diretamente pela PWA ou por uma API intermediária do
-   Fireclaw?
-
-## 14. Referências usadas na investigação
-
-- LEGO Education — aplicação e linguagens do SPIKE:  
-  https://education.lego.com/en-us/teacher-resources/lego-education-spike-prime/support-technical-info/lego-education-spike-prime-support-technical-info-get-the-lego-education-spiketm-app/
-- LEGO Education — dados e privacidade do SPIKE:  
-  https://education.lego.com/en-us/app-privacy-policy/
-- LEGO Education — acessibilidade da aplicação nativa e web:  
-  https://spike.legoeducation.com/prime/settings/accessibility
-- Protocolo oficial do Hub SPIKE Prime:  
-  https://github.com/LEGO/spike-prime-docs
-- Parser aberto de `.llsp/.llsp3` usado como referência técnica:  
-  https://github.com/astrospark/flippertools
-- Projeto `.llsp3` público usado apenas para verificar o formato:  
-  https://github.com/bradjmsu/cookies2025
-- Microsoft UI Automation:  
-  https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-obtainingelements
-
-## 15. Documentos relacionados no repositório
-
-- `docs/arquitetura-aplicacao-alunos.md` — decisão web-first original;
-- `web/agent-simulator/README.md` — execução, testes e escopo da PWA;
-- `docs/protocolo-pesquisa-v1.md` — protocolo científico atual;
-- `docs/revisao-adversarial-completa-pulselab-2026-08-16.md` — riscos
-  encontrados na arquitetura anterior;
-- `schema/supabase-schema.sql` — contratos atuais do banco;
-- `agent/pulselab-agent.ps1` — implementação Windows legada e peças que podem ser
-  extraídas para o Bridge.
-
-## 16. Mensagem sugerida para iniciar a próxima sessão
-
-```text
-Continue o desenvolvimento do PulseLab pela documentação
-docs/HANDOFF-pwa-alunos-spike-bridge.md. Estamos na branch
-feat/student-pwa-linux-first, com alterações ainda não commitadas. Não descarte o
-worktree. Primeiro confira branch, status e testes; depois execute o P0 e avance
-para o Bridge mínimo do P1. Preserve a PWA como única interface dos alunos e o
-PowerShell apenas como servidor local, relógio e motor de alertas.
+### 4.2 Atualização Automática Assinada por Chave RSA
+- O launcher consulta o manifesto `pulselab-update.json` da última release publicada no GitHub com timeout rápido (2 s).
+- O manifesto precisa estar assinado por chave privada RSA-SHA256 externa ao repositório.
+- A chave pública acompanha o pacote (`release-public-key.json`). Sem ela ou com assinatura inválida, nenhuma atualização ocorre.
+- O ZIP baixado tem seu hash SHA-256 conferido contra o manifesto assinado e é instalado por troca atômica de pastas.
+- Se o servidor local não responder após a troca, a versão anterior é restaurada imediatamente a partir de `_update_backup`.
+- As pastas `dados_locais/` e `provisionamento.json` **nunca são sobrescritas ou apagadas**.
+
+### 4.3 Sincronização em Nuvem (Supabase) e Exportação em Pendrive
+- **Online**: Máquinas com internet realizam sincronização Store-and-Forward a cada 30 segundos com o Supabase via Edge Function autenticada (`enroll-device`). O token do polo é utilizado no primeiro contato e trocado por credenciais de máquina rotativas.
+- **Offline**: Em escolas sem conexão, o educador utiliza o atalho **PulseLab - Exportar Dados**, gerando um arquivo ZIP com manifesto e checksum SHA-256 para transporte em pendrive.
+
+---
+
+## 5. Comandos de Manutenção e Testes
+
+Para validar a integridade da aplicação:
+```bash
+# Testes unitários do frontend e contratos
+cd web/agent-simulator && npm ci && npm run test:unit && npm run build
+
+# Validação estrita de sincronização de versão
+python3 scripts/check-version-consistency.py
+
+# Testes de unidade dos scripts operacionais
+python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud
+
+# Validação do servidor portátil e sintaxe PowerShell
+pwsh -File scripts/test-portable-server.ps1
 ```

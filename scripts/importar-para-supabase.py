@@ -622,9 +622,9 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.3.1"
+            payload["config_version"] = event.get("config_version") or "2.3.2"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.3.1"
+            payload["client_version"] = event.get("client_version") or "2.3.2"
         if "response_status" not in payload:
             payload["response_status"] = event.get("response_status") or "completed"
 
@@ -654,13 +654,13 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "protocol_version" not in payload:
             payload["protocol_version"] = event.get("protocol_version")
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.3.1"
+            payload["config_version"] = event.get("config_version") or "2.3.2"
         if "config_hash" not in payload or not payload["config_hash"]:
             # Proveniência não é imputada: sem o hash do instrumento aplicado, o evento vai para quarentena.
             payload["_is_quarantine"] = True
             payload["_quarantine_reason"] = "config_hash ausente: instrumento aplicado não identificado"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.3.1"
+            payload["client_version"] = event.get("client_version") or "2.3.2"
 
 
         # Invariante metodológica: NUNCA converter silenciosamente tipo desconhecido em phase_completed

@@ -1,7 +1,7 @@
 {
-  "version": "2.3.1",
+  "version": "2.3.2",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://raw.githubusercontent.com/vfamim/pulselab/main/instalador/downloads/PulseLab-2.3.1-Windows.zip",
-  "notes": "PulseLab v2.3.1 - canal legado: migra máquinas até 2.2.7 para o atualizador assinado (releases do GitHub)."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v2.3.2/PulseLab-2.3.2-Windows.zip",
+  "notes": "PulseLab v2.3.2 - canal legado: migra m\u00e1quinas at\u00e9 2.2.7 para o atualizador assinado (releases do GitHub)."
 }
