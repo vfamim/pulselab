@@ -73,20 +73,24 @@ serve(async (request: Request) => {
   // This conditional UPDATE is the authorization boundary. Only one concurrent
   // caller can transition consumed_at from NULL, and it happens before any Auth
   // user is created or changed.
-  const { data: tokenRows, error: consumeError } = await admin
-    .from("device_enrollment_tokens")
-    .update({ consumed_at: now })
-    .eq("token_hash", tokenHash)
-    .eq("installation_id", installationId)
-    .eq("site_id", siteId)
-    .is("consumed_at", null)
-    .gt("expires_at", now)
-    .select("id,installation_id,site_id,regional_hub,school_code,computer_id");
+  // Token do polo (vários usos, sem installation_id) ou token da máquina (uso único).
+  // A função consome um uso de forma atômica e respeita validade, revogação e limite.
+  const { data: tokenRows, error: consumeError } = await admin.rpc(
+    "consume_device_enrollment_token",
+    {
+      p_token_hash: tokenHash,
+      p_installation_id: installationId,
+      p_site_id: siteId,
+    },
+  );
 
-  if (consumeError || tokenRows?.length !== 1) {
-    return json(401, { error: "Invalid, expired, or consumed enrollment token." });
+  if (consumeError || !Array.isArray(tokenRows) || tokenRows.length !== 1) {
+    return json(401, { error: "Invalid, expired, revoked, or exhausted enrollment token." });
   }
   const enrollment = tokenRows[0];
+  const machineLabel = typeof body.machine_label === "string"
+    ? body.machine_label.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "-").slice(0, 32)
+    : "";
 
   // Re-enrollment is an explicit administrative operation: never silently
   // reactivate a revoked installation or rotate an existing user's password.
@@ -123,7 +127,7 @@ serve(async (request: Request) => {
     site_id: siteId,
     regional_hub: enrollment.regional_hub,
     school_code: enrollment.school_code,
-    computer_id: enrollment.computer_id,
+    computer_id: enrollment.computer_id || machineLabel || null,
     is_active: true,
     enrolled_at: now,
     updated_at: now,
@@ -135,7 +139,7 @@ serve(async (request: Request) => {
 
   await admin.from("device_enrollment_tokens")
     .update({ consumed_by: userId })
-    .eq("id", enrollment.id);
+    .eq("id", enrollment.token_id);
 
   const authClient = createClient(supabaseUrl, anonKey, {
     auth: { autoRefreshToken: false, persistSession: false },

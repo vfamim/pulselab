@@ -84,6 +84,7 @@ def register_device_enrollment_token(
     regional_hub: str = "",
     school_code: str = "",
     computer_id: str = "",
+    max_uses: int = 1,
 ):
     supabase_url = supabase_url.rstrip("/")
     endpoint = f"{supabase_url}/rest/v1/device_enrollment_tokens"
@@ -100,6 +101,7 @@ def register_device_enrollment_token(
         "school_code": school_code or None,
         "computer_id": computer_id or None,
         "expires_at": expires_at,
+        "max_uses": max_uses,
     }
     request_json(endpoint, data=payload, headers=headers, method="POST")
 
@@ -169,6 +171,24 @@ def main():
         help="Token validity in hours (default: 24)",
     )
     parser.add_argument(
+        "--token-polo",
+        action="store_true",
+        help="Gera um token do polo (sem installation_id) para cadastrar várias máquinas; "
+        "use o arquivo de saída em scripts/gerar-pacote-polo.py --token-cadastro",
+    )
+    parser.add_argument(
+        "--max-usos",
+        type=int,
+        default=40,
+        help="Máquinas que o token do polo pode cadastrar (1 a 500, padrão 40)",
+    )
+    parser.add_argument(
+        "--validade-dias",
+        type=int,
+        default=60,
+        help="Validade do token do polo em dias (padrão 60)",
+    )
+    parser.add_argument(
         "--output",
         required=True,
         help="Mandatory output JSON file path for provisioning bundle (chmod 0600)",
@@ -180,8 +200,13 @@ def main():
     if not supabase_url:
         sys.exit("Error: Supabase URL is required (via --url or env PULSELAB_URL).")
 
+    if args.token_polo and not 1 <= args.max_usos <= 500:
+        sys.exit("Error: --max-usos deve ficar entre 1 e 500.")
+
     installation_id = args.installation_id.strip()
-    if not installation_id:
+    if args.token_polo:
+        installation_id = None
+    elif not installation_id:
         installation_id = str(uuid.uuid4())
     else:
         # Validate UUID format
@@ -196,7 +221,10 @@ def main():
     token_h = hash_token(raw_token)
 
     now_utc = datetime.datetime.now(datetime.timezone.utc)
-    expires_dt = now_utc + datetime.timedelta(hours=max(1, args.expires_hours))
+    if args.token_polo:
+        expires_dt = now_utc + datetime.timedelta(days=max(1, args.validade_dias))
+    else:
+        expires_dt = now_utc + datetime.timedelta(hours=max(1, args.expires_hours))
     expires_at_iso = expires_dt.isoformat()
 
     # Register in Supabase database
@@ -210,7 +238,8 @@ def main():
             expires_at=expires_at_iso,
             regional_hub=args.regional_hub,
             school_code=args.school_code,
-            computer_id=args.computer_id,
+            computer_id="" if args.token_polo else args.computer_id,
+            max_uses=args.max_usos if args.token_polo else 1,
         )
     except Exception as exc:
         sys.exit(f"Error registering enrollment token in database: {exc}")
@@ -225,6 +254,7 @@ def main():
         "school_code": args.school_code,
         "computer_id": args.computer_id,
         "enrollment_token": raw_token,
+        "max_uses": args.max_usos if args.token_polo else 1,
         "expires_at": expires_at_iso,
         "created_at": now_utc.isoformat(),
     }
@@ -235,8 +265,11 @@ def main():
         sys.exit(f"Error writing secure output to {output_path}: {exc}")
 
     # Sanitized output: NEVER leak raw token or secret to stdout
-    print(f"[+] Device provisioning record created for installation {installation_id}")
-    print(f"[+] Single-use enrollment token registered in database (expires at {expires_at_iso})")
+    if args.token_polo:
+        print(f"[+] Token do polo {args.site_id} registrado: até {args.max_usos} máquinas, válido até {expires_at_iso}")
+    else:
+        print(f"[+] Device provisioning record created for installation {installation_id}")
+        print(f"[+] Single-use enrollment token registered in database (expires at {expires_at_iso})")
     print(f"[+] Provisioning bundle saved to {output_path} (mode 0600)")
 
 

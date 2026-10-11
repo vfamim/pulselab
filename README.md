@@ -29,6 +29,26 @@ exporta para pendrive.
 
 Reinstalar com um pacote de polo mais novo mantém a identificação da máquina e os registros.
 
+## Envio para a nuvem
+
+Cada computador guarda tudo localmente e envia ao Supabase quando tiver internet, a cada
+30 segundos. Máquinas offline (ex.: Senhor do Bonfim) enviam quando o instrutor conectar.
+
+1. O coordenador gera um token do polo, válido para várias máquinas:
+   `python3 supabase/scripts/provision_device.py --site-id PET --token-polo --max-usos 40 --validade-dias 60 --output token-PET.json`
+   (precisa da service role; o arquivo de saída fica com permissão 0600 e não vai para o repositório).
+2. O token entra no pacote do polo:
+   `python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae <CAAE> --token-cadastro token-PET.json`
+3. No primeiro contato com a internet, cada máquina se cadastra sozinha, apaga o token do disco
+   e passa a renovar o acesso (validade de 1 hora) por conta própria.
+
+O token vai dentro do ZIP do polo. Se o pacote circular fora do polo, revogue o token
+(`revoked_at` em `device_enrollment_tokens`) e gere outro pacote. O snapshot da sessão sobe uma
+vez, quando a turma é encerrada (ou abandonada há mais de 12 horas); os eventos sobem um a um.
+
+Antes do primeiro uso, aplique no Supabase a migração `20261011150000_site_enrollment_tokens.sql`
+e publique a função `enroll-device`.
+
 ## Identificação da máquina
 
 `dados_locais/installation.json` guarda um `installation_id` aleatório, o rótulo escolhido
@@ -68,8 +88,9 @@ python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --
 ```sh
 cd web/agent-simulator && npm ci && npm run test:unit && npm run build
 python3 scripts/check-version-consistency.py
-python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting
+python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud
 pwsh -File scripts/test-launcher-update.ps1
+python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres descartável
 ```
 
 O site no Firebase publica apenas a lista de pastas de `scripts/build-hosting.py`

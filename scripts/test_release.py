@@ -100,3 +100,24 @@ class GenericPackageDefaultsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PoloEnrollmentTokenTest(unittest.TestCase):
+    def write_bundle(self, tmp: Path, **data) -> Path:
+        path = tmp / "token.json"
+        path.write_text(json.dumps(data), encoding="utf-8")
+        return path
+
+    def test_reads_site_token_for_same_polo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self.write_bundle(Path(tmp), site_id="PET", installation_id=None, enrollment_token="x" * 43)
+            self.assertEqual(polo.read_enrollment_token(bundle, "PET"), "x" * 43)
+
+    def test_refuses_token_of_other_polo_or_single_machine(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            other = self.write_bundle(Path(tmp), site_id="JUA", installation_id=None, enrollment_token="x" * 43)
+            with self.assertRaises(ValueError):
+                polo.read_enrollment_token(other, "PET")
+            machine = self.write_bundle(Path(tmp), site_id="PET", installation_id="11111111-2222-4333-8444-555555555555", enrollment_token="x" * 43)
+            with self.assertRaises(ValueError):
+                polo.read_enrollment_token(machine, "PET")
