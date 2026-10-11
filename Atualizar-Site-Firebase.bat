@@ -11,8 +11,8 @@ call npm run build
 cd ..\..
 echo.
 python installer\build-installer.py --output instalador\downloads\PulseLab-2.3.3-Windows.zip
-copy /Y instalador\downloads\PulseLab-2.3.3-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.3.2.zip >nul 2>&1
-copy /Y instalador\downloads\PulseLab-2.3.3-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.3.2.zip.sha256 >nul 2>&1
+copy /Y instalador\downloads\PulseLab-2.3.3-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.3.3.zip >nul 2>&1
+copy /Y instalador\downloads\PulseLab-2.3.3-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.3.3.zip.sha256 >nul 2>&1
 
 echo [3/3] Montando pasta publica (somente arquivos permitidos)...
 python scripts\build-hosting.py
