@@ -39,6 +39,12 @@ test.beforeEach(async ({ context, page }) => {
 });
 
 test("offline operation: functions smoothly offline without errors interrupting the student", async ({ context, page }) => {
+  // O service worker precisa estar ativo antes de cortar a rede, como numa máquina já usada antes.
+  await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+  });
+  await page.reload();
+  await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await context.setOffline(true);
   await page.reload();
 
@@ -61,8 +67,8 @@ test("reduced motion: respects prefers-reduced-motion media query", async ({ pag
   expect(animationDuration === "0s" || animationDuration === "0ms" || animationDuration === "").toBe(true);
 });
 
-test("enforces 7-day retention cleanup on startup", async ({ page }) => {
-  // Pre-seed an expired event in IndexedDB (> 7 days old)
+test("enforces default 180-day retention cleanup on startup", async ({ page }) => {
+  // Pre-seed an expired event in IndexedDB (> 180 days old)
   await page.evaluate(() => new Promise((resolve, reject) => {
     const req = indexedDB.open("pulselab-student-runner", 1);
     req.onupgradeneeded = () => {
@@ -76,14 +82,14 @@ test("enforces 7-day retention cleanup on startup", async ({ page }) => {
       tx.objectStore("events").put({
         event_id: "expired-event-1",
         event_type: "session_started",
-        occurred_at: new Date(Date.now() - 9 * 24 * 60 * 60 * 1000).toISOString()
+        occurred_at: new Date(Date.now() - 181 * 24 * 60 * 60 * 1000).toISOString()
       });
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => reject(tx.error);
     };
   }));
 
-  // Reload the student page to trigger enforceAbsoluteRetention(7)
+  // Reload the student page to trigger enforceAbsoluteRetention with the default period
   await page.reload();
 
   // Expired event must be purged

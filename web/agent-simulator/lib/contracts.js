@@ -1,83 +1,70 @@
 // Manifesto formal do instrumento versionado (auditoria e integridade científica)
-export const PROTOCOL_VERSION = "protocolo-oficinas-rotativas-v1";
-export const INSTRUMENT_VERSION = "oficinas-rotativas-1.0.0";
+// Itens em rascunho: aguardam validação do pesquisador responsável antes de qualquer análise confirmatória.
+export const PROTOCOL_VERSION = "protocolo-oficinas-rotativas-v2";
+export const INSTRUMENT_VERSION = "bancada-2.3.0-rascunho";
 
 export const INSTRUMENT_MANIFEST = {
   version: INSTRUMENT_VERSION,
   protocol_version: PROTOCOL_VERSION,
+  status: "rascunho_pendente_validacao",
+  unit_of_analysis: "bancada",
+  session_boundary: "da abertura do app (ou do encerramento da turma anterior) até o toque em Encerrar turma",
   target_constructs: [
-    "experiencia_participacao",
-    "resultados_praticos_bancada",
+    "experiencia_bancada",
+    "resultado_pratico_bancada",
     "apoio_instrutor"
   ],
-  stages: [
-    "1. Introdução",
-    "2. Montagem",
-    "3. Experimentação",
-    "4. Desafio Final (Corrida e Encerramento)"
-  ],
   items: {
-    pre: {
-      prior_robotics: {
-        legend: "Vocês na bancada já montaram ou programaram robôs ou blocos antes?",
+    bancada: {
+      experiencia: {
+        item_id: "experiencia_bancada_v1",
+        legend: "Como foi a oficina para a sua bancada hoje?",
         options: [
-          [1, "🐣 Primeira vez", "Ninguém na bancada mexeu com robôs"],
-          [2, "🧩 Pouca prática", "Alguém já viu ou usou 1 ou 2 vezes"],
-          [3, "🚀 Já praticamos", "Já montamos ou programamos antes"],
-          [4, "⚡ Muita prática", "Temos facilidade com montagem e código"]
-        ]
+          [1, "😞", "Não gostamos"],
+          [2, "😐", "Mais ou menos"],
+          [3, "🙂", "Gostamos"],
+          [4, "😄", "Adoramos"]
+        ],
+        action_skip: "Preferimos não responder"
       }
     },
-    post: {
-      experience: {
-        legend: "Como foi participar da oficina de robótica de hoje?",
+    instrutor: {
+      resultado: {
+        item_id: "resultado_bancada_v1",
+        legend: "Resultado da bancada",
         options: [
-          [1, "😞 Muito ruim", "Não gostei da experiência"],
-          [2, "🙁 Ruim", "Poderia ter sido melhor"],
-          [3, "😐 Nem boa nem ruim", "Achei normal"],
-          [4, "🙂 Boa", "Gostei da oficina"],
-          [5, "😄 Muito boa", "Adorei a atividade"]
-        ],
-        action_skip: "Prefiro não responder"
-      },
-      race: {
-        legend: "Desfecho do Desafio da Pista / Corrida",
-        options: [
-          ["success", "🏆 Concluiu com sucesso", "Carrinho completou o percurso no circuito"],
-          ["partial", "⏱️ Não concluiu o percurso", "Travou, saiu da pista ou precisou de ajuste"],
-          ["tech_failure", "⚠️ Falha técnica / Bluetooth", "Problema de bateria, desconexão ou peça solta"]
+          [0, "Não concluiu"],
+          [1, "Concluiu em parte"],
+          [2, "Concluiu a missão"],
+          [3, "Concluiu e foi além"]
         ]
       },
-      assembly: {
-        legend: "Critérios de montagem do carrinho com peças LEGO",
+      apoio: {
+        item_id: "apoio_instrutor_v1",
+        legend: "Apoio que a bancada recebeu",
         options: [
-          ["complete", "🧩 Montagem concluída pelo roteiro"],
-          ["partial", "🔧 Montagem parcial / adaptada"],
-          ["incomplete", "❌ Não concluiu a montagem"]
+          ["nenhum", "Nenhum"],
+          ["algum", "Algum"],
+          ["muito", "Muito"]
         ]
       },
-      quiz_entertainment: {
-        legend: "Dinâmica lúdica do Quiz A/B pelos botões do robô",
-        note: "Dinâmica de entretenimento e recreação (não utilizada como avaliação de aprendizagem)",
-        options: [
-          ["participated", "🎮 Participaram da brincadeira do Quiz A/B no robô"],
-          ["skipped", "⏭️ Dinâmica não realizada"]
-        ]
-      },
-      support_level: {
-        legend: "Nível de apoio do instrutor recebido pela bancada",
-        options: [
-          ["independent", "🟢 Autônomo (trabalharam praticamente sozinhos)"],
-          ["occasional", "🟡 Apoio pontual (dúvidas breves tiradas)"],
-          ["constant", "🔴 Apoio constante (mediação intensiva necessária)"]
-        ]
-      }
+      action_skip: "Pular avaliação"
     }
+  },
+  telemetry: {
+    spike: [
+      "executable_blocks",
+      "top_level_stacks",
+      "uses_motor",
+      "uses_sensor",
+      "uses_loop",
+      "uses_condition"
+    ]
   }
 };
 
 // SHA-256 canônico do manifesto do instrumento (auditoria e integridade científica)
-export const CONFIG_HASH = "3c3662c7306d64236b0f7f26da183cc59a36c00061a2077d93fb0272876b2468";
+export const CONFIG_HASH = "cd0b2f54d78ed9dafad54741ee0fd6622cb1317cceafa39ad7020699bac19ee9";
 
 export const TIMELINE_EVENT_TYPES = [
   "session_started",

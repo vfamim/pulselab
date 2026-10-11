@@ -17,7 +17,8 @@ $script:PulseLabProvisioningFields = @(
     "school_code",
     "research_collection_enabled",
     "research_authorization_version",
-    "research_authorized_purposes"
+    "research_authorized_purposes",
+    "retention_days"
 )
 
 function ConvertTo-PulseLabMachineLabel {

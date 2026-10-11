@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="PulseLab - Download e Instruções de Execução Simplificada para Windows">
-  <title>PulseLab | Download e Execução Simplificada (v2.2.8)</title>
+  <title>PulseLab | Download e Execução Simplificada (v2.3.0)</title>
 
   <link rel="icon" href="/alunos/icon.svg" type="image/svg+xml">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -208,24 +208,24 @@
   <div class="container">
     <header>
       <div class="brand-mark">
-        <span class="dot"></span> PulseLab Protocol v2.2.8
+        <span class="dot"></span> PulseLab Protocol v2.3.0
       </div>
       <h1>Download e Instalação Offline</h1>
-      <p class="subtitle">Arquitetura Web-First com Persistência Local: Interface no navegador padrão, Bridge HTTP local, banco de dados em disco e envio opcional para a nuvem.</p>
+      <p class="subtitle">A tela da bancada abre no Microsoft Edge e um serviço local guarda os registros no próprio computador. A internet não é necessária durante a oficina.</p>
     </header>
 
     <!-- CARD: DOWNLOAD PRINCIPAL DO PACOTE WINDOWS -->
     <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
       <div class="card-title" style="color: #5eead4;">
-        <span>📦</span> Pacote PulseLab v2.2.8 para Windows (Oficinas Rotativas)
+        <span>📦</span> Pacote PulseLab v2.3.0 para Windows (Oficinas Rotativas)
       </div>
       <div class="card-subtitle">
-        Pacote autônomo com persistência local em <code>dados_locais/</code> e sincronização opcional. Funciona 100% offline durante a oficina, exporta para pendrive com 1 clique e consolida no Supabase quando houver internet.
+        Pacote genérico: o app funciona normalmente, mas a coleta de pesquisa vem desligada. Ela só é ativada pelo pacote do polo, que traz o CAAE do parecer ético. Com a coleta ativa, os registros ficam em <code>dados_locais/</code>, saem por pendrive e vão para a nuvem quando a máquina está cadastrada e conectada.
       </div>
 
       <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
-        <a href="/instalador/downloads/PulseLab-2.2.8-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
-          <span>⬇️</span> Baixar PulseLab-2.2.8-Windows.zip
+        <a href="/instalador/downloads/PulseLab-2.3.0-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>⬇️</span> Baixar PulseLab-2.3.0-Windows.zip
         </a>
         <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
           <span>🎨</span> Ver Guia Ilustrado / Slides
@@ -238,17 +238,17 @@
       <div style="margin-bottom: 16px;">
         <label style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
           Checksum SHA-256 Oficial:
-          <a href="/instalador/downloads/PulseLab-2.2.8-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
+          <a href="/instalador/downloads/PulseLab-2.3.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(arquivo .sha256)</a>
         </label>
         <div class="code-box">
-          <span style="font-size: 0.8rem;">803b0f71354914a10c3571f57d87755973ecaab59b8d52b1313df55ddafe57a2  PulseLab-2.2.8-Windows.zip</span>
+          <span style="font-size: 0.8rem;">b44ecebf073336cc3a2714494a9fdf3c37b87620d4824882d22aba4d8dd0781f  PulseLab-2.3.0-Windows.zip</span>
 
           <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar SHA-256</button>
         </div>
       </div>
 
       <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
-        ✨ <strong>Novidades da v2.2.0 (Persistência Offline Robusta):</strong> Persistência local atômica garantida no Windows PowerShell 5.1, integridade de snapshots e eventos mesmo 100% offline, indicadores honestos de estado na PWA, telemetria silenciosa do LEGO SPIKE Prime, banco de dados local permanente em <code>dados_locais/</code> e retenção estrita de 7 dias.
+        <strong>Sobre os dados:</strong> os registros ficam no computador por até 180 dias (prazo pendente de aprovação no protocolo/TCLE). São pseudonimizados, não anônimos: máquina e sessão recebem códigos aleatórios. Atualizações automáticas só instalam pacotes assinados pela equipe e voltam sozinhas à versão anterior se falharem. A pasta <code>dados_locais/</code> é preservada nas atualizações.
       </div>
     </div>
 
@@ -266,7 +266,7 @@
           <div class="step-num">1</div>
           <div class="step-title">Baixar e Extrair</div>
           <div class="step-text">
-            Baixe o arquivo <code>PulseLab-2.2.8-Windows.zip</code> acima e extraia todo o conteúdo em uma pasta (ex: Área de Trabalho ou Pendrive).
+            Baixe o arquivo <code>PulseLab-2.3.0-Windows.zip</code> acima e extraia todo o conteúdo em uma pasta (ex: Área de Trabalho ou Pendrive).
           </div>
         </div>
 
@@ -274,15 +274,15 @@
           <div class="step-num">2</div>
           <div class="step-title">Instalar ou Iniciar</div>
           <div class="step-text">
-            Dê dois cliques em <code>Instalar-PulseLab.bat</code> para criar o atalho fixo na Área de Trabalho ou em <code>Iniciar-PulseLab.bat</code> para rodar direto do pendrive.
+            Dê dois cliques em <code>Instalar-PulseLab.bat</code>. Informe um rótulo para o computador (ex.: <code>PET-LAB1-PC03</code>). A instalação cria os atalhos <code>PulseLab - Iniciar Oficina</code> e <code>PulseLab - Exportar Dados</code>.
           </div>
         </div>
 
         <div class="step-card">
           <div class="step-num">3</div>
-          <div class="step-title">Navegador Abre Sozinho</div>
+          <div class="step-title">Tela da Bancada no Edge</div>
           <div class="step-text">
-            O navegador abre em <code>http://127.0.0.1:43128/alunos/</code>. Vocês respondem o início em 15s, o cronômetro inicia e a oficina segue com foco total no robô.
+            O Microsoft Edge abre em <code>http://127.0.0.1:43128/alunos/</code>. A sessão da turma começa sozinha e a oficina segue no LEGO SPIKE. No fim, o instrutor toca em "Encerrar turma".
           </div>
         </div>
       </div>
@@ -291,38 +291,37 @@
     <!-- CARD: GUIA DE BOTÕES E CONTROLES DISPONÍVEIS -->
     <div class="card" style="border-color: rgba(124, 58, 237, 0.4); background: rgba(124, 58, 237, 0.05);">
       <div class="card-title" style="color: #c4b5fd;">
-        <span>🎮</span> Guia dos Botões e Controles da Aplicação (v2.2.8)
+        <span>🎮</span> Guia dos Botões e Controles da Aplicação (v2.3.0)
 
       </div>
       <div class="card-subtitle">
-        Controles operacionais disponíveis na tela para instrutores, pesquisadores e alunos:
+        O que aparece na tela da bancada e o que fica no computador:
       </div>
 
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px;">
         <div style="background: rgba(15, 11, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px;">
           <strong style="color: #a78bfa; font-family: 'Outfit', sans-serif; font-size: 0.95rem; display: block; margin-bottom: 10px;">
-            ⚙️ Menu do Pesquisador / Demonstração:
+            ⚙️ Na tela da bancada:
           </strong>
           <ul style="list-style: none; padding: 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
-            <li><strong style="color:#fff;">[⚙️ Controles]</strong>: Abre o menu suspenso de ações administrativas discretas.</li>
-            <li><strong style="color:#fff;">[🔄 Reiniciar]</strong>: Zera a contagem e retorna à tela inicial para iniciar uma nova turma limpa.</li>
-            <li><strong style="color:#fff;">[🤖 2. Oficina Prática]</strong>: Salta diretamente para a tela de atividade prática com o robô.</li>
-            <li><strong style="color:#fff;">[🏁 3. Desafio da Corrida]</strong>: Avança para o encerramento com a corrida e a avaliação em dois eixos.</li>
-            <li><strong style="color:#fff;">[✨ Preencher teste]</strong>: Preenche respostas de exemplo para validar o fluxo em poucos segundos.</li>
-            <li><strong style="color:#fff;">[💾 Exportar (.json)]</strong>: Baixa o arquivo JSON estruturado da bancada atual.</li>
+            <li><strong style="color:#fff;">[Encerrar turma]</strong>: Usado pelo instrutor no fim da oficina. Abre as perguntas de encerramento.</li>
+            <li><strong style="color:#fff;">[Pergunta da bancada]</strong>: "Como foi a oficina para a sua bancada hoje?" com 4 carinhas ou "Preferimos não responder".</li>
+            <li><strong style="color:#fff;">[Registro do instrutor]</strong>: Resultado (0 a 3) e apoio recebido (Nenhum, Algum, Muito), em 2 toques, com opção de pular.</li>
+            <li><strong style="color:#fff;">[Próxima turma]</strong>: Começa logo após o encerramento, sem nova configuração.</li>
+            <li><strong style="color:#fff;">[Exportar Dados da Sessão (.json)]</strong>: Aparece só com a coleta de pesquisa ativa.</li>
           </ul>
         </div>
 
         <div style="background: rgba(15, 11, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px;">
           <strong style="color: #5eead4; font-family: 'Outfit', sans-serif; font-size: 0.95rem; display: block; margin-bottom: 10px;">
-            👥 Rotinas Offline e Coleta da Escola:
+            👥 No computador da escola:
           </strong>
           <ul style="list-style: none; padding: 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
-            <li><strong style="color:#fff;">[dados_locais/]</strong>: Pasta em disco onde todas as sessões e eventos são gravados automaticamente.</li>
-            <li><strong style="color:#fff;">[Exportar-Dados-Pendrive.bat]</strong>: Cópia das sessões para qualquer pendrive USB conectado com hash SHA-256.</li>
-            <li><strong style="color:#fff;">[Importar-Para-Supabase.bat]</strong>: Consolida em base SQLite local e envia para a nuvem quando houver internet.</li>
-            <li><strong style="color:#fff;">[Foco no Robô]</strong>: Estudantes usam o app oficial LEGO SPIKE em tela cheia sem pop-ups.</li>
-            <li><strong style="color:#fff;">[Telemetria Silenciosa]</strong>: Leitura contínua dos blocos (.llsp3) sem pedir confirmação das crianças.</li>
+            <li><strong style="color:#fff;">[dados_locais/]</strong>: Pasta onde ficam os registros, por até 180 dias. Preservada nas atualizações.</li>
+            <li><strong style="color:#fff;">[PulseLab - Exportar Dados]</strong>: Atalho que copia os registros para um pendrive, com hash SHA-256.</li>
+            <li><strong style="color:#fff;">[Envio à nuvem]</strong>: Só quando a máquina está cadastrada e conectada.</li>
+            <li><strong style="color:#fff;">[Importar-Para-Supabase.bat]</strong>: Ferramenta do pesquisador para consolidar exportações de pendrive.</li>
+            <li><strong style="color:#fff;">[Leitura do SPIKE]</strong>: Conta blocos e o uso de motor, sensor, laço e condição nos projetos salvos (.llsp3).</li>
           </ul>
         </div>
       </div>

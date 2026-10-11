@@ -423,10 +423,11 @@ class TestBridgeSecurityStatic(unittest.TestCase):
         self.assertNotIn(".DownloadString(", self.bridge_code)
 
     def test_retention_cleanup_routine_present(self):
-        """Bridge deve possuir rotina Invoke-BridgeRetentionCleanup com expurgo seguro de 7 dias."""
+        """Bridge deve possuir rotina Invoke-BridgeRetentionCleanup com prazo configurável (padrão 180 dias)."""
         self.assertIn("function Invoke-BridgeRetentionCleanup", self.bridge_code)
         self.assertIn("$cutoffUtc = [DateTime]::UtcNow.AddDays(-$MaxAgeDays)", self.bridge_code)
-        self.assertIn("Invoke-BridgeRetentionCleanup -MaxAgeDays 7", self.bridge_code)
+        self.assertIn("Invoke-BridgeRetentionCleanup -MaxAgeDays (Get-BridgeRetentionDays)", self.bridge_code)
+        self.assertIn("param([int]$MaxAgeDays = 180)", self.bridge_code)
 
     def test_operational_jwt_not_read_from_config(self):
         """Bridge deve ler JWT operacional exclusivamente de PULSELAB_OPERATIONAL_JWT."""
@@ -641,3 +642,47 @@ class TestManifestHmacAuthenticity(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestProvenienciaNaoImputada(unittest.TestCase):
+    """O importador não inventa contexto nem versão do instrumento."""
+
+    def base_event(self, **overrides):
+        event = {
+            "event_id": "11111111-1111-4111-8111-111111111111",
+            "session_id": "22222222-2222-4222-8222-222222222222",
+            "group_id": "33333333-3333-4333-8333-333333333333",
+            "installation_id": "44444444-4444-4444-8444-444444444444",
+            "event_type": "session_started",
+            "occurred_at": "2026-10-11T12:00:00Z",
+            "config_hash": "a" * 64,
+            "protocol_version": "protocolo-oficinas-rotativas-v2",
+        }
+        event.update(overrides)
+        return event
+
+    def test_contexto_ausente_vira_nao_informado(self):
+        payload = imp.sanitize_event_for_supabase(self.base_event(), "research_session_events")
+        self.assertEqual(payload["school_code"], "nao_informado")
+        self.assertEqual(payload["workshop_code"], "nao_informado")
+        self.assertEqual(payload["class_code"], "nao_informado")
+        self.assertNotIn("_is_quarantine", payload)
+
+    def test_config_hash_ausente_vai_para_quarentena(self):
+        event = self.base_event()
+        del event["config_hash"]
+        payload = imp.sanitize_event_for_supabase(event, "research_session_events")
+        self.assertTrue(payload.get("_is_quarantine"))
+        self.assertIn("config_hash", payload["_quarantine_reason"])
+        self.assertNotEqual(payload.get("config_hash"), "3c3662c7306d64236b0f7f26da183cc59a36c00061a2077d93fb0272876b2468")
+
+    def test_protocolo_nao_e_inventado(self):
+        event = self.base_event()
+        del event["protocol_version"]
+        payload = imp.sanitize_event_for_supabase(event, "research_session_events")
+        self.assertIsNone(payload.get("protocol_version"))
+
+    def test_eventos_do_encerramento_sao_aceitos(self):
+        for event_type in ("experience_recorded", "rubric_completed", "session_completed"):
+            payload = imp.sanitize_event_for_supabase(self.base_event(event_type=event_type), "research_session_events")
+            self.assertNotIn("_is_quarantine", payload, event_type)

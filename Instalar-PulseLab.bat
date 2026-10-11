@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab - Instalador Local (v2.2.8)
+title PulseLab - Instalador Local (v2.3.0)
 echo ====================================================================
-echo                   PULSELAB - INSTALADOR OFFLINE (v2.2.8)
+echo                   PULSELAB - INSTALADOR OFFLINE (v2.3.0)
 
 echo ====================================================================
 echo.

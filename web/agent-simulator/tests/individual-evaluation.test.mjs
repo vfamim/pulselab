@@ -201,7 +201,10 @@ test("Superfície infantil: ausência total de controles de ritmo, painéis téc
   const code = fs.readFileSync(studentPagePath, "utf-8");
 
   // Rota normal não deve expor controles tentadores
-  assert.doesNotMatch(code, /<button[^>]*>[\s\S]*?(Avançar|Próxima|Finalizar|Concluir oficina|Começar atividade)/i, "Não deve expor botões de controle de fluxo");
+  assert.doesNotMatch(code, /<button[^>]*>\s*(Avançar|Próxima|Finalizar|Concluir oficina|Começar atividade)/i, "Não deve expor botões de controle de fluxo");
+  // Único controle na rota normal: encerramento da turma, exibido só com pesquisa ativa
+  assert.match(code, /\{canCloseTurma && closingUi\}/, "Encerramento de turma só aparece com pesquisa ativa");
+  assert.match(code, /const canCloseTurma = configResolved && isResearchActive && !isFreeMode && Boolean\(sessionId\)/);
   assert.doesNotMatch(code, /checkpoint/i, "Não deve expor checkpoints na rota infantil");
 
   // Não deve expor IDs ou versão no markup da rota normal

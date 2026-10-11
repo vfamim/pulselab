@@ -97,8 +97,8 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         expected_bv = f'$script:BridgeVersion = "{canonical}"'
         if expected_bv not in content:
             errors.append(f"bridge/pulselab-bridge.ps1: não contém '{expected_bv}'")
-        if f'protocol_version = "{canonical}"' not in content:
-            errors.append(f"bridge/pulselab-bridge.ps1: /v1/config deve retornar protocol_version='{canonical}'")
+        if re.search(r'protocol_version = "\d+\.\d+\.\d+"', content):
+            errors.append("bridge/pulselab-bridge.ps1: protocol_version não pode ser a versão do software")
 
     # 7. Launcher: pulselab.ps1
     launcher_ps1 = repo_root / "pulselab.ps1"
@@ -219,7 +219,15 @@ def check_version_consistency(repo_root: Path) -> list[str]:
             if real_hash not in test_text:
                 errors.append(f"testes/index.html: não contém o checksum SHA-256 real do pacote ({real_hash})")
 
-    # 15. Atualizador assinado: sem a chave pública no pacote, as máquinas nunca mais se atualizam.
+    # 15. Um único identificador de protocolo: o do manifesto do instrumento (contracts.js)
+    contracts_js = repo_root / "web/agent-simulator/lib/contracts.js"
+    if contracts_js.is_file() and config_json.is_file():
+        match = re.search(r'export const PROTOCOL_VERSION = "([^"]+)"', read_text(contracts_js))
+        protocol = match.group(1) if match else None
+        if read_json(config_json).get("protocol_version") != protocol:
+            errors.append(f"config/config.json: protocol_version deve ser '{protocol}' (igual a lib/contracts.js)")
+
+    # 16. Atualizador assinado: sem a chave pública no pacote, as máquinas nunca mais se atualizam.
     public_key = repo_root / "release-public-key.json"
     if not public_key.is_file():
         errors.append("release-public-key.json ausente: gere com scripts/publicar-release.py gerar-chave")

@@ -10,9 +10,9 @@ cd web\agent-simulator
 call npm run build
 cd ..\..
 echo.
-python installer\build-installer.py --output instalador\downloads\PulseLab-2.2.8-Windows.zip
-copy /Y instalador\downloads\PulseLab-2.2.8-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.2.8.zip >nul 2>&1
-copy /Y instalador\downloads\PulseLab-2.2.8-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.2.8.zip.sha256 >nul 2>&1
+python installer\build-installer.py --output instalador\downloads\PulseLab-2.3.0-Windows.zip
+copy /Y instalador\downloads\PulseLab-2.3.0-Windows.zip instalador\downloads\PulseLab-Alunos-Offline-v2.3.0.zip >nul 2>&1
+copy /Y instalador\downloads\PulseLab-2.3.0-Windows.zip.sha256 instalador\downloads\PulseLab-Alunos-Offline-v2.3.0.zip.sha256 >nul 2>&1
 
 echo [3/3] Montando pasta publica (somente arquivos permitidos)...
 python scripts\build-hosting.py

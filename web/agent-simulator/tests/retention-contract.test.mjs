@@ -48,20 +48,26 @@ test("Retenção absoluta 7 dias: student-store.js implementa enforceAbsoluteRet
   );
 });
 
-test("Retenção absoluta 7 dias: student-page.jsx executa expurgo periódico e no mount", () => {
+test("Retenção configurável (padrão 180 dias): student-page.jsx executa expurgo periódico e no mount", () => {
   assert.ok(fs.existsSync(studentPagePath), "student-page.jsx deve existir");
   const pageContent = fs.readFileSync(studentPagePath, "utf-8");
 
   assert.match(
     pageContent,
-    /enforceAbsoluteRetention\(7\)\.catch\(\(\)\s*=>\s*\{\}\)/,
-    "Deve executar enforceAbsoluteRetention(7) no mount do componente"
+    /const retentionDaysRef = useRef\(DEFAULT_RETENTION_DAYS\)/,
+    "Prazo inicial deve ser o padrão até a configuração do polo chegar"
   );
   assert.match(
     pageContent,
-    /setInterval\(\(\)\s*=>\s*\{\s*enforceAbsoluteRetention\(7\)\.catch\(\(\)\s*=>\s*\{\}\);\s*\},\s*60\s*\*\s*60\s*\*\s*1000\)/,
+    /enforceAbsoluteRetention\(retentionDaysRef\.current\)\.catch\(\(\)\s*=>\s*\{\}\)/,
+    "Deve executar enforceAbsoluteRetention no mount do componente"
+  );
+  assert.match(
+    pageContent,
+    /setInterval\(\(\)\s*=>\s*\{\s*enforceAbsoluteRetention\(retentionDaysRef\.current\)\.catch\(\(\)\s*=>\s*\{\}\);\s*\},\s*60\s*\*\s*60\s*\*\s*1000\)/,
     "Deve agendar expurgo periódico de hora em hora"
   );
+  assert.match(pageContent, /resolveRetentionDays\(cfg\)/, "Prazo vem da configuração do polo");
 });
 
 test("Zero persistência antes da autorização: student-page.jsx protege localStorage", () => {
@@ -93,7 +99,7 @@ test("Zero persistência antes da autorização: student-page.jsx protege localS
   // Grava SOMENTE após autorização estrita da configuração e inicialização da sessão coletiva
   assert.match(
     pageContent,
-    /if \(!sessionStartedEmittedRef\.current\)[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*machineInstallationId\)/,
+    /function beginSession\(startMode\) \{\s*const cfg = configRef\.current;\s*if \(!cfg \|\| !isResearchActiveRef\.current \|\| isWithdrawnRef\.current\) return;[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*machineInstallationId\)/,
     "Deve gravar INSTALLATION_KEY exclusivamente após autorização válida na inicialização da sessão"
   );
 
@@ -155,7 +161,7 @@ test("Sincronização fail-closed: student-page.jsx impede flush incondicional a
   );
 });
 
-test("Retenção absoluta 7 dias: pulselab-bridge.ps1 possui rotina Invoke-BridgeRetentionCleanup", () => {
+test("Retenção configurável (padrão 180 dias): pulselab-bridge.ps1 possui rotina Invoke-BridgeRetentionCleanup", () => {
   assert.ok(fs.existsSync(bridgeScriptPath), "pulselab-bridge.ps1 deve existir");
   const bridgeContent = fs.readFileSync(bridgeScriptPath, "utf-8");
 
@@ -166,8 +172,8 @@ test("Retenção absoluta 7 dias: pulselab-bridge.ps1 possui rotina Invoke-Bridg
   );
   assert.match(
     bridgeContent,
-    /\$MaxAgeDays\s*=\s*7/,
-    "Deve usar retenção padrão de 7 dias"
+    /\$MaxAgeDays\s*=\s*180/,
+    "Deve usar retenção padrão de 180 dias"
   );
   assert.match(
     bridgeContent,
