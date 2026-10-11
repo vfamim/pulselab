@@ -1,4 +1,4 @@
-# Protocolo PulseLab v2 — versão para teste (v2.3.2)
+# Protocolo PulseLab v2 — versão para teste (v2.3.3)
 
 Status: instrumento em rascunho operacional e protótipo de pesquisa. Substitui a descrição
 operacional v1; não altera retrospectivamente o significado de dados históricos.
@@ -46,7 +46,7 @@ missão exige outra versão, itens e critérios correspondentes. A seleção de
 “outra plataforma” permite testar o relato e a rubrica sem parser, não afirma
 equivalência pedagógica entre kits.
 
-## Fluxo e escolhas (v2.3.2)
+## Fluxo e escolhas (v2.3.3)
 
 1. Contexto institucional provisionado pelo polo (`provisionamento.json`) com código
    do polo, regional e CAAE oficial aprovado pelo comitê de ética (CEP/CONEP).

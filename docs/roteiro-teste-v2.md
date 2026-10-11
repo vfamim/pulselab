@@ -1,7 +1,7 @@
-# Roteiro de Testes e Homologação Operacional — PulseLab v2.3.2
+# Roteiro de Testes e Homologação Operacional — PulseLab v2.3.3
 
 Este roteiro orienta o procedimento de validação funcional e auditoria ética dos recursos
-operacionais do PulseLab na versão 2.3.2.
+operacionais do PulseLab na versão 2.3.3.
 
 ---
 

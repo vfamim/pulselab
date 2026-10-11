@@ -1,4 +1,4 @@
-# Inventário de Dados e Governança Ética — PulseLab v2.3.2
+# Inventário de Dados e Governança Ética — PulseLab v2.3.3
 
 A fonte canônica dos contratos e itens do instrumento é `web/agent-simulator/lib/contracts.js`,
 cujo manifesto possui integridade garantida pelo hash canônico `CONFIG_HASH` (SHA-256).
