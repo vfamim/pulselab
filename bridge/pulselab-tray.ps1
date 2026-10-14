@@ -78,7 +78,7 @@ if (-not $script:IconYellow -and (Test-Path -LiteralPath $defaultIconPath)) {
 if (-not $script:IconGreen) { $script:IconGreen = if ($script:IconYellow) { $script:IconYellow } else { [System.Drawing.SystemIcons]::Application } }
 if (-not $script:IconYellow) { $script:IconYellow = [System.Drawing.SystemIcons]::Warning }
 if (-not $script:IconRed) { $script:IconRed = [System.Drawing.SystemIcons]::Error }
-
+$notify = New-Object System.Windows.Forms.NotifyIcon
 $notify.Icon = $script:IconYellow
 $notify.Text = "PulseLab"
 $notify.Visible = $true

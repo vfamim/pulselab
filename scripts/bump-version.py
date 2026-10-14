@@ -52,15 +52,15 @@ def bump(old_v: str, new_v: str):
     # 8. bridge/pulselab-bridge.ps1
     br_ps1 = repo_root / "bridge/pulselab-bridge.ps1"
     content = br_ps1.read_text(encoding="utf-8")
-    content = re.sub(r"\$script:BridgeVersion = '[^']+'", f"\$script:BridgeVersion = '{new_v}'", content)
-    content = re.sub(r"\$script:PulseLabVersion = '[^']+'", f"\$script:PulseLabVersion = '{new_v}'", content)
+    content = re.sub(r"\$script:BridgeVersion = '[^']+'", f"$script:BridgeVersion = '{new_v}'", content)
+    content = re.sub(r"\$script:PulseLabVersion = '[^']+'", f"$script:PulseLabVersion = '{new_v}'", content)
     content = re.sub(r"version = '[0-9\.]+'", f"version = '{new_v}'", content)
     br_ps1.write_text(content, encoding="utf-8")
 
     # 9. pulselab.ps1
     pl_ps1 = repo_root / "pulselab.ps1"
     content = pl_ps1.read_text(encoding="utf-8")
-    content = re.sub(r"\$localVersion = '[^']+'", f"\$localVersion = '{new_v}'", content)
+    content = re.sub(r"\$localVersion = '[^']+'", f"$localVersion = '{new_v}'", content)
     pl_ps1.write_text(content, encoding="utf-8")
 
     # 10. web/agent-simulator/public/sw.js
