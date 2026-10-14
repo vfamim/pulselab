@@ -165,7 +165,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.4.0"
+\$script:BridgeVersion = "3.0.0"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -2597,7 +2597,7 @@ try {
                     Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON invalido" }
                     continue
                 }
-                if ($script:CollectionPause -or -not (Get-BridgeResearchContext)) {
+                if ($script:CollectionPause) {
                     Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "Este computador nao esta registrando turmas agora." }
                     continue
                 }
@@ -2624,6 +2624,16 @@ try {
                 }
                 if (-not $validClose) {
                     Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "Respostas fora da escala do instrumento" }
+                    continue
+                }
+
+                if (-not (Get-BridgeResearchContext)) {
+                    # Modo Livre: permite testar e concluir a dinamica pedagogica de encerramento sem persistencia de pesquisa.
+                    Write-BridgeLog "Encerramento de turma recebido em Modo Livre (sem persistencia de pesquisa)" "INFO"
+                    if ($script:ActiveSession) {
+                        $script:ActiveSession = $null
+                    }
+                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "closed"; session_id = "modo_livre"; modo_livre = $true }
                     continue
                 }
 

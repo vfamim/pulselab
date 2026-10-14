@@ -77,11 +77,11 @@ test("turma mudou enquanto o formulário estava aberto: recomeça em vez de grav
   expect(posts).toHaveLength(1);
 });
 
-test("sem coleta de pesquisa ou com a turma pausada: nada a encerrar e nenhum botão", async ({ context, page }) => {
+test("sem coleta de pesquisa (Modo Livre) permite encerramento, e turma pausada nao exibe botoes", async ({ context, page }) => {
   await mockBridge(context, { current: { research_active: false, paused: false, active: false, session_id: null } });
   await page.goto("/alunos/");
-  await expect(page.getByRole("heading", { name: "Nada a encerrar" })).toBeVisible();
-  await expect(page.getByRole("button")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Encerrar oficina (Modo Livre)?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Encerrar turma" })).toBeVisible();
 
   await context.unrouteAll({ behavior: "ignoreErrors" });
   await mockBridge(context, { current: { research_active: true, paused: true, active: false, session_id: null } });
