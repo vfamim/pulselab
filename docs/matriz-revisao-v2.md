@@ -1,5 +1,10 @@
 # Resposta à revisão adversarial
 
+> **Documento histórico.** Resposta à revisão adversarial da branch de teste v2. Não descreve a versão atual: não há mais
+> caixas de assentimento, checkpoints, itens individuais nem botão de retirada na
+> tela. Ver [protocolo v2](protocolo-pesquisa-v2-teste.md) e
+> [assentimento verbal](assentimento-verbal.md).
+
 | Achado/sugestão | Implementação na branch | Validação restante |
 |---|---|---|
 | Recusa e assentimento | Aceites individuais desmarcados; recusa sem sessão; retirada apaga sessão inteira | Linguagem/processo com crianças e responsáveis; enquadramento ético |

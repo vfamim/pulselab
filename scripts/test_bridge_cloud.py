@@ -1,7 +1,9 @@
-"""Integração do Bridge com um Supabase falso: cadastro pelo token do polo, renovação de
-token após 401 e envio do snapshot só com a turma encerrada.
+"""Integração do Bridge real (pwsh) com um Supabase falso.
 
-Roda o bridge real em pwsh (PowerShell 7). Sem pwsh no PATH, o teste é pulado.
+Cobre o cadastro pelo token do polo, a renovação de token após 401 e a sessão da turma,
+que desde a 2.4.0 é do Bridge: abre sozinha, registra o programa SPIKE e o sinal de vida,
+fecha pelo formulário final, por tempo ou por computador desligado, e "Não registrar esta
+turma" apaga e pausa. Sem pwsh no PATH, os testes de integração são pulados.
 """
 
 from __future__ import annotations
@@ -11,15 +13,20 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from scripts.test_spike_parser import SECRET, known_blocks, project_json, wait_until_blocks, write_llsp3  # noqa: E402
 PWSH = shutil.which("pwsh")
 SITE_TOKEN = "t" * 43
 INSTALLATION_ID = "11111111-2222-4333-8444-555555555555"
@@ -97,68 +104,77 @@ class PowerShellInterpolationTest(unittest.TestCase):
         self.assertEqual(offenders, [])
 
 
-@unittest.skipUnless(PWSH, "pwsh não encontrado")
-class BridgeCloudSyncTest(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        FakeSupabase.calls = []
-        FakeSupabase.session_event_attempts = 0
-        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeSupabase)
-        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
-        supabase_url = f"http://127.0.0.1:{cls.server.server_port}"
+def write_json(path: Path, data) -> None:
+    path.write_text(json.dumps(data), encoding="utf-8")
 
-        cls.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-cloud-"))
-        (cls.tmp / "bridge").mkdir()
+
+def read_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
+def read_events(data_dir: Path) -> list[dict]:
+    events_file = data_dir / "events.jsonl"
+    if not events_file.exists():
+        return []
+    return [json.loads(line) for line in events_file.read_text(encoding="utf-8-sig").splitlines() if line.strip()]
+
+
+class BridgeProcess:
+    """Bridge real numa pasta temporária, com prazos encurtados por variáveis de ambiente."""
+
+    def __init__(self, root: Path, supabase_url: str, env_extra: dict | None = None):
+        self.root = root
+        (root / "bridge").mkdir(parents=True, exist_ok=True)
         for name in ("pulselab-bridge.ps1", "spike-parser.ps1"):
-            shutil.copy2(ROOT / "bridge" / name, cls.tmp / "bridge" / name)
-        (cls.tmp / "config").mkdir()
-        (cls.tmp / "config" / "config.json").write_text(json.dumps({
-            "version": "test",
-            "group_size": 2,
-            "supabase_url": supabase_url,
-            "sync_interval_seconds": 1,
-        }), encoding="utf-8")
-        cls.data = cls.tmp / "dados_locais"
-        cls.data.mkdir()
-        (cls.data / "installation.json").write_text(json.dumps({
-            "installation_id": INSTALLATION_ID,
-            "machine_label": "PET-LAB1-PC03",
-            "site_id": "PET",
-            "research_collection_enabled": True,
-            "research_authorization_version": "12345678.9.0000.1234",
-            "research_authorized_purposes": ["academic_research"],
-            "enrollment_token": SITE_TOKEN,
-        }), encoding="utf-8")
+            shutil.copy2(ROOT / "bridge" / name, root / "bridge" / name)
+        (root / "config").mkdir(exist_ok=True)
+        write_json(root / "config" / "config.json", {
+            "version": "test", "group_size": 2, "supabase_url": supabase_url, "sync_interval_seconds": 1,
+        })
+        self.data = root / "dados_locais"
+        self.data.mkdir(exist_ok=True)
+        self.spike = root / "LEGO SPIKE"
+        self.spike.mkdir(exist_ok=True)
+        self.env = {
+            **os.environ,
+            "USERPROFILE": str(root / "perfil"),
+            "PULSELAB_SPIKE_DIR": str(self.spike),
+            "PULSELAB_HEARTBEAT_SECONDS": "2",
+            "PULSELAB_SPIKE_POLL_SECONDS": "1",
+            **(env_extra or {}),
+        }
+        self.proc = None
+        self.port = None
 
-        cls.port = free_port()
-        # O leitor do SPIKE usa USERPROFILE (Windows); fora dele, aponta para uma pasta vazia.
-        env = {**os.environ, "USERPROFILE": str(cls.tmp / "perfil")}
-        (cls.tmp / "perfil").mkdir()
-        cls.proc = subprocess.Popen(
-            [PWSH, "-NoProfile", "-File", str(cls.tmp / "bridge" / "pulselab-bridge.ps1"),
-             "-Port", str(cls.port), "-AppRoot", str(ROOT / "alunos"), "-DataDir", str(cls.data), "-NoAlert"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env,
+    def start(self):
+        self.port = free_port()
+        self.base = f"http://127.0.0.1:{self.port}"
+        self.proc = subprocess.Popen(
+            [PWSH, "-NoProfile", "-File", str(self.root / "bridge" / "pulselab-bridge.ps1"),
+             "-Port", str(self.port), "-AppRoot", str(ROOT / "alunos"), "-DataDir", str(self.data)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=self.env,
         )
-        cls.base = f"http://127.0.0.1:{cls.port}"
         deadline = time.time() + 40
         while time.time() < deadline:
             try:
-                with urllib.request.urlopen(f"{cls.base}/health", timeout=1):
-                    break
+                with urllib.request.urlopen(f"{self.base}/health", timeout=1):
+                    return
             except Exception:
                 time.sleep(0.3)
-        else:
-            raise RuntimeError("Bridge não respondeu")
+        raise RuntimeError("Bridge não respondeu")
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.proc.terminate()
-        try:
-            cls.proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            cls.proc.kill()
-        cls.server.shutdown()
-        shutil.rmtree(cls.tmp, ignore_errors=True)
+    def stop(self):
+        if self.proc:
+            self.proc.terminate()
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+            self.proc = None
+
+    def get(self, path: str):
+        with urllib.request.urlopen(f"{self.base}{path}", timeout=5) as resp:
+            return json.loads(resp.read())
 
     def post(self, path: str, payload: dict):
         req = urllib.request.Request(
@@ -167,19 +183,57 @@ class BridgeCloudSyncTest(unittest.TestCase):
             headers={"Content-Type": "application/json", "Origin": self.base},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            return resp.status
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                return resp.status, json.loads(resp.read() or b"{}")
+        except urllib.error.HTTPError as err:
+            return err.code, json.loads(err.read() or b"{}")
 
-    def wait_for(self, predicate, timeout=30):
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            if predicate():
-                return True
-            time.sleep(0.5)
-        return False
+
+def wait_for(predicate, timeout=30):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        time.sleep(0.5)
+    return False
+
+
+def authorized_installation(**extra) -> dict:
+    return {
+        "installation_id": INSTALLATION_ID,
+        "machine_label": "PET-LAB1-PC03",
+        "site_id": "PET",
+        "research_collection_enabled": True,
+        "research_authorization_version": "12345678.9.0000.1234",
+        "research_authorized_purposes": ["academic_research"],
+        **extra,
+    }
+
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeCloudSyncTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        FakeSupabase.calls = []
+        FakeSupabase.session_event_attempts = 0
+        cls.server = ThreadingHTTPServer(("127.0.0.1", 0), FakeSupabase)
+        threading.Thread(target=cls.server.serve_forever, daemon=True).start()
+        cls.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-cloud-"))
+        cls.bridge = BridgeProcess(cls.tmp, f"http://127.0.0.1:{cls.server.server_port}")
+        write_json(cls.bridge.data / "installation.json", authorized_installation(enrollment_token=SITE_TOKEN))
+        # Linha cortada por desligamento brusco no fim da aula anterior
+        (cls.bridge.data / "events.jsonl").write_bytes(b'{"event_id":"77777777-7777-4777-8777-77777')
+        cls.bridge.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.bridge.stop()
+        cls.server.shutdown()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
 
     def debug_state(self) -> str:
-        log = self.data / "bridge.log"
+        log = self.bridge.data / "bridge.log"
         tail = log.read_text(encoding="utf-8-sig", errors="replace").splitlines()[-12:] if log.exists() else []
         with FakeSupabase.lock:
             calls = [(c["path"], c["auth"]) for c in FakeSupabase.calls]
@@ -189,50 +243,170 @@ class BridgeCloudSyncTest(unittest.TestCase):
         with FakeSupabase.lock:
             return [c for c in FakeSupabase.calls if c["path"].startswith(prefix)]
 
-    def test_full_cloud_flow(self):
-        # 1. Cadastro automático com o token do polo
-        self.assertTrue(self.wait_for(lambda: self.calls_to("/functions/v1/enroll-device")), "bridge não tentou se cadastrar")
+    def test_full_class_flow(self):
+        data = self.bridge.data
+        # 1. Linha cortada separada; a fila segue
+        self.assertTrue((data / "events_corrupted.jsonl").exists(), "linha cortada deveria ir para events_corrupted.jsonl")
+
+        # 2. Cadastro automático com o token do polo
+        self.assertTrue(wait_for(lambda: self.calls_to("/functions/v1/enroll-device")), "bridge não tentou se cadastrar")
         enroll = self.calls_to("/functions/v1/enroll-device")[0]["body"]
         self.assertEqual(enroll["installation_id"], INSTALLATION_ID)
         self.assertEqual(enroll["machine_label"], "PET-LAB1-PC03")
-        self.assertTrue(self.wait_for(lambda: "enrolled_at" in json.loads((self.data / "installation.json").read_text(encoding="utf-8-sig"))))
-        installation = json.loads((self.data / "installation.json").read_text(encoding="utf-8-sig"))
-        self.assertNotIn("enrollment_token", installation, "token do polo deve sair do disco após o cadastro")
+        self.assertTrue(wait_for(lambda: "enrolled_at" in read_json(data / "installation.json")))
+        self.assertNotIn("enrollment_token", read_json(data / "installation.json"), "token do polo deve sair do disco")
 
-        # 2. Evento: primeiro envio recebe 401, bridge renova o token e reenvia sem quarentena
-        session_id = "33333333-3333-4333-8333-333333333333"
-        event = {
-            "event_id": "44444444-4444-4444-8444-444444444444",
-            "session_id": session_id,
-            "group_id": "55555555-5555-4555-8555-555555555555",
-            "installation_id": INSTALLATION_ID,
-            "site_id": "PET",
-            "event_type": "session_started",
-            "occurred_at": "2026-10-11T12:00:00Z",
-            "config_hash": "a" * 64,
-            "_target_table": "research_session_events",
-        }
-        self.assertIn(self.post("/v1/events", event), (200, 201))
-        self.assertTrue(self.wait_for(lambda: any(c["auth"] == "Bearer tok-2" for c in self.calls_to("/rest/v1/research_session_events"))), "evento não reenviado com token renovado: " + self.debug_state())
+        # 3. A turma abre sozinha, sem página aberta
+        current = self.bridge.get("/v1/session/current")
+        self.assertTrue(current["research_active"])
+        self.assertTrue(current["active"], self.debug_state())
+        session_id = current["session_id"]
+        started = [e for e in read_events(data) if e["event_type"] == "session_started"]
+        self.assertEqual(len(started), 1)
+        self.assertEqual(started[0]["session_id"], session_id)
+        self.assertEqual(started[0]["details"]["start_mode"], "abertura_app")
+        self.assertEqual(started[0]["participant_role"], None)
+
+        # 4. Evento: primeiro envio recebe 401, bridge renova o token e reenvia sem quarentena
+        self.assertTrue(wait_for(lambda: any(c["auth"] == "Bearer tok-2" for c in self.calls_to("/rest/v1/research_session_events"))), "evento não reenviado com token renovado: " + self.debug_state())
         self.assertTrue(self.calls_to("/auth/v1/token"), "token não foi renovado")
-        self.assertFalse((self.data / "events_quarantine.jsonl").exists(), "401 não pode mandar evento para quarentena")
-        stored = json.loads((self.data / "device_session.json").read_text(encoding="utf-8-sig"))
-        self.assertEqual(stored["access_token"], "tok-2")
-        self.assertEqual(stored["refresh_token"], "ref-2")
+        self.assertFalse((data / "events_quarantine.jsonl").exists(), "401 não pode mandar evento para quarentena")
+        self.assertEqual(read_json(data / "device_session.json")["access_token"], "tok-2")
 
-        # 3. Snapshot em andamento não sobe; encerrado sobe uma vez
-        snapshot = {"session_id": session_id, "group_id": event["group_id"], "installation_id": INSTALLATION_ID,
-                    "site_id": "PET", "status": "in_progress", "timeline": [event]}
-        self.post("/v1/sessions/save", snapshot)
-        time.sleep(4)
+        # 5. Programa salvo no SPIKE vira telemetria, sem textos das crianças nem caminhos
+        write_llsp3(self.bridge.spike / "Projeto1.llsp3", json.dumps(project_json(known_blocks())))
+        self.assertTrue(wait_for(lambda: any(e["event_type"] == "spike_telemetry" for e in read_events(data))), self.debug_state())
+        telemetry = [e for e in read_events(data) if e["event_type"] == "spike_telemetry"][0]
+        details = telemetry["details"]
+        self.assertGreater(details["executable_blocks"], 0)
+        self.assertTrue(details["first_coding_detected"])
+        self.assertEqual(telemetry["activity_stage"], "primeira_programacao_detectada")
+        self.assertEqual(details["file_seq"], 1)
+        self.assertFalse(details["continued_previous_file"])
+        self.assertRegex(details["structure_hash"], r"^[0-9a-f]{64}$")
+        self.assertIn("total", details["ct_score"])
+        raw_events = (data / "events.jsonl").read_text(encoding="utf-8")
+        self.assertNotIn(SECRET, raw_events)
+        self.assertNotIn("JOAO", raw_events)
+        self.assertNotIn(str(self.bridge.spike), raw_events)
+
+        # 6. Sinal de vida
+        self.assertTrue(wait_for(lambda: any(e["event_type"] == "heartbeat" for e in read_events(data))))
+
+        # 7. Em andamento não sobe; formulário com turma errada é recusado; turma certa fecha e sobe
         self.assertEqual(self.calls_to("/rest/v1/research_bancada_sessions"), [], "snapshot em andamento não deve subir")
-        self.post("/v1/sessions/save", {**snapshot, "status": "completed", "phase": "completed"})
-        self.assertTrue(self.wait_for(lambda: self.calls_to("/rest/v1/research_bancada_sessions")), "snapshot encerrado não subiu")
+        status, _ = self.bridge.post("/v1/session/close", {"session_id": "00000000-0000-4000-8000-000000000000", "experience": {"refused": True}, "rubric": {"skipped": True}})
+        self.assertEqual(status, 409)
+        status, _ = self.bridge.post("/v1/session/close", {"session_id": session_id, "experience": {"value": 9}, "rubric": {"skipped": True}})
+        self.assertEqual(status, 400, "valor fora da escala")
+        status, body = self.bridge.post("/v1/session/close", {
+            "session_id": session_id,
+            "experience": {"value": 3, "label": "Gostamos", "refused": False},
+            "rubric": {"skipped": False, "result_level": 2, "support_level": "algum"},
+        })
+        self.assertEqual((status, body["session_id"]), (200, session_id))
+        self.assertFalse(self.bridge.get("/v1/session/current")["active"], "próxima turma só abre no primeiro programa salvo")
+        types = [e["event_type"] for e in read_events(data) if e["session_id"] == session_id]
+        self.assertEqual(types[-3:], ["experience_recorded", "rubric_completed", "session_completed"])
+        self.assertTrue(wait_for(lambda: self.calls_to("/rest/v1/research_bancada_sessions")), "snapshot encerrado não subiu: " + self.debug_state())
         uploaded = self.calls_to("/rest/v1/research_bancada_sessions")[0]["body"]
         self.assertEqual(uploaded["phase"], "completed")
+        self.assertEqual(uploaded["ended_by"], "instrutor")
+        self.assertFalse(uploaded["interrupted"])
+        self.assertGreaterEqual(uploaded["data_quality"]["heartbeat_count"], 1)
+        self.assertEqual(uploaded["data_quality"]["telemetry_events"], 1)
         self.assertEqual(uploaded["school_code"], "nao_informado")
-        self.assertIsNone(uploaded.get("protocol_version"))
+        self.assertEqual(uploaded["protocol_version"], "protocolo-oficinas-rotativas-v2")
 
+        # 8. Próxima turma abre no primeiro programa salvo, continuando o arquivo da anterior
+        time.sleep(1.1)
+        write_llsp3(self.bridge.spike / "Projeto1.llsp3", json.dumps(project_json(wait_until_blocks())))
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/session/current")["active"]), self.debug_state())
+        second = self.bridge.get("/v1/session/current")["session_id"]
+        self.assertNotEqual(second, session_id)
+        self.assertTrue(wait_for(lambda: any(e["event_type"] == "spike_telemetry" and e["session_id"] == second for e in read_events(data))))
+        second_start = [e for e in read_events(data) if e["session_id"] == second and e["event_type"] == "session_started"][0]
+        self.assertEqual(second_start["details"]["start_mode"], "atividade_spike")
+        second_tel = [e for e in read_events(data) if e["session_id"] == second and e["event_type"] == "spike_telemetry"][0]["details"]
+        self.assertTrue(second_tel["continued_previous_file"], "arquivo deixado pela turma anterior deve ser reconhecido")
+        self.assertEqual(second_tel["baseline_executable_blocks"], details["executable_blocks"])
+        self.assertEqual(second_tel["blocks_delta_from_baseline"], second_tel["executable_blocks"] - details["executable_blocks"])
+
+        # 9. "Não registrar esta turma": apaga a turma atual, grava tombstone e pausa
+        status, body = self.bridge.post("/v1/session/pause", {})
+        self.assertEqual((status, body["purged_session"]), (200, True))
+        self.assertFalse(any(e["session_id"] == second for e in read_events(data)), "eventos da turma não registrada devem ser apagados")
+        self.assertIn(second, (data / "sessions_withdrawn.txt").read_text(encoding="utf-8-sig"))
+        self.assertTrue(self.bridge.get("/v1/status")["paused"])
+        status, _ = self.bridge.post("/v1/session/close", {"session_id": None})
+        self.assertEqual(status, 409, "turma pausada não tem o que encerrar")
+
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeRestartTest(unittest.TestCase):
+    """Reinício rápido retoma a turma; computador desligado ou turma longa fecha sozinha."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-restart-"))
+        self.bridge = BridgeProcess(self.tmp, "http://127.0.0.1:9")
+        write_json(self.bridge.data / "installation.json", authorized_installation())
+
+    def tearDown(self):
+        self.bridge.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def start_and_get_session(self) -> str:
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/session/current")["active"]))
+        return self.bridge.get("/v1/session/current")["session_id"]
+
+    def shift_state(self, started_min_ago: float, alive_min_ago: float):
+        state_file = self.bridge.data / "active_session.json"
+        state = read_json(state_file)
+        now_ms = int(time.time() * 1000)
+        state["started_at_ms"] = now_ms - int(started_min_ago * 60000)
+        state["last_alive_ms"] = now_ms - int(alive_min_ago * 60000)
+        write_json(state_file, state)
+
+    def snapshot(self, session_id: str) -> dict:
+        return read_json(self.bridge.data / "sessoes" / f"sessao_{session_id}.json")
+
+    def test_quick_restart_resumes_same_class(self):
+        first = self.start_and_get_session()
+        self.bridge.stop()
+        self.shift_state(started_min_ago=30, alive_min_ago=2)
+        self.assertEqual(self.start_and_get_session(), first)
+        issues = [e for e in read_events(self.bridge.data) if e["event_type"] == "quality_issue"]
+        self.assertEqual(issues[-1]["details"]["issue"], "pulselab_reiniciado")
+        self.assertEqual(read_json(self.bridge.data / "active_session.json")["bridge_restarts"], 1)
+
+    def test_computer_off_closes_previous_class_without_closing_form(self):
+        first = self.start_and_get_session()
+        self.bridge.stop()
+        self.shift_state(started_min_ago=90, alive_min_ago=45)
+        second = self.start_and_get_session()
+        self.assertNotEqual(second, first)
+        snap = self.snapshot(first)
+        self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "sem_encerramento"))
+        self.assertAlmostEqual(snap["duration_seconds"], 45 * 60, delta=120)
+
+    def test_class_longer_than_limit_closes_by_time(self):
+        first = self.start_and_get_session()
+        self.bridge.stop()
+        self.shift_state(started_min_ago=200, alive_min_ago=1)
+        second = self.start_and_get_session()
+        self.assertNotEqual(second, first)
+        snap = self.snapshot(first)
+        self.assertEqual(snap["ended_by"], "tempo")
+        self.assertEqual(snap["duration_seconds"], 180 * 60)
+
+    def test_without_site_package_nothing_is_recorded(self):
+        write_json(self.bridge.data / "installation.json", {"installation_id": INSTALLATION_ID, "site_id": "PET", "research_collection_enabled": False})
+        self.bridge.start()
+        current = self.bridge.get("/v1/session/current")
+        self.assertFalse(current["research_active"])
+        self.assertFalse(current["active"])
+        self.assertEqual(read_events(self.bridge.data), [])
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,5 +1,10 @@
 # 🚀 PulseLab: Revelando a Jornada Real da Robótica Educativa
 
+> **Documento histórico.** Apresentação de uma versão antiga. O PulseLab atual
+> não faz perguntas durante a aula e não registra a tela, o teclado nem os
+> cliques. Ver [protocolo v2](protocolo-pesquisa-v2-teste.md) e
+> [assentimento verbal](assentimento-verbal.md).
+
 ---
 
 ## 1. O que é o PulseLab?

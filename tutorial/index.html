@@ -139,11 +139,11 @@ footer {
     Guia Operacional Ilustrado
   </span>
   <h1>
-    PulseLab 2.3.3
+    PulseLab 3.0.0
   </h1>
 
   <p>
-    Instalação offline, uma bancada por computador, leitura de contagens do LEGO SPIKE (.llsp3) e encerramento da turma em poucos toques.
+    Instalação offline, uma bancada por computador, ícone na bandeja do Windows, leitura da estrutura dos projetos do LEGO SPIKE (.llsp3) e encerramento da turma em poucos cliques.
   </p>
   <div>
     <div class="card-panel">
@@ -158,8 +158,8 @@ footer {
     </div>
     <div class="card-panel">
       <div>⚙️</div>
-      <strong>3. Botões da Tela</strong>
-      <p>Encerrar turma · Exportar</p>
+      <strong>3. Menu da Bandeja</strong>
+      <p>Encerrar · Não registrar</p>
     </div>
     <div class="card-panel">
       <div>🤖</div>
@@ -307,7 +307,7 @@ footer {
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Baixar o ZIP:</strong> Obtenha <code>PulseLab-2.3.3-Windows.zip</code> pela web ou transporte via pendrive para os computadores da escola.</div>
+        <div><strong>Baixar o ZIP:</strong> Obtenha <code>PulseLab-3.0.0-Windows.zip</code> pela web ou transporte via pendrive para os computadores da escola.</div>
 
       </li>
       <li class="step-item">
@@ -316,7 +316,7 @@ footer {
       </li>
       <li class="step-item">
         <span class="step-num">3</span>
-        <div><strong>Modo Instalador (Recomendado):</strong> Dê dois cliques em <code>Instalar-PulseLab.bat</code>. Ele copia os arquivos para <code>%LOCALAPPDATA%\PulseLab</code>, pede um rótulo para o computador (ex.: <code>PET-LAB1-PC03</code>) e cria os atalhos <strong>"PulseLab - Iniciar Oficina"</strong> e <strong>"PulseLab - Exportar Dados"</strong> na Área de Trabalho.</div>
+        <div><strong>Modo Instalador (Recomendado):</strong> Dê dois cliques em <code>Instalar-PulseLab.bat</code>. Ele copia os arquivos para <code>%LOCALAPPDATA%\PulseLab</code>, pede um rótulo para o computador (ex.: <code>PET-LAB1-PC03</code>) e cria os atalhos <strong>"PulseLab - Iniciar Oficina"</strong> e <strong>"PulseLab - Exportar Dados"</strong> na Área de Trabalho. Depois disso, o PulseLab abre sozinho com o Windows.</div>
       </li>
       <li class="step-item">
         <span class="step-num">4</span>
@@ -466,15 +466,15 @@ footer {
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Abertura Automática:</strong> Ao executar o atalho, o Bridge sobe em segundo plano e abre a tela da bancada no Microsoft Edge em <code>http://127.0.0.1:43128/alunos/</code>.</div>
+        <div><strong>Abertura Automática:</strong> O PulseLab abre com o Windows e mostra um ícone na área de notificação (bandeja, perto do relógio). Nenhuma página fica aberta durante a aula.</div>
       </li>
       <li class="step-item">
         <span class="step-num">2</span>
-        <div><strong>Início Automático:</strong> A sessão da turma começa quando o app abre ou logo depois que a turma anterior é encerrada. Não há perguntas no início.</div>
+        <div><strong>Início Automático:</strong> A sessão da turma começa quando o PulseLab inicia ou, depois de uma turma encerrada, quando a bancada salva o primeiro programa. Não há perguntas no início.</div>
       </li>
       <li class="step-item">
         <span class="step-num">3</span>
-        <div><strong>Foco no LEGO SPIKE:</strong> A tela do PulseLab pode ficar em segundo plano enquanto as crianças usam o app do SPIKE.</div>
+        <div><strong>Assentimento Verbal:</strong> No começo da aula, o instrutor lê o roteiro às crianças. Se alguém da bancada não quiser, clique com o botão direito no ícone daquele computador e escolha <em>"Não registrar esta turma"</em>. A bancada continua a atividade normalmente.</div>
       </li>
       <li class="step-item">
         <span class="step-num">4</span>
@@ -487,7 +487,7 @@ footer {
 </code></pre>
   </div>
   <div class="img-container">
-    <img src="images/02-como-usar.jpg" alt="Tela da bancada durante a atividade" />
+    <img src="images/02-como-usar.jpg" alt="Imagem da versão anterior, com a tela da bancada no navegador" />
   </div>
 </div>
 </section>
@@ -618,18 +618,18 @@ footer {
 }
 " lang="pt-BR" data-marpit-pagination="4" style="--paginate:true;--theme:default;--style:@import url(&quot;https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&amp;family=Nunito:wght@400;600;700;800&amp;display=swap&quot;)
 ;" data-marpit-pagination-total="7" data-size="16:9">
-<h2 id="span-classbadge-stylebackgroundfdf4ff-color86198fetapa-3span-guia-de-bot%C3%B5es-e-controles-dispon%C3%ADveis"><span class="badge">Etapa 3</span> Guia de Botões e Controles Disponíveis</h2>
+<h2 id="span-classbadge-stylebackgroundfdf4ff-color86198fetapa-3span-guia-de-bot%C3%B5es-e-controles-dispon%C3%ADveis"><span class="badge">Etapa 3</span> Menu da Bandeja e Saída dos Registros</h2>
 <div class="grid-2">
   <div>
     <p>
-      Botões usados pelo instrutor e caminhos para tirar os registros do computador:
+      Menu do ícone do PulseLab (botão direito) e caminhos para tirar os registros do computador:
     </p>
 <pre is="marp-pre" data-auto-scaling="downscale-only"><code>&lt;div class=&quot;card-panel&quot; style=&quot;border-color:#d8b4fe; background:#faf5ff;&quot;&gt;
-  &lt;strong style=&quot;color:#7e22ce; font-size: 0.88rem;&quot;&gt;Fim da Oficina: Botão &lt;span class=&quot;btn-badge&quot;&gt;Encerrar turma&lt;/span&gt;&lt;/strong&gt;
+  &lt;strong style=&quot;color:#7e22ce; font-size: 0.88rem;&quot;&gt;Menu da Bandeja&lt;/strong&gt;
   &lt;ul style=&quot;font-size: 0.8rem; margin: 4px 0 0 16px; padding: 0; line-height: 1.35;&quot;&gt;
-    &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;Encerrar turma&lt;/span&gt;: O instrutor toca ao final da oficina. Abre a pergunta da bancada.&lt;/li&gt;
-    &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;Pular&lt;/span&gt;: O instrutor pode pular o registro de resultado e apoio.&lt;/li&gt;
-    &lt;li&gt;Depois do encerramento, a próxima turma começa sozinha.&lt;/li&gt;
+    &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;Encerrar turma…&lt;/span&gt;: No fim da aula. Abre a pergunta da bancada e o registro do instrutor.&lt;/li&gt;
+    &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;Não registrar esta turma&lt;/span&gt;: Se alguém da bancada, ou a família, não quiser participar. Apaga os dados da turma atual naquele computador e pausa o registro até a próxima turma.&lt;/li&gt;
+    &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;Ver situação&lt;/span&gt;: Mostra se o registro está ativo ou pausado.&lt;/li&gt;
   &lt;/ul&gt;
 &lt;/div&gt;
 
@@ -637,14 +637,13 @@ footer {
   &lt;strong style=&quot;color:#1e293b; font-size: 0.88rem;&quot;&gt;Saída dos Registros&lt;/strong&gt;
   &lt;ul style=&quot;font-size: 0.8rem; margin: 4px 0 0 16px; padding: 0; line-height: 1.35;&quot;&gt;
     &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;<img class="emoji" draggable="false" alt="📥" src="https://cdn.jsdelivr.net/gh/jdecked/twemoji@17.0.3/assets/svg/1f4e5.svg" data-marp-twemoji=""/> PulseLab - Exportar Dados&lt;/span&gt;: Atalho da Área de Trabalho que copia os registros para um pendrive.&lt;/li&gt;
-    &lt;li&gt;&lt;span class=&quot;btn-badge&quot;&gt;Exportar Dados da Sessão (.json)&lt;/span&gt;: Aparece na tela só com a coleta de pesquisa ativa.&lt;/li&gt;
     &lt;li&gt;Envio à nuvem: só quando a máquina está cadastrada e conectada.&lt;/li&gt;
   &lt;/ul&gt;
 &lt;/div&gt;
 </code></pre>
   </div>
   <div class="img-container">
-    <img src="images/03-encerramento.jpg" alt="Tela de encerramento da turma" />
+    <img src="images/03-encerramento.jpg" alt="Encerramento da turma (imagem da versão anterior)" />
   </div>
 </div>
 </section>
@@ -781,7 +780,7 @@ footer {
     <ul class="step-list">
       <li class="step-item">
         <span class="step-num">1</span>
-        <div><strong>Encerrar turma:</strong> No fim da oficina, o instrutor toca em <em>"Encerrar turma"</em>.</div>
+        <div><strong>Encerrar turma:</strong> No fim da aula, o instrutor clica com o botão direito no ícone do PulseLab e escolhe <em>"Encerrar turma…"</em>.</div>
       </li>
       <li class="step-item">
         <span class="step-num">2</span>
@@ -789,11 +788,11 @@ footer {
       </li>
       <li class="step-item">
         <span class="step-num">3</span>
-        <div><strong>Registro do instrutor (2 toques):</strong> resultado (0 Não concluiu, 1 Concluiu em parte, 2 Concluiu a missão, 3 Concluiu e foi além) e apoio recebido (Nenhum, Algum, Muito). Pode pular.</div>
+        <div><strong>Registro do instrutor:</strong> resultado (0 Não concluiu, 1 Concluiu em parte, 2 Concluiu a missão, 3 Concluiu e foi além) e apoio recebido (Nenhum, Algum, Muito). Pode pular.</div>
       </li>
       <li class="step-item">
         <span class="step-num">4</span>
-        <div><strong>Próxima turma:</strong> começa logo em seguida, na mesma tela.</div>
+        <div><strong>Se ninguém encerrar:</strong> a sessão fecha sozinha depois de 3 horas ou se o computador ficar desligado por mais de 20 minutos. A próxima sessão começa quando um programa for salvo.</div>
       </li>
     </ul>
 <pre is="marp-pre" data-auto-scaling="downscale-only"><code>&lt;div class=&quot;highlight-box&quot; style=&quot;border-left-color: #d97706;&quot;&gt;
@@ -943,15 +942,15 @@ footer {
       </li>
       <li class="step-item">
         <span class="step-num">2</span>
-        <div><strong>O que é contado:</strong> Abre o <code>.llsp3</code> no próprio computador e registra a contagem de blocos e o uso de motor, sensor, laço e condição.</div>
+        <div><strong>O que é registrado:</strong> Abre o <code>.llsp3</code> no próprio computador e registra a estrutura de cada versão salva: tipos de blocos e como estão organizados (motor, sensor, laço, condição).</div>
       </li>
       <li class="step-item">
         <span class="step-num">3</span>
-        <div><strong>Só arquivos salvos:</strong> Não lê a tela nem o teclado.</div>
+        <div><strong>Só arquivos salvos:</strong> Não lê a tela, o teclado nem os cliques. Se a pasta do SPIKE não for encontrada, isso fica registrado.</div>
       </li>
       <li class="step-item">
         <span class="step-num">4</span>
-        <div><strong>Sem conteúdo (LGPD):</strong> Não guarda nomes de variáveis, textos, fotos nem o código do robô. Só as contagens.</div>
+        <div><strong>Sem conteúdo (LGPD):</strong> Não guarda nomes de variáveis, textos digitados, fotos nem o arquivo do projeto. Só os tipos de blocos.</div>
       </li>
     </ul>
   </div>
@@ -1105,7 +1104,7 @@ footer {
       </li>
       <li class="step-item">
         <span class="step-num">4</span>
-        <div><strong>Pseudonimizados, não anônimos:</strong> Máquina e sessão recebem códigos aleatórios. O computador aparece pelo rótulo escolhido na instalação (ex.: <code>PET-LAB1-PC03</code>), nunca pelo nome do Windows ou do usuário.</div>
+        <div><strong>Desidentificados, não anônimos:</strong> Máquina e sessão recebem códigos aleatórios, mas a escola sabe quem sentou em cada bancada. O computador aparece pelo rótulo escolhido na instalação (ex.: <code>PET-LAB1-PC03</code>), nunca pelo nome do Windows ou do usuário.</div>
       </li>
     </ul>
 <pre is="marp-pre" data-auto-scaling="downscale-only"><code>&lt;div class=&quot;highlight-box&quot; style=&quot;border-left-color: #059669;&quot;&gt;
@@ -1114,7 +1113,7 @@ footer {
 </code></pre>
   </div>
   <div class="img-container">
-    <img src="images/03-encerramento.jpg" alt="Tela de encerramento da turma" />
+    <img src="images/03-encerramento.jpg" alt="Encerramento da turma (imagem da versão anterior)" />
   </div>
 </div>
 </section>

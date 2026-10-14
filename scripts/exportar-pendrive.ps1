@@ -63,10 +63,18 @@ if (Test-Path -LiteralPath $eventsFile) {
     $totalEvents = (Get-Content -LiteralPath $eventsFile -ErrorAction SilentlyContinue | Measure-Object).Count
 }
 
+# Tombstones de retirada: o importador descarta eventos e snapshots dessas sessoes.
+$withdrawnFile = Join-Path $dataDir "sessions_withdrawn.txt"
+$totalWithdrawn = 0
+if (Test-Path -LiteralPath $withdrawnFile) {
+    $totalWithdrawn = @(Get-Content -LiteralPath $withdrawnFile -ErrorAction SilentlyContinue | Where-Object { $_.Trim() }).Count
+}
+
 Write-Host "      - Sessoes completas: $($sessaoFiles.Count)" -ForegroundColor White
 Write-Host "      - Eventos de processo: $totalEvents" -ForegroundColor White
+Write-Host "      - Sessoes retiradas: $totalWithdrawn" -ForegroundColor White
 
-if ($sessaoFiles.Count -eq 0 -and $totalEvents -eq 0) {
+if ($sessaoFiles.Count -eq 0 -and $totalEvents -eq 0 -and $totalWithdrawn -eq 0) {
     Write-Host ""
     Write-Host "[AVISO] Nao ha dados de oficina gravados nesta maquina ainda." -ForegroundColor Yellow
     if (-not $SaveToDesktop) {
@@ -191,6 +199,14 @@ if (Test-Path -LiteralPath $archiveFile) {
     Write-Host "      [OK] events_archive.jsonl" -ForegroundColor Green
 }
 
+# Sessoes retiradas (somente session_id)
+if (Test-Path -LiteralPath $withdrawnFile) {
+    $withdrawnDest = Join-Path $targetExportDir "sessions_withdrawn.txt"
+    Copy-Item -LiteralPath $withdrawnFile -Destination $withdrawnDest -Force
+    $copiedFiles.Add($withdrawnDest)
+    Write-Host "      [OK] sessions_withdrawn.txt ($totalWithdrawn sessoes retiradas)" -ForegroundColor Green
+}
+
 # Sessoes individuais
 $sessCount = 0
 foreach ($sFile in $sessaoFiles) {
@@ -212,6 +228,7 @@ $manifestContent = [System.Text.StringBuilder]::new()
 [void]$manifestContent.AppendLine("Instalacao            : $installationId")
 [void]$manifestContent.AppendLine("Total de Sessoes      : $sessCount")
 [void]$manifestContent.AppendLine("Total de Eventos      : $totalEvents")
+[void]$manifestContent.AppendLine("Sessoes Retiradas     : $totalWithdrawn")
 [void]$manifestContent.AppendLine("====================================================================")
 [void]$manifestContent.AppendLine("INTEGRIDADE DOS ARQUIVOS (SHA-256):")
 [void]$manifestContent.AppendLine("")

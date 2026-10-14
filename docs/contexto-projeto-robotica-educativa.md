@@ -72,8 +72,10 @@ qualidade.
 ## Relação com o PulseLab
 
 O projeto Robótica Educativa oferece o contexto pedagógico e territorial. O
-PulseLab acrescenta uma camada de observação e pesquisa: assentimento,
-autorrelatos pseudonimizados, checkpoints, rubrica do instrutor, controle de
-qualidade e linha do tempo auditável. A comunicação do aplicativo deve manter
+PulseLab acrescenta uma camada de observação e pesquisa por bancada:
+assentimento verbal lido pelo instrutor, estrutura dos programas salvos no LEGO
+SPIKE, uma pergunta coletiva e dois itens do instrutor no encerramento,
+controle de qualidade da coleta e linha do tempo auditável (ver
+[protocolo v2](protocolo-pesquisa-v2-teste.md)). A comunicação do aplicativo deve manter
 essa separação clara para que identidade institucional, atividade pedagógica e
 resultado de pesquisa não sejam confundidos.

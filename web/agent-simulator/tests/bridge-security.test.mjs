@@ -47,73 +47,42 @@ test("Bridge Security: guards de Content-Length e leitura limitada de corpo a 5M
   );
 });
 
-test("Bridge Security: validação de JSON e esquema mínimo em /v1/events sem tocar disco em falha", () => {
+test("Bridge Security: /v1/session/close valida JSON, turma e escala antes de gravar qualquer coisa", () => {
   const code = fs.readFileSync(bridgePath, "utf-8");
-
-  // Localiza o bloco da rota /v1/events
-  const eventsRouteIdx = code.indexOf('$path -eq "/v1/events"');
-  assert.ok(eventsRouteIdx !== -1, "Rota /v1/events deve existir");
-  const eventsBlock = code.slice(eventsRouteIdx, eventsRouteIdx + 3000);
-
-  // Validação de JSON e campos mínimos
-  assert.match(eventsBlock, /ConvertFrom-Json/, "Deve validar JSON via ConvertFrom-Json antes de persistir");
-  assert.match(eventsBlock, /event_id/, "Deve exigir campo event_id");
-  assert.match(eventsBlock, /session_id/, "Deve exigir campo session_id");
-  assert.match(eventsBlock, /-StatusCode\s+400|StatusCode\s*=\s*400/, "Deve retornar 400 Bad Request em JSON inválido ou campos ausentes");
-
-  // Ausência de gravação antes da validação
-  const appendCallIdx = eventsBlock.indexOf("AppendAllText");
-  const validationIdx = eventsBlock.indexOf("-StatusCode 400");
-  assert.ok(validationIdx !== -1, "Deve conter -StatusCode 400 na validação");
-  assert.ok(appendCallIdx !== -1, "Deve conter AppendAllText");
-  assert.ok(validationIdx < appendCallIdx, "Guarda 400 deve ocorrer ANTES de qualquer AppendAllText em disco");
+  const start = code.indexOf('$path -eq "/v1/session/close"');
+  assert.ok(start !== -1, "Rota /v1/session/close deve existir");
+  const block = code.slice(start, code.indexOf('$path -eq "/v1/session/pause"', start));
+  assert.match(block, /Read-BoundedRequestBody -Request \$request -MaxBytes 65536/);
+  assert.match(block, /ConvertFrom-Json/);
+  const closeIdx = block.indexOf("Close-BridgeSession");
+  for (const guard of ["-StatusCode 400", "-StatusCode 409"]) {
+    const idx = block.indexOf(guard);
+    assert.ok(idx !== -1 && idx < closeIdx, `${guard} deve vir antes de gravar`);
+  }
 });
 
-test("Bridge Security: validação de JSON e esquema em /v1/sessions/save sem tocar disco em falha", () => {
+test("Bridge Security: Não registrar esta turma apaga com tombstone antes de qualquer arquivo", () => {
   const code = fs.readFileSync(bridgePath, "utf-8");
-
-  const saveRouteIdx = code.indexOf('$path -eq "/v1/sessions/save"');
-  assert.ok(saveRouteIdx !== -1, "Rota /v1/sessions/save deve existir");
-  const saveBlock = code.slice(saveRouteIdx, saveRouteIdx + 3000);
-
-  assert.match(saveBlock, /ConvertFrom-Json/, "Deve validar JSON em /v1/sessions/save");
-  assert.match(saveBlock, /session_id/, "Deve exigir session_id");
-  assert.match(saveBlock, /-StatusCode\s+400|StatusCode\s*=\s*400/, "Deve retornar 400 Bad Request se session_id estiver ausente ou JSON inválido");
-
-  const writeCallIdx = saveBlock.indexOf("WriteAllText");
-  const validationIdx = saveBlock.indexOf("-StatusCode 400");
-  assert.ok(validationIdx !== -1, "Deve conter -StatusCode 400 na validação de save");
-  assert.ok(writeCallIdx !== -1, "Deve conter WriteAllText");
-  assert.ok(validationIdx < writeCallIdx, "Guarda 400 deve ocorrer ANTES de qualquer WriteAllText em disco");
+  const idx = code.indexOf("function Remove-BridgeSessionData");
+  assert.ok(idx !== -1, "Remove-BridgeSessionData deve existir");
+  const block = code.slice(idx, code.indexOf("\nfunction ", idx + 10));
+  const tombstone = block.indexOf("Register-SessionWithdrawal");
+  assert.ok(tombstone !== -1 && tombstone < block.indexOf("Remove-Item"), "Tombstone durável antes do expurgo");
+  assert.match(block, /events\.tmp\./, "Reescreve events.jsonl com arquivo temporário");
+  assert.match(block, /catalogo_sessoes\.tmp\./, "Atualiza catálogo com arquivo temporário");
+  assert.match(block, /\$script:SyncedEventIds\.Remove/);
+  assert.match(block, /\$script:QuarantinedEventIds\.Remove/);
+  assert.match(block, /expurgada localmente/);
+  const pause = code.slice(code.indexOf("function Suspend-BridgeCollection"));
+  assert.match(pause, /Remove-BridgeSessionData -SessionId \$sessionId -Reason "nao_registrar_turma"/);
 });
 
-test("Bridge Security: endpoint /v1/sessions/reset exige session_id e purga atomicamente quando não concluída", () => {
+test("Bridge Security: rotas da página aberta durante a aula não existem mais", () => {
   const code = fs.readFileSync(bridgePath, "utf-8");
-
-  const resetRouteIdx = code.indexOf('$path -eq "/v1/sessions/reset"');
-  assert.ok(resetRouteIdx !== -1, "Rota /v1/sessions/reset deve existir");
-  const nextRouteIdx = code.indexOf('$path -eq "/v1/spike/metrics"', resetRouteIdx);
-  const resetBlock = code.slice(resetRouteIdx, nextRouteIdx !== -1 ? nextRouteIdx : resetRouteIdx + 12000);
-
-  // Exigência explícita de session_id
-  assert.match(resetBlock, /session_id\s*e\s*obrigatorio|session_id is required/, "Deve exigir session_id explicitamente");
-  assert.match(resetBlock, /-StatusCode\s+400|StatusCode\s*=\s*400/, "Deve retornar 400 se session_id não for informado");
-
-  // Preservação de sessão concluída
-  assert.match(resetBlock, /status\s*=\s*"preserved"/, "Deve preservar sessão concluída quando acionado para próxima oficina");
-
-  // Remoção atômica em caso de purga/recusa
-  assert.match(resetBlock, /sessao_\$safeSessId\.json[\s\S]*Remove-Item.*\$sessFile/, "Deve remover arquivo snapshot da sessão");
-  assert.match(resetBlock, /events\.tmp\./, "Deve reescrever events.jsonl atomicamente com arquivo temporário");
-  assert.match(resetBlock, /catalogo_sessoes\.tmp\./, "Deve atualizar catálogo atomicamente com arquivo temporário");
-
-  // Limpeza de trackers
-  assert.match(resetBlock, /\$script:SyncedEventIds\.Remove/, "Deve remover IDs expurgados do tracker de sincronizados");
-  assert.match(resetBlock, /\$script:QuarantinedEventIds\.Remove/, "Deve remover IDs expurgados do tracker de quarentena");
-
-  // Não vazar payload da criança recusante e registrar retirada antes da limpeza.
-  assert.match(resetBlock, /Register-SessionWithdrawal/, "Deve registrar tombstone durável antes do expurgo");
-  assert.match(resetBlock, /expurgada localmente/, "Deve registrar expurgo sem registrar payload do estudante recusante");
+  for (const route of ["/v1/events", "/v1/sessions/save", "/v1/sessions/reset", "/v1/alert", "/v1/spike/metrics", "checkpoints"]) {
+    assert.ok(!code.includes(`"${route}`) && !code.includes(`/${route}/`), `Rota antiga ${route} deve ter sido removida`);
+  }
+  assert.doesNotMatch(code, /pulselab-toast|Show-NativeCheckpointAlert/, "Sem alertas na tela durante a aula");
 });
 
 test("Bridge Security: rota /v1/config expõe explicitamente campos de autorização fail-closed", () => {

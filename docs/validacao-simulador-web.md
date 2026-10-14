@@ -1,5 +1,10 @@
 # PulseLab — Protocolo de validação do simulador web
 
+> **Documento histórico.** Protocolo de validação do simulador do agente 1.5.0. Não descreve a versão atual: não há mais
+> caixas de assentimento, checkpoints, itens individuais nem botão de retirada na
+> tela. Ver [protocolo v2](protocolo-pesquisa-v2-teste.md) e
+> [assentimento verbal](assentimento-verbal.md).
+
 ## 1. Finalidade
 
 O simulador web permite que coordenação, instrutores e participantes percorram

@@ -22,7 +22,7 @@ if (-not (Test-Path -LiteralPath $bridge) -or -not (Test-Path -LiteralPath (Join
 }
 
 # --- VERIFICA VERSAO LOCAL ---
-$localVersion = "2.3.3"
+$localVersion = "3.0.0"
 $verFile = Join-Path $scriptRoot "VERSION"
 if (Test-Path -LiteralPath $verFile) {
     try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}
@@ -235,19 +235,11 @@ if ($updateLoaded) {
     try { [void](Complete-PulseLabUpdate -InstallRoot $scriptRoot) } catch {}
 }
 
-Write-Host "[OK] Servidor ativo em http://127.0.0.1:$port/alunos/"
+Write-Host "[OK] Servidor ativo em http://127.0.0.1:$port"
 
-# Disparo preferencial do Microsoft Edge em Modo Aplicativo Dedicado (--app)
-# Evita abas, barra de enderecos e distracoes na bancada, operando com consumo ultraleve (~90MB).
-$edgeCandidates = @(
-    (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"),
-    (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
-    (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe")
-)
-$edgePath = $edgeCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
-
-if ($edgePath) {
-    Start-Process -FilePath $edgePath -ArgumentList "--app=`"http://127.0.0.1:$port/alunos/`" --disable-features=Translate,InterestFeedContentSuggestions"
-} else {
-    Start-Process "http://127.0.0.1:$port/alunos/"
+# Durante a aula nenhuma pagina fica aberta: o icone na bandeja mostra que o PulseLab esta ligado
+# e abre o formulario final em "Encerrar turma...". O icone impede uma segunda instancia sozinho.
+$tray = Join-Path $scriptRoot "bridge\pulselab-tray.ps1"
+if (Test-Path -LiteralPath $tray) {
+    Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-STA -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$tray`" -Port $port -InstallRoot `"$scriptRoot`""
 }

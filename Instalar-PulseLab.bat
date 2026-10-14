@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab - Instalador Local (v2.3.3)
+title PulseLab - Instalador Local (v3.0.0)
 echo ====================================================================
-echo                   PULSELAB - INSTALADOR OFFLINE (v2.3.3)
+echo                   PULSELAB - INSTALADOR OFFLINE (v3.0.0)
 
 echo ====================================================================
 echo.
@@ -56,7 +56,7 @@ if exist "%SRC_DIR%Exportar-Dados-Pendrive.bat" copy "%SRC_DIR%Exportar-Dados-Pe
 if exist "%SRC_DIR%scripts\exportar-pendrive.ps1" copy "%SRC_DIR%scripts\exportar-pendrive.ps1" "%INSTALL_DIR%\scripts\" /Y >nul 2>&1
 if exist "%SRC_DIR%Install-PulseLab.ps1" copy "%SRC_DIR%Install-PulseLab.ps1" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%VERSION" copy "%SRC_DIR%VERSION" "%INSTALL_DIR%\" /Y >nul 2>&1
-if exist "%SRC_DIR%pulselab.ico" copy "%SRC_DIR%pulselab.ico" "%INSTALL_DIR%\" /Y >nul 2>&1
+if exist "%SRC_DIR%pulselab.ico" copy "%SRC_DIR%pulselab*.ico" "%INSTALL_DIR%\" /Y >nul 2>&1
 
 echo.
 echo Identificacao desta maquina (opcional): use o mesmo nome da etiqueta no gabinete.
@@ -66,24 +66,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . (Join-Path $env:LO
 echo.
 
 echo [3/3] Criando atalho silencioso na Area de Trabalho com icone oficial...
-:: Limpar atalhos ou pastas de versoes legadas (v2.3.3)
+:: Limpar atalhos ou pastas de versoes legadas (v3.0.0)
 if exist "%INSTALL_DIR%\app\agent" rd /s /q "%INSTALL_DIR%\app\agent" >nul 2>&1
 if exist "%INSTALL_DIR%\app\pulselab-agent.ps1" del /f /q "%INSTALL_DIR%\app\pulselab-agent.ps1" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$desktop = [Environment]::GetFolderPath('Desktop'); $startup = [Environment]::GetFolderPath('Startup'); Remove-Item -LiteralPath (Join-Path $desktop 'Iniciar Pulselab - Oficina de Robotica.lnk') -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $startup 'PulseLab.lnk') -Force -ErrorAction SilentlyContinue" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'PulseLab - Iniciar Oficina.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:SystemRoot, 'System32\wscript.exe'); $s.Arguments = '\"' + [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\iniciar-silencioso.vbs') + '\"'; $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'Iniciar oficina de robotica do PulseLab'; $s.Save()" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'PulseLab - Exportar Dados.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\Exportar-Dados-Pendrive.bat'); $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'Copiar os registros da oficina para o pendrive'; $s.Save()" >nul 2>&1
 
-:: Suporte a provisionamento centralizado para notebooks dedicados (--startup)
-if /i "%1"=="--startup" (
+:: Inicia com o Windows: a sessao da turma abre quando o computador liga e o icone fica na bandeja.
+:: Os computadores sao dedicados as oficinas; use --sem-inicializacao para nao criar o atalho.
+if /i not "%1"=="--sem-inicializacao" (
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Startup'), 'PulseLab.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:SystemRoot, 'System32\wscript.exe'); $s.Arguments = '\"' + [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\iniciar-silencioso.vbs') + '\"'; $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'PulseLab - Inicializacao Automatica'; $s.Save()" >nul 2>&1
-    echo [OK] Configurado para iniciar automaticamente no logon do Windows.
+    echo [OK] O PulseLab vai iniciar sozinho com o Windows ^(icone na bandeja^).
 )
 
 echo.
 echo ====================================================================
 echo [OK] Instalacao concluida com sucesso!
-echo      Voce pode iniciar a oficina pelo atalho criado na Area de Trabalho
-echo      ('PulseLab - Iniciar Oficina') ou executando Iniciar-PulseLab.bat.
+echo      O PulseLab inicia com o Windows e fica como icone na bandeja.
+echo      Para iniciar agora, use o atalho 'PulseLab - Iniciar Oficina'.
+echo      Ao fim da aula: clique direito no icone ^> Encerrar turma.
 echo ====================================================================
 echo.
 pause

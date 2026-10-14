@@ -249,9 +249,12 @@ def validate_manifest(
         if checked_files == 0:
             return False, f"Manifesto vazio ou inválido: nenhum arquivo verificado em {manifest_file.name}."
 
-        # Verificação de arquivos extras (.json ou .jsonl) não declarados
+        # Verificação de arquivos extras (.json, .jsonl ou lista de retiradas) não declarados
         for cand_path in target_dir.rglob("*"):
-            if cand_path.is_file() and cand_path.suffix.lower() in (".json", ".jsonl"):
+            if cand_path.is_file() and (
+                cand_path.suffix.lower() in (".json", ".jsonl")
+                or cand_path.name.lower() == WITHDRAWN_SESSIONS_FILE
+            ):
                 if cand_path.name.startswith("relatorio_") or cand_path.name.startswith("rejeicoes_"):
                     continue
                 if cand_path.resolve() not in verified_file_paths:
@@ -297,7 +300,18 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
                 spike_telemetry_json TEXT,
                 events_count INTEGER,
                 source_file TEXT,
-                imported_at TEXT
+                imported_at TEXT,
+                ended_by TEXT,
+                interrupted INTEGER,
+                data_quality_json TEXT
+            )
+        """)
+
+        # Sessões retiradas: só o session_id, para descartar coletas atrasadas em importações futuras.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS withdrawn_sessions (
+                session_id TEXT PRIMARY KEY,
+                recorded_at TEXT
             )
         """)
 
@@ -356,12 +370,14 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
     for tbl, cols in [
         ("events", ["occurred_at", "response_status", "knowledge_answers_json", "prior_robotics", "mission_performance", "primary_issue"]),
         ("session_events", ["occurred_at"]),
+        ("sessions", ["ended_by", "interrupted INTEGER", "data_quality_json"]),
     ]:
         existing = {row[1] for row in cur.execute(f"PRAGMA table_info({tbl})").fetchall()}
-        for col in cols:
+        for col_def in cols:
+            col, _, col_type = col_def.partition(" ")
             if col not in existing:
                 try:
-                    conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} TEXT;")
+                    conn.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} {col_type or 'TEXT'};")
                 except Exception:
                     pass
 
@@ -427,17 +443,7 @@ def send_to_supabase(
         return 0, 0, 0, None
 
     endpoint = f"{supabase_url.rstrip('/')}/rest/v1/{table}?on_conflict={id_col}"
-    is_service_role = False
-    try:
-        parts = supabase_key.split(".")
-        if len(parts) == 3:
-            padding = "=" * ((4 - len(parts[1]) % 4) % 4)
-            payload_bytes = base64.urlsafe_b64decode(parts[1] + padding)
-            payload_data = json.loads(payload_bytes.decode("utf-8"))
-            if payload_data.get("role") == "service_role":
-                is_service_role = True
-    except Exception:
-        pass
+    is_service_role = is_service_role_key(supabase_key)
 
     resolution = "merge-duplicates" if (is_snapshot and is_service_role) else "ignore-duplicates"
     prefer_header = f"resolution={resolution},return=representation" if is_service_role else f"resolution={resolution},return=minimal"
@@ -572,6 +578,257 @@ def ensure_uuid(val: str | None) -> str:
         return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(val)))
 
 
+WITHDRAWN_SESSIONS_FILE = "sessions_withdrawn.txt"
+ALLOWED_ENDED_BY = {"instrutor", "tempo", "sem_encerramento"}
+
+
+def session_key(val) -> str | None:
+    """Forma canônica do session_id (a mesma enviada à nuvem por ensure_uuid)."""
+    if val is None:
+        return None
+    raw = str(val).strip()
+    return ensure_uuid(raw) if raw else None
+
+
+def is_withdrawn(session_id, withdrawn: set[str]) -> bool:
+    key = session_key(session_id)
+    return key is not None and key in withdrawn
+
+
+def read_withdrawn_sessions(target_dir: Path) -> set[str]:
+    """Lê sessions_withdrawn.txt da coleta: um session_id por linha (o bridge grava com BOM)."""
+    path = target_dir / WITHDRAWN_SESSIONS_FILE
+    if not path.is_file():
+        return set()
+    ids: set[str] = set()
+    for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        key = session_key(line)
+        if key:
+            ids.add(key)
+    return ids
+
+
+def load_withdrawn_sqlite(conn: sqlite3.Connection) -> set[str]:
+    return {row[0] for row in conn.execute("SELECT session_id FROM withdrawn_sessions")}
+
+
+def record_withdrawn_sqlite(conn: sqlite3.Connection, withdrawn: set[str], now_iso: str) -> None:
+    with conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO withdrawn_sessions (session_id, recorded_at) VALUES (?, ?)",
+            [(sid, now_iso) for sid in sorted(withdrawn)],
+        )
+
+
+def purge_withdrawn_sqlite(conn: sqlite3.Connection, withdrawn: set[str]) -> int:
+    """Apaga do SQLite consolidado o que já tinha sido importado de sessões retiradas."""
+    if not withdrawn:
+        return 0
+    removed = 0
+    with conn:
+        for tbl in ("sessions", "events", "session_events", "quarantined_events"):
+            stored = [row[0] for row in conn.execute(f"SELECT DISTINCT session_id FROM {tbl}")]
+            for sid in stored:
+                if is_withdrawn(sid, withdrawn):
+                    removed += conn.execute(f"DELETE FROM {tbl} WHERE session_id = ?", (sid,)).rowcount
+    return removed
+
+
+def bancada_phase(data: dict) -> str:
+    """Mesma regra do bridge: phase explícita; senão status; snapshot legado sem ambos conta como encerrado."""
+    if data.get("phase"):
+        return str(data["phase"])
+    status = data.get("status")
+    if status and status != "completed":
+        return "in_progress"
+    return "completed"
+
+
+def bancada_quality_fields(data: dict) -> dict:
+    """Campos de qualidade do snapshot (ended_by, interrupted, data_quality), descartando formatos inválidos."""
+    ended_by = data.get("ended_by")
+    interrupted = data.get("interrupted")
+    data_quality = data.get("data_quality")
+    return {
+        "ended_by": ended_by if ended_by in ALLOWED_ENDED_BY else None,
+        "interrupted": interrupted if isinstance(interrupted, bool) else None,
+        "data_quality": data_quality if isinstance(data_quality, dict) else None,
+    }
+
+
+def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str, now_iso: str) -> str:
+    """
+    Grava o snapshot no SQLite. Retorna 'inserted', 'updated' ou 'kept_completed'
+    (sessão já encerrada nunca é substituída por um snapshot em andamento).
+    """
+    sess_id = data.get("session_id")
+    row = conn.execute("SELECT status FROM sessions WHERE session_id = ?", (sess_id,)).fetchone()
+    phase = bancada_phase(data)
+    if row is not None and row[0] == "completed" and phase != "completed":
+        return "kept_completed"
+
+    quality = bancada_quality_fields(data)
+    interrupted = quality["interrupted"]
+    events_list = data.get("events") or []
+    with conn:
+        conn.execute("""
+            INSERT INTO sessions (
+                session_id, group_id, site_id, regional_hub, school_code,
+                workshop_code, class_code, activity_id, started_at, completed_at,
+                duration_seconds, team_role, status, pre_answers_json,
+                post_answers_json, spike_telemetry_json, events_count,
+                source_file, imported_at, ended_by, interrupted, data_quality_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(session_id) DO UPDATE SET
+                group_id = excluded.group_id,
+                site_id = excluded.site_id,
+                regional_hub = excluded.regional_hub,
+                school_code = excluded.school_code,
+                workshop_code = excluded.workshop_code,
+                class_code = excluded.class_code,
+                activity_id = excluded.activity_id,
+                started_at = excluded.started_at,
+                completed_at = excluded.completed_at,
+                duration_seconds = excluded.duration_seconds,
+                team_role = excluded.team_role,
+                status = excluded.status,
+                pre_answers_json = excluded.pre_answers_json,
+                post_answers_json = excluded.post_answers_json,
+                spike_telemetry_json = excluded.spike_telemetry_json,
+                events_count = excluded.events_count,
+                source_file = excluded.source_file,
+                imported_at = excluded.imported_at,
+                ended_by = excluded.ended_by,
+                interrupted = excluded.interrupted,
+                data_quality_json = excluded.data_quality_json
+        """, (
+            sess_id,
+            data.get("group_id", ""),
+            data.get("site_id", ""),
+            data.get("regional_hub", ""),
+            data.get("school_code", ""),
+            data.get("workshop_code", ""),
+            data.get("class_code", ""),
+            data.get("activity_id", ""),
+            data.get("started_at", ""),
+            data.get("completed_at", ""),
+            data.get("duration_seconds", 0),
+            data.get("team_role", ""),
+            data.get("status") or phase,
+            json.dumps(data.get("pre_answers") or {}),
+            json.dumps(data.get("post_answers") or {}),
+            json.dumps(data.get("spike_telemetry") or {}),
+            len(events_list) if isinstance(events_list, list) else 0,
+            source_name,
+            now_iso,
+            quality["ended_by"],
+            None if interrupted is None else int(interrupted),
+            json.dumps(quality["data_quality"]) if quality["data_quality"] is not None else None,
+        ))
+    return "updated" if row is not None else "inserted"
+
+
+def build_bancada_record(sdata: dict, now_iso: str) -> dict:
+    record = {
+        "session_id": ensure_uuid(sdata.get("session_id")),
+        "group_id": ensure_uuid(sdata.get("group_id")),
+        "installation_id": ensure_uuid(sdata.get("installation_id") or sdata.get("computer_id") or "10000000-0000-4000-8000-000000000001"),
+        "site_id": sdata.get("site_id") or "Polo-Nordeste",
+        "school_code": sdata.get("school_code") or "geral",
+        "workshop_code": sdata.get("workshop_code") or "oficina-spike",
+        "class_code": sdata.get("class_code") or "turma-geral",
+        "environment": "test" if sdata.get("is_synthetic") else "production",
+        "protocol_version": sdata.get("protocol_version") or "v2.2",
+        "instrument_version": sdata.get("instrument_version") or "bancada-2.0.0",
+        "group_size": sdata.get("group_size") or 2,
+        "phase": bancada_phase(sdata),
+        "session_payload": sdata,
+        "created_at": sdata.get("started_at") or now_iso,
+        "updated_at": sdata.get("completed_at") or now_iso,
+    }
+    # Chaves sempre presentes: o PostgREST exige o mesmo conjunto de colunas no lote.
+    record.update(bancada_quality_fields(sdata))
+    return record
+
+
+def dedup_bancada_records(records: list[dict]) -> list[dict]:
+    """Um snapshot por sessão; o encerrado prevalece sobre um em andamento da mesma coleta."""
+    out: dict[str, dict] = {}
+    for rec in records:
+        prev = out.get(rec["session_id"])
+        if prev is not None and prev["phase"] == "completed" and rec["phase"] != "completed":
+            continue
+        out[rec["session_id"]] = rec
+    return list(out.values())
+
+
+def is_service_role_key(key: str) -> bool:
+    try:
+        parts = key.split(".")
+        if len(parts) == 3:
+            padding = "=" * ((4 - len(parts[1]) % 4) % 4)
+            payload = json.loads(base64.urlsafe_b64decode(parts[1] + padding).decode("utf-8"))
+            return payload.get("role") == "service_role"
+    except Exception:
+        pass
+    return False
+
+
+def withdraw_sessions_remote(
+    session_ids: set[str], supabase_url: str, supabase_key: str, chunk_size: int = 50
+) -> tuple[int, str | None]:
+    """
+    Grava tombstones em research_withdrawals e apaga da nuvem o que já tinha chegado
+    dessas sessões (ex.: pendrive importado antes da retirada). Exige service_role.
+    Retorna (tombstones enviados, erro).
+    """
+    if not session_ids or not supabase_url or not supabase_key:
+        return 0, None
+    if not is_service_role_key(supabase_key):
+        return 0, "tombstones de retirada exigem credencial service_role"
+
+    base = supabase_url.rstrip("/") + "/rest/v1"
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+    }
+    ids = sorted(session_ids)
+    sent = 0
+    try:
+        for i in range(0, len(ids), chunk_size):
+            chunk = ids[i : i + chunk_size]
+            body = json.dumps([{"session_id": sid, "source": "importer"} for sid in chunk]).encode("utf-8")
+            req = urllib.request.Request(
+                f"{base}/research_withdrawals?on_conflict=session_id",
+                data=body,
+                headers={**headers, "Prefer": "resolution=ignore-duplicates,return=minimal"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp.read()
+            sent += len(chunk)
+            id_list = ",".join(chunk)
+            for table in ("instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions"):
+                req = urllib.request.Request(
+                    f"{base}/{table}?session_id=in.({id_list})",
+                    headers={**headers, "Prefer": "return=minimal"},
+                    method="DELETE",
+                )
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    resp.read()
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            pass
+        return sent, f"HTTP {exc.code}: {detail or exc.reason}"
+    except Exception as exc:
+        return sent, str(exc)
+    return sent, None
+
+
 def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
     valid_cols = RESEARCH_EVENT_COLUMNS if target_table == "research_events" else SESSION_EVENT_COLUMNS
     payload = {}
@@ -622,9 +879,9 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "computer_id" not in payload:
             payload["computer_id"] = event.get("computer_id") or "pc-offline"
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.3.2"
+            payload["config_version"] = event.get("config_version") or "2.4.0"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.3.2"
+            payload["client_version"] = event.get("client_version") or "2.4.0"
         if "response_status" not in payload:
             payload["response_status"] = event.get("response_status") or "completed"
 
@@ -654,13 +911,13 @@ def sanitize_event_for_supabase(event: dict, target_table: str) -> dict:
         if "protocol_version" not in payload:
             payload["protocol_version"] = event.get("protocol_version")
         if "config_version" not in payload:
-            payload["config_version"] = event.get("config_version") or "2.3.2"
+            payload["config_version"] = event.get("config_version") or "2.4.0"
         if "config_hash" not in payload or not payload["config_hash"]:
             # Proveniência não é imputada: sem o hash do instrumento aplicado, o evento vai para quarentena.
             payload["_is_quarantine"] = True
             payload["_quarantine_reason"] = "config_hash ausente: instrumento aplicado não identificado"
         if "client_version" not in payload:
-            payload["client_version"] = event.get("client_version") or "2.3.2"
+            payload["client_version"] = event.get("client_version") or "2.4.0"
 
 
         # Invariante metodológica: NUNCA converter silenciosamente tipo desconhecido em phase_completed
@@ -809,6 +1066,7 @@ def main() -> int:
     session_files: list[Path] = []
     events_files: list[Path] = []
     raw_sessions_data: list[dict] = []
+    withdrawn_from_exports: set[str] = set()
 
     hmac_key = (
         args.manifest_hmac_key
@@ -837,6 +1095,8 @@ def main() -> int:
             elif manifest_msg != "no_manifest":
                 print(f"[!] Integridade verificada, origem não autenticada em: {tdir.name} ({manifest_msg})")
 
+            withdrawn_from_exports |= read_withdrawn_sessions(tdir)
+
             s_dir = tdir / "sessoes"
             if s_dir.is_dir():
                 session_files.extend(s_dir.glob("*.json"))
@@ -853,7 +1113,7 @@ def main() -> int:
     session_files = list({p.resolve(): p for p in session_files}.values())
     events_files = list({p.resolve(): p for p in events_files}.values())
 
-    if not args.no_cloud and not session_files and not events_files:
+    if not args.no_cloud and not session_files and not events_files and not withdrawn_from_exports:
         print("[ERRO] Nenhuma pasta de coleta atendeu aos requisitos de integridade e autenticidade institucional para envio à nuvem.")
         return 1
 
@@ -863,9 +1123,17 @@ def main() -> int:
 
     now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
 
+    # 0. Retiradas: lista das coletas + as já registradas em importações anteriores
+    withdrawn = withdrawn_from_exports | load_withdrawn_sqlite(conn)
+    record_withdrawn_sqlite(conn, withdrawn_from_exports, now_iso)
+    withdrawn_purged_sqlite = purge_withdrawn_sqlite(conn, withdrawn)
+    withdrawn_snapshots_skipped = 0
+    withdrawn_events_skipped = 0
+
     # 1. Processar Sessões (Falha 9: atualização completa coerente sem registro híbrido)
     sessions_inserted = 0
     sessions_updated = 0
+    sessions_kept_completed = 0
     all_events_from_sessions: list[dict] = []
 
     for sf in session_files:
@@ -875,74 +1143,28 @@ def main() -> int:
             sess_id = data.get("session_id")
             if not sess_id:
                 continue
+            if is_withdrawn(sess_id, withdrawn):
+                withdrawn_snapshots_skipped += 1
+                continue
 
             raw_sessions_data.append(data)
             events_list = data.get("events") or []
             if isinstance(events_list, list):
                 all_events_from_sessions.extend(events_list)
 
-            cur = conn.cursor()
-            cur.execute("SELECT session_id FROM sessions WHERE session_id = ?", (sess_id,))
-            exists = cur.fetchone() is not None
-
-            with conn:
-                conn.execute("""
-                    INSERT INTO sessions (
-                        session_id, group_id, site_id, regional_hub, school_code,
-                        workshop_code, class_code, activity_id, started_at, completed_at,
-                        duration_seconds, team_role, status, pre_answers_json,
-                        post_answers_json, spike_telemetry_json, events_count,
-                        source_file, imported_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT(session_id) DO UPDATE SET
-                        group_id = excluded.group_id,
-                        site_id = excluded.site_id,
-                        regional_hub = excluded.regional_hub,
-                        school_code = excluded.school_code,
-                        workshop_code = excluded.workshop_code,
-                        class_code = excluded.class_code,
-                        activity_id = excluded.activity_id,
-                        started_at = excluded.started_at,
-                        completed_at = excluded.completed_at,
-                        duration_seconds = excluded.duration_seconds,
-                        team_role = excluded.team_role,
-                        status = excluded.status,
-                        pre_answers_json = excluded.pre_answers_json,
-                        post_answers_json = excluded.post_answers_json,
-                        spike_telemetry_json = excluded.spike_telemetry_json,
-                        events_count = excluded.events_count,
-                        source_file = excluded.source_file,
-                        imported_at = excluded.imported_at
-                """, (
-                    sess_id,
-                    data.get("group_id", ""),
-                    data.get("site_id", ""),
-                    data.get("regional_hub", ""),
-                    data.get("school_code", ""),
-                    data.get("workshop_code", ""),
-                    data.get("class_code", ""),
-                    data.get("activity_id", ""),
-                    data.get("started_at", ""),
-                    data.get("completed_at", ""),
-                    data.get("duration_seconds", 0),
-                    data.get("team_role", ""),
-                    data.get("status", "completed"),
-                    json.dumps(data.get("pre_answers") or {}),
-                    json.dumps(data.get("post_answers") or {}),
-                    json.dumps(data.get("spike_telemetry") or {}),
-                    len(events_list),
-                    str(sf.name),
-                    now_iso,
-                ))
-
-            if exists:
+            outcome = upsert_session_sqlite(conn, data, str(sf.name), now_iso)
+            if outcome == "inserted":
+                sessions_inserted += 1
+            elif outcome == "updated":
                 sessions_updated += 1
             else:
-                sessions_inserted += 1
+                sessions_kept_completed += 1
         except Exception as exc:
             print(f"[!] Erro ao processar sessão {sf.name}: {exc}")
 
     print(f"[✓] Sessões SQLite: {sessions_inserted} inseridas, {sessions_updated} atualizadas.")
+    if sessions_kept_completed:
+        print(f"[✓] Sessões já encerradas mantidas (snapshot em andamento ignorado): {sessions_kept_completed}.")
 
     # 2. Processar Eventos (Falha 9: contabilizar JSON inválido, evento sem event_id e erros de sanitização)
     events_to_upload_research: list[dict] = []
@@ -985,6 +1207,10 @@ def main() -> int:
                 """, (rej_id, "", "corrupt_json", None, rej_reason, raw_line, src_name, now_iso))
                 with rejections_file.open("a", encoding="utf-8") as rf:
                     rf.write(json.dumps({"rejection_id": rej_id, "reason": rej_reason, "source": src_name, "raw": raw_line}) + "\n")
+                continue
+
+            if isinstance(ev, dict) and is_withdrawn(ev.get("session_id"), withdrawn):
+                withdrawn_events_skipped += 1
                 continue
 
             event_id = ev.get("event_id")
@@ -1074,6 +1300,11 @@ def main() -> int:
                 """, (event_id, session_id, event_type, occurred_at, f"Tipo desconhecido preservado: {event_type}", raw_line, src_name, now_iso))
 
     print(f"[✓] Eventos SQLite: {events_inserted_sqlite} novos inseridos, {events_duplicate_sqlite} duplicados ignorados.")
+    if withdrawn:
+        print(
+            f"[✓] Sessões retiradas: {len(withdrawn)} na lista; descartados {withdrawn_snapshots_skipped} snapshots "
+            f"e {withdrawn_events_skipped} eventos; {withdrawn_purged_sqlite} registros antigos apagados do SQLite."
+        )
     if events_rejected_sqlite > 0:
         print(f"[!] Rejeições SQLite: {events_rejected_sqlite} linhas com JSON inválido ou sem event_id preservadas em quarantined_events.")
     if quarantined_events:
@@ -1095,6 +1326,14 @@ def main() -> int:
         print("\n[!] Supabase URL/Key operacional não configurada. Envio remoto ignorado.")
     else:
         print(f"\nSincronizando com o Supabase ({sb_url})...")
+
+        # 3.0 Retiradas primeiro: tombstone na nuvem e exclusão do que já tinha chegado.
+        # Só as listas desta execução, que passaram pela assinatura exigida no envio à nuvem.
+        if withdrawn_from_exports:
+            sent_tombstones, withdraw_err = withdraw_sessions_remote(withdrawn_from_exports, sb_url, sb_key)
+            print(f"  - Sessões retiradas: {sent_tombstones}/{len(withdrawn_from_exports)} tombstones gravados na nuvem")
+            if withdraw_err:
+                print(f"    [!] Retirada remota pendente: {withdraw_err}")
 
         # 3.1 research_events
         res_dict = {e["event_id"]: e for e in events_to_upload_research}
@@ -1120,31 +1359,10 @@ def main() -> int:
 
         # 3.3 research_bancada_sessions (Snapshots consolidados com merge-duplicates)
         if raw_sessions_data:
-            bancada_sessions_records = []
-            for sdata in raw_sessions_data:
-                sid = sdata.get("session_id")
-                if not sid:
-                    continue
-                bancada_sessions_records.append({
-                    "session_id": ensure_uuid(sid),
-                    "group_id": ensure_uuid(sdata.get("group_id")),
-                    "installation_id": ensure_uuid(sdata.get("installation_id") or sdata.get("computer_id") or "10000000-0000-4000-8000-000000000001"),
-                    "site_id": sdata.get("site_id") or "Polo-Nordeste",
-                    "school_code": sdata.get("school_code") or "geral",
-                    "workshop_code": sdata.get("workshop_code") or "oficina-spike",
-                    "class_code": sdata.get("class_code") or "turma-geral",
-                    "environment": "test" if sdata.get("is_synthetic") else "production",
-                    "protocol_version": sdata.get("protocol_version") or "v2.2",
-
-                    "instrument_version": sdata.get("instrument_version") or "bancada-2.0.0",
-                    "group_size": sdata.get("group_size") or 2,
-                    "phase": sdata.get("phase") or "completed",
-                    "session_payload": sdata,
-                    "created_at": sdata.get("started_at") or now_iso,
-                    "updated_at": sdata.get("completed_at") or now_iso,
-                })
-            sess_dedup = {r["session_id"]: r for r in bancada_sessions_records}
-            sess_list = list(sess_dedup.values())
+            bancada_sessions_records = [
+                build_bancada_record(sdata, now_iso) for sdata in raw_sessions_data if sdata.get("session_id")
+            ]
+            sess_list = dedup_bancada_records(bancada_sessions_records)
             print(f"  - Tabela 'research_bancada_sessions': {len(sess_list)} snapshots consolidados a sincronizar")
             ins_bs, dup_bs, rej_bs, last_err3 = send_to_supabase(
                 "research_bancada_sessions", sess_list, sb_url, sb_key, id_col="session_id", is_snapshot=True, rejected_sink=remote_rejections
@@ -1212,6 +1430,7 @@ Data/Hora da Execução : {now_iso}
 Base SQLite Local     : {sqlite_file}
 Sessões Inseridas     : {sessions_inserted}
 Sessões Atualizadas   : {sessions_updated}
+Sessões Retiradas     : {len(withdrawn)} (snapshots descartados: {withdrawn_snapshots_skipped}, eventos descartados: {withdrawn_events_skipped}, apagados do SQLite: {withdrawn_purged_sqlite})
 Eventos Inseridos     : {events_inserted_sqlite}
 Eventos Duplicados    : {events_duplicate_sqlite}
 Eventos Rejeitados    : {events_rejected_sqlite}

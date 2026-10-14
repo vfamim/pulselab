@@ -119,49 +119,25 @@ test("Configuração fail-closed: autorização válida com group_size 2..8 auto
 // 2. ROTA NORMAL SILENCIOSA: ZERO COMPONENTES INFANTIS
 // ==============================================================================
 
-test("Rota silenciosa de alunos: zero componentes infantis, formulários ou perguntas", () => {
+test("Página do PWA: só o formulário final, sem telas individuais nem questionários durante a aula", () => {
   assert.ok(fs.existsSync(studentPagePath), "student-page.jsx deve existir");
   const code = fs.readFileSync(studentPagePath, "utf-8");
-
-  // Não deve conter componentes de telas ou questionários direcionados a crianças
-  assert.doesNotMatch(code, /function PreScreen/, "student-page.jsx não deve conter PreScreen");
-  assert.doesNotMatch(code, /function PostScreen/, "student-page.jsx não deve conter PostScreen");
-  assert.doesNotMatch(code, /function ActivityScreen/, "student-page.jsx não deve conter ActivityScreen");
-  assert.doesNotMatch(code, /function ScaleQuestion/, "student-page.jsx não deve conter ScaleQuestion");
-  assert.doesNotMatch(code, /function RubricQuestion/, "student-page.jsx não deve conter RubricQuestion");
-  assert.doesNotMatch(code, /<form\b/, "student-page.jsx não deve conter formulários");
-
-  // Rota normal de alunos renderiza apenas o fallback não interativo
-  assert.match(
-    code,
-    /Oficina de robótica em andamento\. Use o aplicativo LEGO SPIKE\./,
-    "Deve conter a mensagem não interativa de fallback para os alunos"
-  );
-  assert.match(
-    code,
-    /if \(!labMode\)[\s\S]*?student-app--silent[\s\S]*?Oficina de robótica em andamento/,
-    "Rota normal de alunos deve retornar exclusivamente a tela silenciosa"
-  );
+  for (const screen of ["PreScreen", "PostScreen", "ActivityScreen", "ScaleQuestion", "RubricQuestion"]) {
+    assert.doesNotMatch(code, new RegExp(`function ${screen}`), `student-page.jsx não deve conter ${screen}`);
+  }
+  assert.doesNotMatch(code, /<form\b/, "Sem formulários HTML (botões de escolha apenas)");
+  assert.doesNotMatch(code, /checkpoint/i, "Sem checkpoints");
+  assert.doesNotMatch(code, /setInterval/, "Sem contador ou consulta periódica na tela");
+  for (const field of ["memberAssents", "memberExperiences", "member_index", "isAllAssented"]) {
+    assert.doesNotMatch(code, new RegExp(`\\b${field}\\b`), `Não deve conter ${field}`);
+  }
 });
 
-// ==============================================================================
-// 3. MODELO COLETIVO DE BANCADA: ZERO CAMPOS INDIVIDUAIS
-// ==============================================================================
-
-test("Modelo coletivo de bancada: zero campos individuais e ausência de memberAssents/memberExperiences", () => {
-  const code = fs.readFileSync(studentPagePath, "utf-8");
-
-  // Zero campos individuais no fluxo ou payload
-  assert.doesNotMatch(code, /\bmemberAssents\b/, "Não deve conter memberAssents");
-  assert.doesNotMatch(code, /\bmemberExperiences\b/, "Não deve conter memberExperiences");
-  assert.doesNotMatch(code, /\bmember_index\b/, "Não deve conter member_index");
-  assert.doesNotMatch(code, /\bresolveMemberExperiences\b/, "Não deve conter resolveMemberExperiences");
-  assert.doesNotMatch(code, /\bisAllAssented\b/, "Não deve conter isAllAssented");
-  assert.doesNotMatch(code, /\bisPostScreenReady\b/, "Não deve conter isPostScreenReady");
-
-  // Bancada coletiva como unidade analítica
-  assert.match(code, /collective_unit:\s*["']bancada["']/, "Eventos devem registrar bancada coletiva");
-  assert.match(code, /group_size:\s*cfg\.group_size|group_size:\s*groupSize/, "Sessão deve registrar group_size coletivo");
+test("Modelo coletivo de bancada: eventos do Bridge registram a bancada e o tamanho do grupo", () => {
+  const bridge = fs.readFileSync(path.join(repoRoot, "bridge/pulselab-bridge.ps1"), "utf-8");
+  assert.match(bridge, /collective_unit = "bancada"/);
+  assert.match(bridge, /group_size = \$s\.context\.group_size/);
+  assert.match(bridge, /-ParticipantId "BANCADA" -ParticipantRole "group"/);
 });
 
 test("Validação fail-closed de snapshot restaurado: group_size estrito 2..8 e retenção", () => {
@@ -196,35 +172,6 @@ test("Validação fail-closed de snapshot restaurado: group_size estrito 2..8 e 
   assert.equal(validateRestoredSession({ ...validSnap, startedAt: Date.now() - 40 * 60 * 1000 }, { maxAgeMs: 30 * 60 * 1000 }), null);
   assert.ok(validateRestoredSession({ ...validSnap, startedAt: Date.now() - 10 * 60 * 1000 }, { maxAgeMs: 30 * 60 * 1000 }));
 });
-
-test("Superfície infantil: ausência total de controles de ritmo, painéis técnicos, IDs e contadores", () => {
-  const code = fs.readFileSync(studentPagePath, "utf-8");
-
-  // Rota normal não deve expor controles tentadores
-  assert.doesNotMatch(code, /<button[^>]*>\s*(Avançar|Próxima|Finalizar|Concluir oficina|Começar atividade)/i, "Não deve expor botões de controle de fluxo");
-  // Único controle na rota normal: encerramento da turma, exibido só com pesquisa ativa
-  assert.match(code, /\{canCloseTurma && closingUi\}/, "Encerramento de turma só aparece com pesquisa ativa");
-  assert.match(code, /const canCloseTurma = configResolved && isResearchActive && !isFreeMode && Boolean\(sessionId\)/);
-  assert.doesNotMatch(code, /checkpoint/i, "Não deve expor checkpoints na rota infantil");
-
-  // Não deve expor IDs ou versão no markup da rota normal
-  const normalRouteMatch = code.match(/if \(!labMode\)\s*\{\s*return\s*\(\s*<main[\s\S]*?<\/main>\s*\);\s*\}/);
-  assert.ok(normalRouteMatch, "Bloco if (!labMode) de renderização deve ser encontrado");
-  const normalMarkup = normalRouteMatch[0];
-
-  assert.doesNotMatch(normalMarkup, /sessionId|session_id|installation_id|client_version|protocol_version/, "Markup normal não deve renderizar IDs ou versão");
-  assert.doesNotMatch(normalMarkup, /cronômetro|timer|outbox|quarentena|pendente/i, "Markup normal não deve renderizar contadores ou cronômetro");
-  assert.match(normalMarkup, /Oficina pronta/, "Deve conter o estado discreto de oficina pronta");
-  assert.match(normalMarkup, /Monte, programe e teste o seu robô na bancada\./, "Deve conter orientação curta e útil");
-
-  // Descarte seguro de sessões antigas para novos grupos
-  assert.match(code, /sessionStorage\.getItem\("pulselab_tab_session_id"\)/, "Deve verificar identificador de sessão da aba");
-  assert.match(code, /localStorage\.removeItem\(ACTIVE_SESSION_KEY\)/, "Deve descartar chave ativa se a sessão for antiga ou de outro grupo");
-});
-
-// ==============================================================================
-// 4. EXPORTAÇÃO E TELEMETRIA ESTRUTURAL DO SPIKE
-// ==============================================================================
 
 test("downloadSessionData recusa estritamente exportação no Modo Livre ou sem autorização institucional", () => {
   const dummySession = { session_id: "s1", events: [] };

@@ -66,41 +66,25 @@ test("Bridge Store-and-Forward: carregamento de credenciais operacionais de disp
   );
 });
 
-test("Bridge Store-and-Forward: acionamento de sincronização em save e expurgo em reset", () => {
+test("Bridge Store-and-Forward: envio só no ciclo periódico, linha corrompida não trava a fila e retirada não volta", () => {
   const code = fs.readFileSync(bridgePath, "utf-8");
-
-  // Chamada no loop periódico
-  assert.match(
-    code,
-    /Sync-EventsToSupabase[\s\S]*?Sync-SessionSnapshotsToSupabase/,
-    "Loop periódico deve sincronizar eventos e snapshots de sessão"
-  );
-
-  // Chamada ao salvar sessão
-  const saveIdx = code.indexOf('$path -eq "/v1/sessions/save"');
-  assert.ok(saveIdx !== -1, "Rota /v1/sessions/save deve existir");
-  const saveBlock = code.slice(saveIdx, saveIdx + 8000);
-  assert.match(
-    saveBlock,
-    /Sync-SessionSnapshotsToSupabase/,
-    "Rota /v1/sessions/save deve invocar Sync-SessionSnapshotsToSupabase após persistência local"
-  );
-
-  // Limpeza de tracker em /v1/sessions/reset
-  const resetIdx = code.indexOf('$path -eq "/v1/sessions/reset"');
-  assert.ok(resetIdx !== -1, "Rota /v1/sessions/reset deve existir");
-  const nextRouteIdx = code.indexOf('$path -eq "/v1/spike/metrics"', resetIdx);
-  const resetBlock = code.slice(resetIdx, nextRouteIdx !== -1 ? nextRouteIdx : resetIdx + 15000);
-  assert.match(
-    resetBlock,
-    /\$script:SyncedSessionIds\.Remove\(\$reqSessId\)/,
-    "Rota /v1/sessions/reset deve purgar session_id do tracker de sessões sincronizadas"
-  );
-  assert.match(code, /function\s+Invoke-RemoteSessionPurge/, "Bridge deve implementar exclusão remota autenticada");
-  assert.match(code, /purge_own_research_session/, "Bridge deve usar RPC restrita para retirada ética");
-  assert.match(code, /sessions_withdrawn\.txt/, "Bridge deve manter tombstone persistente contra reenvio");
-  assert.match(code, /withdrawals_pending\.txt/, "Bridge deve manter fila durável para retry da exclusão remota");
-  assert.match(code, /Sync-PendingWithdrawals/, "Loop deve repetir retiradas remotas pendentes");
-  assert.match(code, /WithdrawnSessionIds\.Contains\(\$eventSessionId\)/, "Eventos retirados nunca podem ser reenviados");
-  assert.match(code, /WithdrawnSessionIds\.Contains\(\$sid\)/, "Snapshots retirados nunca podem ser reenviados");
+  assert.match(code, /Sync-EventsToSupabase[\s\S]*?Sync-SessionSnapshotsToSupabase/, "Loop periódico sincroniza eventos e snapshots");
+  const loop = code.slice(code.indexOf("# 6. Loop de Atendimento Resiliente"));
+  assert.doesNotMatch(loop, /Sync-EventsToSupabase|Sync-SessionSnapshotsToSupabase/, "Rotas não esperam a rede");
+  const sync = code.slice(code.indexOf("function Sync-EventsToSupabase"), code.indexOf("function Sync-SessionSnapshotsToSupabase"));
+  assert.match(sync, /if \(-not \$ev -or -not \$ev\.event_id\) \{ continue \}/, "Linha ilegível é pulada, não interrompe o envio");
+  assert.match(sync, /Save-BridgeTextAtomic -Path \$eventsFile/, "Compactação por arquivo temporário");
+  assert.match(code, /function Repair-BridgeEventsFile/, "Linhas cortadas são separadas na inicialização");
+  const purge = code.slice(code.indexOf("function Remove-BridgeSessionData"));
+  assert.match(purge, /\$script:SyncedSessionIds\.Remove\(\$reqSessId\)/);
+  assert.match(code, /function\s+Invoke-RemoteSessionPurge/);
+  assert.match(code, /purge_own_research_session/);
+  assert.match(code, /sessions_withdrawn\.txt/);
+  assert.match(code, /withdrawals_pending\.txt/);
+  assert.match(code, /Sync-PendingWithdrawals/);
+  assert.match(code, /WithdrawnSessionIds\.Contains\(\$eventSessionId\)/);
+  assert.match(code, /WithdrawnSessionIds\.Contains\(\$sid\)/);
+  const snap = code.slice(code.indexOf("function Sync-SessionSnapshotsToSupabase"));
+  assert.doesNotMatch(snap.slice(0, 6000), /Polo-Nordeste|10000000-0000-4000-8000-000000000001|Guid\]::Empty/, "Sem identidades inventadas");
+  assert.match(snap, /\$sessRecord\["ended_by"\][\s\S]*?\$sessRecord\["interrupted"\][\s\S]*?\$sessRecord\["data_quality"\]/);
 });

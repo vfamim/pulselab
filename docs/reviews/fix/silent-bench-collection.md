@@ -103,3 +103,35 @@ Para atender aos contratos de sincronização segura (Store-and-Forward), isolam
    - O mecanismo de retirada ética (`withdrawSession` / `resetBridgeSession`) limpa imediatamente a sessão ativa, purga o banco local, remove identificadores temporários e registra tombstone durável que impede qualquer transmissão posterior.
 4. **Isolamento de Rede Fail-Closed**:
    - Em ambiente sem credencial operacional de dispositivo ou sem autorização institucional ativa, qualquer envio para a nuvem é terminantemente bloqueado, garantindo operação offline-first integral em escolas municipais e estaduais.
+
+---
+
+## Atualização 2026-10-14 (v2.4.0)
+
+Este registro descreve a decisão de 10 de outubro e não foi reescrito. Mudanças
+posteriores, decididas pelo responsável pelo projeto:
+
+1. **Assentimento verbal.** Não há caixas de assentimento nem botão
+   "Parar de participar e apagar meus dados" na tela. O instrutor lê um roteiro
+   padronizado no início de cada aula. Se alguém da bancada (ou a família)
+   recusar, o instrutor escolhe **Não registrar esta turma** no ícone do
+   PulseLab daquele computador: os dados da turma atual são apagados, com marca
+   de exclusão, e o registro pausa até a próxima turma. Exige emenda ao CEP.
+   Ver [assentimento verbal](../../assentimento-verbal.md).
+2. **Sem página aberta durante a aula.** A rota `/alunos/` deixa de ficar
+   aberta no Edge. O PulseLab inicia com o Windows e mostra um ícone na área de
+   notificação (bandeja). A sessão começa sozinha; termina por
+   **Encerrar turma…** no menu da bandeja (formulário curto: pergunta coletiva
+   da bancada e dois itens do instrutor), ou sozinha depois de 3 horas ou de
+   mais de 20 minutos com o computador desligado.
+3. **Qualidade.** Cada sessão registra como terminou (`instrutor`, `tempo`,
+   `sem_encerramento`), interrupções (computador desligado, falhas no sinal de
+   vida de 5 minutos) e a situação da pasta do SPIKE.
+4. **Programa.** Além das contagens da seção 3.2, a estrutura de cada versão
+   salva (só tipos de blocos), um escore de pensamento computacional adaptado
+   de Dr. Scratch ("adaptado, não validado") e, com calendário de missões, a
+   cobertura da missão.
+5. **Retenção.** O prazo de 7 dias da seção 4 foi substituído na v2.3.0 por
+   `retention_days` do pacote do polo (padrão 180 dias).
+
+Protocolo vigente: [protocolo v2](../../protocolo-pesquisa-v2-teste.md).

@@ -132,6 +132,10 @@ style: |
 ---
 
 <!-- Slide 1: Capa -->
+<div class="highlight-box" style="border-left-color:#d97706;">
+  <strong>Guia histórico (PulseLab 2.2.0).</strong> Não descreve a versão atual: não há mais tela aberta no navegador durante a aula, check-ins aos 20/40 minutos, perguntas por dupla nem botões na tela. Na versão atual, o PulseLab fica como ícone na bandeja do Windows e o assentimento é verbal. Ver <code>docs/protocolo-pesquisa-v2-teste.md</code> e <code>docs/assentimento-verbal.md</code>.
+</div>
+
 <div style="text-align: center; padding-top: 14px;">
   <span class="badge" style="background:#dbeafe; color:#1d4ed8; font-size:0.95rem; padding: 5px 14px;">
     Guia Operacional Ilustrado

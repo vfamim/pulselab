@@ -1,52 +1,44 @@
 # PulseLab
 
-Camada de observabilidade pedagógica para oficinas do projeto Robótica Educativa (UNIVASF).
-A tela das crianças roda no navegador em modo silencioso; um servidor local em PowerShell
-(porta 43128) guarda os registros no próprio computador, analisa passivamente contagens
-estruturais de blocos dos projetos LEGO SPIKE Prime e exporta dados para pendrive ou nuvem.
+Camada de observação das oficinas do projeto Robótica Educativa (UNIVASF). O PulseLab
+inicia com o Windows e fica como um ícone na área de notificação (bandeja); nenhuma página
+fica aberta durante a aula. Um servidor local em PowerShell (porta 43128) guarda os
+registros no próprio computador, lê a estrutura dos projetos LEGO SPIKE e exporta para
+pendrive.
 
-## Estado (v2.3.3)
+## Estado
 
-- **Experiência Silenciosa do Aluno**: Durante a oficina, a tela exibida para os estudantes
-  é 100% silenciosa e sem atrito pedagógico. Não há questionários, formulários, escalas
-  Likert nem popups intrusivos durante a atividade. A interface exibe apenas uma orientação
-  neutra para uso do software oficial LEGO SPIKE Prime.
-- **Bancada Coletiva como Unidade de Análise (LGPD Art. 14)**: A unidade de observação é
-  a bancada coletiva (2 a 8 integrantes, `group_size`). Em estrita conformidade com a
-  proteção de crianças e adolescentes, **não são coletados** nomes, fotos, vídeos, áudios,
-  e-mails, matrículas, digitação de teclado (`GetAsyncKeyState`) nem capturas de tela (screenshots).
-- **Coleta Passiva de Telemetria SPIKE**: O Bridge local inspeciona periodicamente os
-  projetos salvos do LEGO SPIKE Prime (`.llsp3`, Scratch `.sb3`, Python) a cada 10 segundos
-  via `/v1/spike/metrics`. São extraídas apenas métricas agregadas estruturais (blocos
-  executáveis, pilhas, uso de motor, sensor, loop e condicional), sem armazenar código bruto,
-  variáveis ou identificadores do Hub.
-- **Encerramento de Turma pelo Educador/Bancada**: A sessão da turma vai da abertura do app
-  (ou fim da turma anterior) até o acionamento do botão discreto **Encerrar turma**. No encerramento,
-  a bancada responde a uma pergunta rápida com 4 carinhas sobre a oficina e o educador
-  registra o resultado (0 a 3) e o apoio recebido (nenhum, algum, muito). Os itens estão
-  em `web/agent-simulator/lib/contracts.js` como rascunho até validação do pesquisador.
-- **Modo Laboratório (`?lab=1`)**: Parâmetro de URL reservado para desenvolvimento,
-  homologação e testes de engenharia. Permite inspecionar o outbox local, verificar a saúde
-  do Bridge, simular telemetria sintética e acionar expurgo de dados sem poluir a tela normal.
-- **Coleta Desativada por Padrão (Modo Livre)**: O pacote genérico opera em Modo Livre
-  (zero gravação, zero envio). A coleta de pesquisa só é ativada pelo pacote do polo, que
-  traz `provisionamento.json` com a sede, token de cadastro e o CAAE do parecer ético do CEP.
-- **Persistência em Dupla Camada**: Os dados são registrados concomitantemente no IndexedDB
-  do navegador (`pulselab-student-runner`) e em arquivos locais do Bridge (`dados_locais/events.jsonl`
-  e `dados_locais/sessions.jsonl`), garantindo integridade mesmo perante reinicializações ou quedas.
-- **Retenção Local Configurável**: Os registros ficam no computador por `retention_days` do
-  pacote do polo (padrão 180 dias, ajustável de 1 a 365 dias), mesmo após exportação ou envio.
-  O botão "Parar de participar e apagar meus dados" executa expurgo local e remoto definitivo imediato.
+- A coleta de pesquisa vem **desligada** no pacote genérico. Ela só liga com o pacote
+  do polo, que traz `provisionamento.json` com a sede e o CAAE do parecer ético.
+- A unidade de análise é a bancada. Não há nomes, fotos, câmera, captura de tela nem teclado.
+- Assentimento verbal: no início de cada aula o instrutor lê um roteiro padronizado às crianças.
+  Não há caixas de assentimento nem botão de retirada na tela. Se alguém recusar, o instrutor
+  escolhe **Não registrar esta turma** no menu da bandeja daquele computador: os dados da turma
+  atual são apagados (com marca de exclusão) e o registro pausa até a próxima turma. Depende de
+  emenda ao CEP. Veja [assentimento verbal](docs/assentimento-verbal.md).
+- A sessão começa quando o PulseLab inicia (ou, depois de uma turma encerrada, no primeiro programa
+  salvo) e termina por **Encerrar turma…** no menu da bandeja
+  (pergunta coletiva com 4 carinhas ou "Preferimos não responder"; resultado 0 a 3 e apoio
+  nenhum/algum/muito, que o instrutor pode pular). Sem encerramento, fecha sozinha depois de
+  3 horas ou de mais de 20 minutos com o computador desligado. Os itens estão em
+  `web/agent-simulator/lib/contracts.js` como rascunho até validação do pesquisador.
+- Cada sessão registra como terminou (instrutor, tempo, sem encerramento), interrupções e a
+  situação da pasta do SPIKE. Do programa: estrutura de cada versão salva (só tipos de blocos),
+  escore de pensamento computacional adaptado de Dr. Scratch (não validado) e, com calendário de
+  missões, a cobertura da missão.
 - Escola, oficina e turma não informadas ficam como `nao_informado`, nunca com valores genéricos.
+- Os registros ficam no computador por `retention_days` do pacote do polo (padrão 180 dias),
+  mesmo depois de exportados ou enviados. O prazo precisa constar no protocolo e no TCLE.
 - Os itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica.
-  Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md) e
-  [plano de validação](docs/plano-validacao-v2.md).
+  Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md),
+  [plano de validação](docs/plano-validacao-v2.md) e [roadmap](docs/roadmap.md).
 
 ## Para os polos
 
 1. Baixe o pacote do seu polo e extraia o ZIP.
 2. Rode `Instalar-PulseLab.bat` e, se quiser, informe o nome da máquina (ex.: `PET-LAB1-PC03`).
-3. Use os atalhos **PulseLab - Iniciar Oficina** e **PulseLab - Exportar Dados**.
+3. O PulseLab abre com o Windows. Use o menu do ícone na bandeja durante a aula e o atalho
+   **PulseLab - Exportar Dados** para copiar os registros para pendrive.
 
 Reinstalar com um pacote de polo mais novo mantém a identificação da máquina e os registros.
 
@@ -65,7 +57,8 @@ Cada computador guarda tudo localmente e envia ao Supabase quando tiver internet
 
 O token vai dentro do ZIP do polo. Se o pacote circular fora do polo, revogue o token
 (`revoked_at` em `device_enrollment_tokens`) e gere outro pacote. O snapshot da sessão sobe uma
-vez, quando a turma é encerrada (ou abandonada há mais de 12 horas); os eventos sobem um a um.
+vez, quando a sessão é encerrada (pelo instrutor ou automaticamente); os eventos sobem um a um.
+O painel mostra as máquinas que estão sem enviar dados há alguns dias.
 
 Antes do primeiro uso, aplique no Supabase a migração `20261011150000_site_enrollment_tokens.sql`
 e publique a função `enroll-device`.

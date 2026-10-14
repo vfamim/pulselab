@@ -12,10 +12,16 @@ Valida:
 
 from __future__ import annotations
 
+import base64
+import contextlib
 import hashlib
 import hmac
+import io
 import json
+import os
 from pathlib import Path
+import sqlite3
+import sys
 import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
@@ -686,3 +692,219 @@ class TestProvenienciaNaoImputada(unittest.TestCase):
         for event_type in ("experience_recorded", "rubric_completed", "session_completed"):
             payload = imp.sanitize_event_for_supabase(self.base_event(event_type=event_type), "research_session_events")
             self.assertNotIn("_is_quarantine", payload, event_type)
+
+
+class TestRetiradaEQualidadeDaBancada(unittest.TestCase):
+    """Sessões retiradas nunca entram (SQLite e nuvem); snapshot encerrado não regride."""
+
+    WITHDRAWN = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    KEPT = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp_dir.name)
+        self.conn = imp.init_sqlite_database(self.root / "teste.sqlite")
+
+    def tearDown(self):
+        self.conn.close()
+        self.temp_dir.cleanup()
+
+    def snapshot(self, session_id, **overrides):
+        data = {"session_id": session_id, "group_id": "g-1", "site_id": "SITE_A", "status": "completed"}
+        data.update(overrides)
+        return data
+
+    def write_export(self, name, files: dict[str, bytes]):
+        folder = self.root / "coletas" / name
+        lines = []
+        for rel, content in files.items():
+            path = folder / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+            lines.append(f"{hashlib.sha256(content).hexdigest().upper()}  {rel}")
+        (folder / "manifesto_coleta.txt").write_text(
+            "INTEGRIDADE DOS ARQUIVOS (SHA-256):\n\n" + "\n".join(lines) + "\n", encoding="utf-8"
+        )
+        return folder
+
+    def run_main(self):
+        argv = ["importar", "--no-cloud", "--source", str(self.root / "coletas"),
+                "--sqlite-path", str(self.root / "consolidado.sqlite")]
+        out = io.StringIO()
+        with patch.object(imp, "__file__", str(self.root / "scripts" / "importar-para-supabase.py")), \
+                patch.object(sys, "argv", argv), patch.dict(os.environ, {"PULSELAB_MANIFEST_HMAC_KEY": ""}), \
+                contextlib.redirect_stdout(out):
+            code = imp.main()
+        return code, out.getvalue()
+
+    def test_lista_de_retiradas_aceita_bom_e_linhas_vazias(self):
+        (self.root / "sessions_withdrawn.txt").write_bytes(
+            ("﻿" + self.WITHDRAWN.upper() + "\r\n\r\n  sessao-legada  \r\n").encode("utf-8")
+        )
+        ids = imp.read_withdrawn_sessions(self.root)
+        self.assertEqual(ids, {self.WITHDRAWN, imp.ensure_uuid("sessao-legada")})
+        self.assertTrue(imp.is_withdrawn("sessao-legada", ids))
+        self.assertFalse(imp.is_withdrawn(None, ids))
+        self.assertEqual(imp.read_withdrawn_sessions(self.root / "inexistente"), set())
+
+    def test_lista_de_retiradas_precisa_estar_no_manifesto(self):
+        folder = self.write_export("Coleta_A", {"events.jsonl": b"{}\n"})
+        (folder / "sessions_withdrawn.txt").write_text(self.WITHDRAWN, encoding="utf-8")
+        valid, msg = imp.validate_manifest(folder)
+        self.assertFalse(valid)
+        self.assertIn("sessions_withdrawn.txt", msg)
+
+        declared = self.write_export("Coleta_B", {"sessions_withdrawn.txt": self.WITHDRAWN.encode("utf-8")})
+        valid, msg = imp.validate_manifest(declared)
+        self.assertTrue(valid, msg)
+
+    def test_importacao_descarta_sessao_retirada_e_lembra_em_coletas_antigas(self):
+        events = "\n".join(json.dumps(e) for e in [
+            {"event_id": "e1", "session_id": self.WITHDRAWN, "event_type": "session_started", "occurred_at": "2026-10-14T10:00:00Z"},
+            {"event_id": "e2", "session_id": self.WITHDRAWN, "event_type": "pre", "occurred_at": "2026-10-14T10:01:00Z"},
+            {"session_id": self.WITHDRAWN, "event_type": "heartbeat"},
+            {"event_id": "e3", "session_id": self.KEPT, "event_type": "session_started", "occurred_at": "2026-10-14T10:00:00Z"},
+        ]).encode("utf-8")
+        self.write_export("Coleta_PC1_20261014_120000", {
+            "events.jsonl": events,
+            f"sessoes/sessao_{self.WITHDRAWN}.json": json.dumps(self.snapshot(self.WITHDRAWN)).encode("utf-8"),
+            f"sessoes/sessao_{self.KEPT}.json": json.dumps(self.snapshot(self.KEPT)).encode("utf-8"),
+            "sessions_withdrawn.txt": ("﻿" + self.WITHDRAWN + "\r\n").encode("utf-8"),
+        })
+        code, out = self.run_main()
+        self.assertEqual(code, 0, out)
+        self.assertIn("descartados 1 snapshots e 3 eventos", out)
+
+        db = sqlite3.connect(str(self.root / "consolidado.sqlite"))
+        try:
+            for tbl in ("sessions", "events", "session_events", "quarantined_events"):
+                count = db.execute(f"SELECT count(*) FROM {tbl} WHERE session_id = ?", (self.WITHDRAWN,)).fetchone()[0]
+                self.assertEqual(count, 0, tbl)
+            self.assertEqual(db.execute("SELECT count(*) FROM sessions WHERE session_id = ?", (self.KEPT,)).fetchone()[0], 1)
+            self.assertEqual(db.execute("SELECT session_id FROM withdrawn_sessions").fetchall(), [(self.WITHDRAWN,)])
+        finally:
+            db.close()
+
+        # Coleta antiga, exportada antes da retirada e sem a lista: o tombstone local ainda vale.
+        self.write_export("Coleta_PC1_20261001_120000", {
+            "events.jsonl": json.dumps({"event_id": "e9", "session_id": self.WITHDRAWN, "event_type": "heartbeat"}).encode("utf-8"),
+            f"sessoes/sessao_{self.WITHDRAWN}.json": json.dumps(self.snapshot(self.WITHDRAWN)).encode("utf-8"),
+        })
+        code, out = self.run_main()
+        self.assertEqual(code, 0, out)
+        db = sqlite3.connect(str(self.root / "consolidado.sqlite"))
+        try:
+            self.assertEqual(db.execute("SELECT count(*) FROM sessions WHERE session_id = ?", (self.WITHDRAWN,)).fetchone()[0], 0)
+            self.assertEqual(db.execute("SELECT count(*) FROM session_events WHERE session_id = ?", (self.WITHDRAWN,)).fetchone()[0], 0)
+        finally:
+            db.close()
+
+    def test_retirada_apaga_o_que_ja_estava_no_sqlite(self):
+        imp.upsert_session_sqlite(self.conn, self.snapshot(self.WITHDRAWN), "a.json", "agora")
+        imp.upsert_session_sqlite(self.conn, self.snapshot(self.KEPT), "b.json", "agora")
+        with self.conn:
+            self.conn.execute("INSERT INTO events (event_id, session_id) VALUES ('x1', ?)", (self.WITHDRAWN.upper(),))
+        removed = imp.purge_withdrawn_sqlite(self.conn, {self.WITHDRAWN})
+        self.assertEqual(removed, 2)
+        self.assertEqual(self.conn.execute("SELECT session_id FROM sessions").fetchall(), [(self.KEPT,)])
+
+    def test_sqlite_nao_regride_sessao_encerrada(self):
+        sid = self.KEPT
+        self.assertEqual(imp.upsert_session_sqlite(self.conn, self.snapshot(sid, ended_by="instrutor"), "a.json", "t1"), "inserted")
+        self.assertEqual(
+            imp.upsert_session_sqlite(self.conn, self.snapshot(sid, status="in_progress", ended_by=None), "b.json", "t2"),
+            "kept_completed",
+        )
+        self.assertEqual(
+            self.conn.execute("SELECT status, ended_by, source_file FROM sessions WHERE session_id = ?", (sid,)).fetchone(),
+            ("completed", "instrutor", "a.json"),
+        )
+        self.assertEqual(
+            imp.upsert_session_sqlite(self.conn, self.snapshot(sid, phase="completed", status=None), "c.json", "t3"),
+            "updated",
+        )
+
+    def test_sqlite_completa_sessao_em_andamento_e_grava_qualidade(self):
+        sid = self.KEPT
+        imp.upsert_session_sqlite(self.conn, self.snapshot(sid, status="in_progress"), "a.json", "t1")
+        quality = {"heartbeat_count": 12, "max_heartbeat_gap_min": 3.5, "bridge_restarts": 1, "corrupted_lines": 0,
+                   "spike_status": "ok", "telemetry_events": 40, "last_activity_at": None}
+        outcome = imp.upsert_session_sqlite(
+            self.conn, self.snapshot(sid, ended_by="tempo", interrupted=True, data_quality=quality), "b.json", "t2"
+        )
+        self.assertEqual(outcome, "updated")
+        status, ended_by, interrupted, dq = self.conn.execute(
+            "SELECT status, ended_by, interrupted, data_quality_json FROM sessions WHERE session_id = ?", (sid,)
+        ).fetchone()
+        self.assertEqual((status, ended_by, interrupted), ("completed", "tempo", 1))
+        self.assertEqual(json.loads(dq), quality)
+
+    def test_sqlite_existente_recebe_colunas_novas(self):
+        legacy = sqlite3.connect(str(self.root / "legado.sqlite"))
+        legacy.execute("CREATE TABLE sessions (session_id TEXT PRIMARY KEY, status TEXT)")
+        legacy.commit()
+        legacy.close()
+        conn = imp.init_sqlite_database(self.root / "legado.sqlite")
+        try:
+            cols = {row[1]: row[2] for row in conn.execute("PRAGMA table_info(sessions)")}
+            self.assertEqual(cols["ended_by"], "TEXT")
+            self.assertEqual(cols["interrupted"], "INTEGER")
+            self.assertEqual(cols["data_quality_json"], "TEXT")
+        finally:
+            conn.close()
+
+    def test_registro_da_nuvem_mapeia_qualidade(self):
+        quality = {"heartbeat_count": 3, "spike_status": "pasta_nao_encontrada"}
+        rec = imp.build_bancada_record(
+            self.snapshot(self.KEPT, ended_by="sem_encerramento", interrupted=False, data_quality=quality), "agora"
+        )
+        self.assertEqual(rec["ended_by"], "sem_encerramento")
+        self.assertIs(rec["interrupted"], False)
+        self.assertEqual(rec["data_quality"], quality)
+        self.assertEqual(rec["phase"], "completed")
+
+        legacy = imp.build_bancada_record(self.snapshot(self.KEPT, status="in_progress", ended_by="aluno", data_quality=[1]), "agora")
+        self.assertEqual(legacy["phase"], "in_progress")
+        self.assertIsNone(legacy["ended_by"])
+        self.assertIsNone(legacy["interrupted"])
+        self.assertIsNone(legacy["data_quality"])
+        # PostgREST exige as mesmas chaves em todos os registros do lote
+        self.assertEqual(set(rec), set(legacy))
+
+    def test_dedup_mantem_snapshot_encerrado(self):
+        done = imp.build_bancada_record(self.snapshot(self.KEPT), "t")
+        open_ = imp.build_bancada_record(self.snapshot(self.KEPT, status="in_progress"), "t")
+        self.assertEqual(imp.dedup_bancada_records([done, open_])[0]["phase"], "completed")
+        self.assertEqual(imp.dedup_bancada_records([open_, done])[0]["phase"], "completed")
+
+    @staticmethod
+    def fake_key(role):
+        payload = base64.urlsafe_b64encode(json.dumps({"role": role}).encode()).decode().rstrip("=")
+        return f"eyJhbGciOiJIUzI1NiJ9.{payload}.assinatura"
+
+    @patch("urllib.request.urlopen")
+    def test_retirada_remota_grava_tombstone_antes_de_apagar(self, mock_urlopen):
+        resp = MagicMock()
+        resp.__enter__.return_value.read.return_value = b""
+        mock_urlopen.return_value = resp
+        sent, err = imp.withdraw_sessions_remote({self.WITHDRAWN}, "https://exemplo.supabase.co", self.fake_key("service_role"))
+        self.assertEqual((sent, err), (1, None))
+        calls = [c.args[0] for c in mock_urlopen.call_args_list]
+        self.assertEqual(calls[0].get_method(), "POST")
+        self.assertIn("/research_withdrawals?on_conflict=session_id", calls[0].full_url)
+        self.assertIn("ignore-duplicates", calls[0].headers["Prefer"])
+        self.assertEqual(json.loads(calls[0].data), [{"session_id": self.WITHDRAWN, "source": "importer"}])
+        deleted = [c.full_url.split("/rest/v1/")[1] for c in calls[1:]]
+        self.assertTrue(all(c.get_method() == "DELETE" for c in calls[1:]))
+        self.assertEqual(
+            [d.split("?")[0] for d in deleted],
+            ["instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions"],
+        )
+        self.assertTrue(all(d.endswith(f"session_id=in.({self.WITHDRAWN})") for d in deleted))
+
+    @patch("urllib.request.urlopen")
+    def test_retirada_remota_exige_service_role(self, mock_urlopen):
+        sent, err = imp.withdraw_sessions_remote({self.WITHDRAWN}, "https://exemplo.supabase.co", self.fake_key("authenticated"))
+        self.assertEqual(sent, 0)
+        self.assertIn("service_role", err)
+        mock_urlopen.assert_not_called()
