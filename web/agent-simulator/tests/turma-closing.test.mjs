@@ -97,3 +97,12 @@ test("Sessão do Bridge: fecha por tempo (3 h) e por computador desligado/suspen
   assert.match(bridgeCode, /Start-BridgeSession -StartMode "atividade_spike"/);
 });
 
+test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegador", () => {
+  const trayPath = path.join(__dirname, "../../../bridge/pulselab-tray.ps1");
+  const tray = fs.readFileSync(trayPath, "utf-8");
+  assert.match(tray, /function Close-CurrentTurma/);
+  assert.match(tray, /\$itemClose\.add_Click\(\{\s*Close-CurrentTurma\s*\}\)/);
+  assert.match(tray, /Invoke-TrayApi "\/v1\/session\/close" "POST"/);
+  assert.doesNotMatch(tray, /\$itemClose\.add_Click\(\{\s*Open-ClosingForm\s*\}\)/);
+});
+

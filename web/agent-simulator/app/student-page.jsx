@@ -6,7 +6,7 @@ import { deleteLocalStore } from "../lib/student-store.js";
 // do Bridge e o ícone na bandeja abre esta página em "Encerrar turma...". Aqui só se registra a
 // resposta da bancada e a avaliação do instrutor; nada fica gravado no navegador.
 
-const CLIENT_VERSION = "student-pwa/3.0.0";
+const CLIENT_VERSION = "student-pwa/3.0.1";
 const BRIDGE_URL = "http://127.0.0.1:43128";
 
 const BANCADA_ITEM = INSTRUMENT_MANIFEST.items.bancada.experiencia;
@@ -87,7 +87,7 @@ function LabPanel() {
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v3.0.0 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.1 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>

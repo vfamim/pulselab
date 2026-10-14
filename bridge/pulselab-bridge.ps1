@@ -165,7 +165,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.0.0"
+$script:BridgeVersion = "3.0.1"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1515,30 +1515,36 @@ function Close-BridgeSession {
 
     $assessmentSkipped = $null
     if ($EndedBy -eq "instrutor") {
-        $value = $null
-        $label = $null
-        $refused = $true
-        if ($Experience -and -not $Experience.refused -and $null -ne $Experience.value) {
-            $value = [int]$Experience.value
-            $label = [string]$Experience.label
-            $refused = $false
+        if ($Experience -or $Rubric) {
+            $value = $null
+            $label = $null
+            $refused = $true
+            if ($Experience -and -not $Experience.refused -and $null -ne $Experience.value) {
+                $value = [int]$Experience.value
+                $label = [string]$Experience.label
+                $refused = $false
+            }
+            [void](Add-BridgeSessionEvent -EventType "experience_recorded" -Stage "encerramento" -ParticipantId "BANCADA" -ParticipantRole "group" -Details ([ordered]@{
+                item_id = "experiencia_bancada_v1"
+                instrument_version = $script:InstrumentVersion
+                value = $value
+                label = $label
+                refused = $refused
+            }))
+            $assessmentSkipped = (-not $Rubric) -or ($Rubric.skipped -eq $true)
+            [void](Add-BridgeSessionEvent -EventType "rubric_completed" -Stage "encerramento" -ParticipantId "INSTRUTOR" -ParticipantRole "instructor" -Details ([ordered]@{
+                result_item_id = "resultado_bancada_v1"
+                support_item_id = "apoio_instrutor_v1"
+                instrument_version = $script:InstrumentVersion
+                result_level = if ($assessmentSkipped) { $null } else { [int]$Rubric.result_level }
+                support_level = if ($assessmentSkipped) { $null } else { [string]$Rubric.support_level }
+                skipped = $assessmentSkipped
+            }))
+        } else {
+            # Encerramento silencioso (bandeja ou automatico): sem questionarios no PC do aluno.
+            # A avaliacao pedagogica do instrutor e realizada externamente no portal/celular.
+            $assessmentSkipped = $true
         }
-        [void](Add-BridgeSessionEvent -EventType "experience_recorded" -Stage "encerramento" -ParticipantId "BANCADA" -ParticipantRole "group" -Details ([ordered]@{
-            item_id = "experiencia_bancada_v1"
-            instrument_version = $script:InstrumentVersion
-            value = $value
-            label = $label
-            refused = $refused
-        }))
-        $assessmentSkipped = (-not $Rubric) -or ($Rubric.skipped -eq $true)
-        [void](Add-BridgeSessionEvent -EventType "rubric_completed" -Stage "encerramento" -ParticipantId "INSTRUTOR" -ParticipantRole "instructor" -Details ([ordered]@{
-            result_item_id = "resultado_bancada_v1"
-            support_item_id = "apoio_instrutor_v1"
-            instrument_version = $script:InstrumentVersion
-            result_level = if ($assessmentSkipped) { $null } else { [int]$Rubric.result_level }
-            support_level = if ($assessmentSkipped) { $null } else { [string]$Rubric.support_level }
-            skipped = $assessmentSkipped
-        }))
     }
 
     # Lacunas de sinal de vida acima de dois intervalos indicam computador desligado ou PulseLab parado.
@@ -2580,7 +2586,7 @@ try {
                 continue
             }
 
-            # Formulario final (aberto pela bandeja): resposta da bancada + avaliacao do instrutor.
+            # Formulario final ou comando silencioso da bandeja: encerra a turma.
             if ($path -eq "/v1/session/close" -and $request.HttpMethod -eq "POST") {
                 $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 65536
                 if (-not $readRes.Success) {
@@ -2593,7 +2599,7 @@ try {
                 } catch {
                     $closeObj = $null
                 }
-                if (-not $closeObj) {
+                if (-not $closeObj -and -not [string]::IsNullOrWhiteSpace($readRes.Body) -and $readRes.Body.Trim() -ne "{}") {
                     Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON invalido" }
                     continue
                 }
@@ -2601,16 +2607,16 @@ try {
                     Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "Este computador nao esta registrando turmas agora." }
                     continue
                 }
-                # A turma precisa ser a mesma que o formulario mostrou: evita gravar respostas na turma errada.
+                # A turma precisa ser a mesma que o formulario mostrou (caso session_id tenha sido informado explicitamente)
                 $expectedSessId = if ($script:ActiveSession) { [string]$script:ActiveSession.session_id } else { $null }
-                $requestedSessId = if ($closeObj.session_id) { [string]$closeObj.session_id } else { $null }
-                if ($requestedSessId -ne $expectedSessId) {
+                $requestedSessId = if ($closeObj -and $closeObj.session_id) { [string]$closeObj.session_id } else { $null }
+                if ($requestedSessId -and ($requestedSessId -ne $expectedSessId)) {
                     Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "A turma mudou desde que o formulario foi aberto."; session_id = $expectedSessId }
                     continue
                 }
 
-                $exp = $closeObj.experience
-                $rub = $closeObj.rubric
+                $exp = if ($closeObj) { $closeObj.experience } else { $null }
+                $rub = if ($closeObj) { $closeObj.rubric } else { $null }
                 $validClose = $true
                 if ($exp -and -not $exp.refused) {
                     $expValue = 0
@@ -2638,8 +2644,14 @@ try {
                 }
 
                 if (-not $expectedSessId) {
-                    # Nenhum programa foi salvo desde a turma anterior: abre a sessao so para guardar as respostas.
-                    [void](Start-BridgeSession -StartMode "encerramento_sem_atividade")
+                    if ($exp -or $rub) {
+                        # Nenhum programa foi salvo desde a turma anterior mas respostas foram enviadas: abre a sessao para guardar respostas.
+                        [void](Start-BridgeSession -StartMode "encerramento_sem_atividade")
+                    } else {
+                        # Encerramento silencioso quando nao ha sessao ativa: nenhuma sessao a encerrar.
+                        Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "no_active_session"; session_id = $null }
+                        continue
+                    }
                 }
                 $closedSnapshot = Close-BridgeSession -EndedBy "instrutor" -Experience $exp -Rubric $rub
                 if (-not $closedSnapshot) {
