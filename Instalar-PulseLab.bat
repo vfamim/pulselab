@@ -56,7 +56,7 @@ if exist "%SRC_DIR%Exportar-Dados-Pendrive.bat" copy "%SRC_DIR%Exportar-Dados-Pe
 if exist "%SRC_DIR%scripts\exportar-pendrive.ps1" copy "%SRC_DIR%scripts\exportar-pendrive.ps1" "%INSTALL_DIR%\scripts\" /Y >nul 2>&1
 if exist "%SRC_DIR%Install-PulseLab.ps1" copy "%SRC_DIR%Install-PulseLab.ps1" "%INSTALL_DIR%\" /Y >nul 2>&1
 if exist "%SRC_DIR%VERSION" copy "%SRC_DIR%VERSION" "%INSTALL_DIR%\" /Y >nul 2>&1
-if exist "%SRC_DIR%pulselab.ico" copy "%SRC_DIR%pulselab.ico" "%INSTALL_DIR%\" /Y >nul 2>&1
+if exist "%SRC_DIR%pulselab.ico" copy "%SRC_DIR%pulselab*.ico" "%INSTALL_DIR%\" /Y >nul 2>&1
 
 echo.
 echo Identificacao desta maquina (opcional): use o mesmo nome da etiqueta no gabinete.
