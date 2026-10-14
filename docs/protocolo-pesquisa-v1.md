@@ -1,7 +1,10 @@
 # Protocolo de Pesquisa PulseLab v1
 
-> Histórico: este protocolo descreve a coleta individual v1. A branch de teste
-> usa o [protocolo de bancada v2](protocolo-pesquisa-v2-teste.md). Não agrupar dados
+> **Documento histórico.** Este protocolo descreve a coleta individual v1 e não
+> foi reescrito. As hipóteses H1–H4, os itens individuais, as capturas de tela e
+> as contagens de teclas descritas aqui não fazem parte da versão atual.
+> Protocolo vigente: [protocolo de bancada v2](protocolo-pesquisa-v2-teste.md).
+> Assentimento: [assentimento verbal](assentimento-verbal.md). Não agrupar dados
 > dessas versões como se fossem o mesmo instrumento ou unidade de análise.
 
 > Status: versão de trabalho para revisão pedagógica, ética e estatística.

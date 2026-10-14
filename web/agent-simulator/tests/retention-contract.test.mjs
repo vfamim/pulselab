@@ -48,117 +48,27 @@ test("Retenção absoluta 7 dias: student-store.js implementa enforceAbsoluteRet
   );
 });
 
-test("Retenção configurável (padrão 180 dias): student-page.jsx executa expurgo periódico e no mount", () => {
-  assert.ok(fs.existsSync(studentPagePath), "student-page.jsx deve existir");
+test("Formulário final não guarda nada no navegador e apaga o que versões antigas deixaram", () => {
   const pageContent = fs.readFileSync(studentPagePath, "utf-8");
-
-  assert.match(
-    pageContent,
-    /const retentionDaysRef = useRef\(DEFAULT_RETENTION_DAYS\)/,
-    "Prazo inicial deve ser o padrão até a configuração do polo chegar"
-  );
-  assert.match(
-    pageContent,
-    /enforceAbsoluteRetention\(retentionDaysRef\.current\)\.catch\(\(\)\s*=>\s*\{\}\)/,
-    "Deve executar enforceAbsoluteRetention no mount do componente"
-  );
-  assert.match(
-    pageContent,
-    /setInterval\(\(\)\s*=>\s*\{\s*enforceAbsoluteRetention\(retentionDaysRef\.current\)\.catch\(\(\)\s*=>\s*\{\}\);\s*\},\s*60\s*\*\s*60\s*\*\s*1000\)/,
-    "Deve agendar expurgo periódico de hora em hora"
-  );
-  assert.match(pageContent, /resolveRetentionDays\(cfg\)/, "Prazo vem da configuração do polo");
+  assert.doesNotMatch(pageContent, /localStorage\.setItem|sessionStorage\.setItem/, "Nenhuma gravação em localStorage/sessionStorage");
+  assert.doesNotMatch(pageContent, /saveEvent|saveSession|flushPendingEvents|syncSingleEvent/, "Nenhuma fila de eventos no navegador");
+  assert.match(pageContent, /deleteLocalStore\(\)/, "Apaga o IndexedDB das versões até 2.3.x");
+  assert.match(pageContent, /localStorage\.removeItem\(key\)/, "Apaga as chaves antigas de sessão");
 });
 
-test("Zero persistência antes da autorização: student-page.jsx protege localStorage", () => {
-  const pageContent = fs.readFileSync(studentPagePath, "utf-8");
-
-  // getInstallationId não grava no localStorage
-  const getInstallationIdMatch = pageContent.match(/function getInstallationId\([^)]*\)\s*\{[\s\S]*?\n\}/);
-  assert.ok(getInstallationIdMatch, "function getInstallationId deve ser encontrada");
-  assert.doesNotMatch(
-    getInstallationIdMatch[0],
-    /localStorage\.setItem/,
-    "getInstallationId NÃO deve chamar localStorage.setItem em seu corpo"
-  );
-
-  // Sem autorização válida ou config inválida, ativa Modo Livre sem apagar indiscriminadamente sessões ativas vigentes
-  assert.match(
-    pageContent,
-    /if \(!authorized\)[\s\S]*?setIsFreeMode\(true\)[\s\S]*?return;/,
-    "Deve ativar Modo Livre e retornar sem apagar indiscriminadamente ACTIVE_SESSION_KEY se a configuração não for autorizada"
-  );
-  const unauthBlockMatch = pageContent.match(/if \(!authorized\)[\s\S]*?return;/);
-  assert.ok(unauthBlockMatch, "Bloco if (!authorized) deve ser encontrado");
-  assert.doesNotMatch(
-    unauthBlockMatch[0],
-    /localStorage\.removeItem\(ACTIVE_SESSION_KEY\)/,
-    "if (!authorized) NÃO deve apagar indiscriminadamente ACTIVE_SESSION_KEY sem decisão explícita"
-  );
-
-  // Grava SOMENTE após autorização estrita da configuração e inicialização da sessão coletiva
-  assert.match(
-    pageContent,
-    /function beginSession\(startMode\) \{\s*const cfg = configRef\.current;\s*if \(!cfg \|\| !isResearchActiveRef\.current \|\| isWithdrawnRef\.current\) return;[\s\S]*?localStorage\.setItem\(INSTALLATION_KEY,\s*machineInstallationId\)/,
-    "Deve gravar INSTALLATION_KEY exclusivamente após autorização válida na inicialização da sessão"
-  );
-
-  // Remove em retirada/revogação (withdrawSession)
-  assert.match(
-    pageContent,
-    /async function withdrawSession\(broadcast = true\)[\s\S]*?localStorage\.removeItem\(INSTALLATION_KEY\)/,
-    "Deve remover INSTALLATION_KEY em withdrawSession"
-  );
-  assert.match(
-    pageContent,
-    /async function withdrawSession\(broadcast = true\)[\s\S]*?localStorage\.removeItem\(ACTIVE_SESSION_KEY\)/,
-    "Deve remover ACTIVE_SESSION_KEY em withdrawSession"
-  );
-});
-
-test("Sincronização fail-closed: student-page.jsx impede flush incondicional antes da autorização", () => {
-  assert.ok(fs.existsSync(studentPagePath), "student-page.jsx deve existir");
-  const pageContent = fs.readFileSync(studentPagePath, "utf-8");
-
-  // runSync não pode executar antes de a configuração do Bridge ser resolvida nem fora do modo autorizado
-  const runSyncMatch = pageContent.match(/async function runSync\(\)\s*\{[\s\S]*?\n  \}/);
-  assert.ok(runSyncMatch, "Função runSync deve existir");
-  const runSyncBody = runSyncMatch[0];
-
-  assert.match(
-    runSyncBody,
-    /!configResolvedRef\.current/,
-    "runSync não pode executar antes de a configuração do Bridge ter sido resolvida"
-  );
-  assert.match(
-    runSyncBody,
-    /!isResearchActiveRef\.current/,
-    "runSync não pode executar quando pesquisa não estiver autorizada/ativa"
-  );
-  assert.match(
-    runSyncBody,
-    /isFreeModeRef\.current/,
-    "runSync não pode executar quando estiver em Modo Livre"
-  );
-  assert.match(
-    runSyncBody,
-    /isWithdrawnRef\.current/,
-    "runSync não pode executar após retirada/revogação da sessão"
-  );
-
-  // O useEffect de sincronização NÃO pode ter dependências vazias [] (evita flush incondicional no mount)
-  assert.doesNotMatch(
-    pageContent,
-    /useEffect\(\(\)\s*=>\s*\{[\s\S]*?void\s+runSync\(\);[\s\S]*?\},\s*\[\]\)/,
-    "useEffect de sincronização NÃO pode ter dependências vazias [] nem disparar flush incondicional no mount"
-  );
-
-  // O useEffect de sincronização deve depender de [configResolved, isResearchActive, isFreeMode]
-  assert.match(
-    pageContent,
-    /useEffect\(\(\)\s*=>\s*\{[\s\S]*?handleOnline[\s\S]*?\},\s*\[configResolved,\s*isResearchActive,\s*isFreeMode\]\)/,
-    "useEffect de sincronização deve depender estritamente de [configResolved, isResearchActive, isFreeMode]"
-  );
+test("Sessão só abre com provisionamento válido do polo (fail-closed no Bridge)", () => {
+  const code = fs.readFileSync(bridgeScriptPath, "utf-8");
+  const ctxIdx = code.indexOf("function Get-BridgeResearchContext");
+  assert.ok(ctxIdx !== -1, "Get-BridgeResearchContext deve existir");
+  const ctx = code.slice(ctxIdx, code.indexOf("\nfunction ", ctxIdx + 10));
+  assert.match(ctx, /research_collection_enabled -is \[bool\]/, "Exige booleano estrito");
+  assert.match(ctx, /research_authorization_version/, "Exige versão de autorização (CAAE)");
+  assert.match(ctx, /"academic_research"/, "Exige finalidade academic_research");
+  assert.match(ctx, /\$groupSize -lt 2 -or \$groupSize -gt 8/, "group_size entre 2 e 8");
+  const startIdx = code.indexOf("function Start-BridgeSession");
+  const start = code.slice(startIdx, code.indexOf("\nfunction ", startIdx + 10));
+  assert.match(start, /Test-BridgeCollectionPaused/, "Turma pausada não abre sessão");
+  assert.match(start, /\$ctx = Get-BridgeResearchContext[\s\S]*?if \(-not \$ctx\) \{ return \$false \}/, "Sem autorização não abre sessão");
 });
 
 test("Retenção configurável (padrão 180 dias): pulselab-bridge.ps1 possui rotina Invoke-BridgeRetentionCleanup", () => {

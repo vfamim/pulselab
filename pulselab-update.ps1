@@ -155,7 +155,7 @@ function Test-PulseLabPayload {
     foreach ($rel in $required) {
         if (-not (Test-Path -LiteralPath (Join-Path $PayloadRoot $rel))) { throw "Pacote sem $rel." }
     }
-    foreach ($script in @("pulselab.ps1", "pulselab-update.ps1", "bridge\pulselab-bridge.ps1", "bridge\spike-parser.ps1")) {
+    foreach ($script in @("pulselab.ps1", "pulselab-update.ps1", "bridge\pulselab-bridge.ps1", "bridge\spike-parser.ps1", "bridge\pulselab-tray.ps1")) {
         $path = Join-Path $PayloadRoot $script
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $errors = $null

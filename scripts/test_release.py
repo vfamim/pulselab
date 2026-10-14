@@ -98,6 +98,33 @@ class GenericPackageDefaultsTest(unittest.TestCase):
         self.assertIn("machine_label", exporter)
 
 
+
+class PoloMissionCalendarTest(unittest.TestCase):
+    def write(self, tmp: Path, catalog: dict, csv_text: str):
+        cat = tmp / "missoes.json"
+        cat.write_text(json.dumps(catalog), encoding="utf-8")
+        cal = tmp / "calendario.csv"
+        cal.write_text(csv_text, encoding="utf-8")
+        return cal, cat
+
+    def test_reads_calendar_checked_against_catalog(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cal, cat = self.write(Path(tmp), {"missoes": [{"mission_id": "m1"}]}, "data,mission_id\n2026-10-20,m1\n")
+            self.assertEqual(polo.read_mission_calendar(cal, cat), [{"data": "2026-10-20", "mission_id": "m1"}])
+
+    def test_refuses_unknown_mission_or_bad_date(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            cal, cat = self.write(Path(tmp), {"missoes": [{"mission_id": "m1"}]}, "data,mission_id\n2026-10-20,m9\n")
+            with self.assertRaises(ValueError):
+                polo.read_mission_calendar(cal, cat)
+            cal, cat = self.write(Path(tmp), {"missoes": [{"mission_id": "m1"}]}, "data,mission_id\n20/10/2026,m1\n")
+            with self.assertRaises(ValueError):
+                polo.read_mission_calendar(cal, cat)
+
+    def test_installation_keeps_calendar_from_provisioning(self):
+        script = (ROOT / "pulselab-installation.ps1").read_text(encoding="utf-8")
+        self.assertIn('"calendario_missoes"', script)
+
 if __name__ == "__main__":
     unittest.main()
 

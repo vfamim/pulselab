@@ -1,9 +1,9 @@
 # ==============================================================================
-# PulseLab — Bridge HTTP Local e Companion de Alertas (Windows Offline)
+# PulseLab — Bridge HTTP Local e Sessão da Turma (Windows Offline)
 # ==============================================================================
-# - Servidor web local em http://127.0.0.1:43128/alunos/
-# - Agenda de checkpoints e relógio de sessão independente
-# - Alertas sonoros e visuais nativos quando o navegador estiver em segundo plano
+# - Servidor local em http://127.0.0.1:43128 (formulário final em /alunos/)
+# - Dono da sessão da turma: início, sinal de vida, telemetria do SPIKE e encerramento
+# - Sem páginas, alertas ou janelas durante a aula (a bandeja mostra que está ligado)
 # - Extração de métricas de telemetria do SPIKE via spike-parser.ps1
 # ==============================================================================
 
@@ -12,7 +12,6 @@ param(
     [int]$Port = 43128,
     [string]$AppRoot = "",
     [string]$DataDir = "",
-    [switch]$NoAlert,
     [switch]$EnableAutoUpdate
 )
 
@@ -77,30 +76,15 @@ if (-not (Test-Path $sessoesDir)) {
     New-Item -ItemType Directory -Path $sessoesDir -Force | Out-Null
 }
 
-$scheduleFile = Join-Path $DataDir "active_schedule.json"
-
-# 3. Estado em memória
+# 3. Estado em memória (a sessão da turma é restaurada por Initialize-BridgeSession)
 $script:StartTime = [DateTime]::UtcNow
-$script:ActiveSession = $null
-$script:LastAlertMark = 0
-$script:LastAlertTime = [DateTime]::MinValue
-$script:AlertCount = 0
-
-if (Test-Path $scheduleFile) {
-    try {
-        $loaded = Get-Content -Path $scheduleFile -Raw | ConvertFrom-Json
-        $script:ActiveSession = $loaded
-    } catch {
-        # ignore corrupt schedule
-    }
-}
 
 # 3.1 Supabase Sync Configuration & Tracker (Store-and-forward)
 $script:SupabaseUrl = "https://cylsqbmtglvdfubbarqe.supabase.co"
 $script:SupabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN5bHNxYm10Z2x2ZGZ1YmJhcnFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5NjE1MzIsImV4cCI6MjA5MzUzNzUzMn0.tscU354WLjnYz6E6NOrDQK16ViWBc-Af5FYhvZikFbU"
 $script:SupabaseOperationalJwt = ""
 $script:InstallationId = ""
-$script:SiteId = "Polo-Nordeste"
+$script:SiteId = ""
 
 if ($env:PULSELAB_OPERATIONAL_JWT) {
     $script:SupabaseOperationalJwt = $env:PULSELAB_OPERATIONAL_JWT
@@ -181,7 +165,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "2.3.1"
+$script:BridgeVersion = "2.4.0"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -332,10 +316,7 @@ function Get-BridgeHttpStatus($ErrorRecord) {
 }
 
 function Save-BridgeJsonAtomic([string]$Path, $Data) {
-    $tmp = "$Path.tmp"
-    [System.IO.File]::WriteAllText($tmp, ($Data | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
-    if (Test-Path -LiteralPath $Path) { Remove-Item -LiteralPath $Path -Force }
-    Move-Item -LiteralPath $tmp -Destination $Path
+    Save-BridgeTextAtomic -Path $Path -Text ($Data | ConvertTo-Json -Depth 6)
 }
 
 # Grava a sessao do dispositivo: DPAPI no Windows; JSON so fora do Windows (testes em pwsh).
@@ -348,8 +329,7 @@ function Save-BridgeDeviceSession($Session) {
         $enc = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
         $target = Join-Path $DataDir "device_session.dat"
         [System.IO.File]::WriteAllBytes("$target.tmp", $enc)
-        if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
-        Move-Item -LiteralPath "$target.tmp" -Destination $target
+        Move-BridgeAtomicFile -SourcePath "$target.tmp" -DestinationPath $target
     } else {
         Save-BridgeJsonAtomic -Path (Join-Path $DataDir "device_session.json") -Data $Session
     }
@@ -479,10 +459,16 @@ function Sync-EventsToSupabase {
     try {
         $lines = [System.IO.File]::ReadAllLines($eventsFile)
         $syncedCount = 0
+        $networkAttempts = 0
         foreach ($line in $lines) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            # Linha corrompida nao trava a fila: pula (Repair-BridgeEventsFile a separa na inicializacao).
+            $ev = $null
+            try { $ev = $line | ConvertFrom-Json -ErrorAction Stop } catch { $ev = $null }
+            if (-not $ev -or -not $ev.event_id) { continue }
+            # Limite por ciclo: com a rede ruim, o envio nao segura o atendimento local por muito tempo.
+            if ($networkAttempts -ge 50) { break }
             try {
-                $ev = $line | ConvertFrom-Json
                 $eventId = [string]$ev.event_id
                 $eventSessionId = [string]$ev.session_id
                 if (-not $eventId -or $script:SyncedEventIds.Contains($eventId) -or $script:QuarantinedEventIds.Contains($eventId) -or $script:WithdrawnSessionIds.Contains($eventSessionId)) {
@@ -513,6 +499,7 @@ function Sync-EventsToSupabase {
                 }
 
                 $uri = "$($script:SupabaseUrl)/rest/v1/$($targetTable)?on_conflict=event_id"
+                $networkAttempts++
                 Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -Body $bodyJson -TimeoutSec 6 -ErrorAction Stop | Out-Null
 
                 [void]$script:SyncedEventIds.Add($eventId)
@@ -580,6 +567,7 @@ function Sync-EventsToSupabase {
             }
         }
         if ($syncedCount -gt 0) {
+            $script:LastSyncOkAt = ConvertTo-BridgeIso ([DateTime]::UtcNow)
             Write-BridgeLog "Sincronizados $syncedCount evento(s) da oficina com o Supabase com sucesso." "INFO"
         }
 
@@ -604,7 +592,9 @@ function Sync-EventsToSupabase {
                 if ($archived.Count -gt 0) {
                     $archiveFile = Join-Path $DataDir "events_archive.jsonl"
                     [System.IO.File]::AppendAllLines($archiveFile, $archived, [System.Text.Encoding]::UTF8)
-                    [System.IO.File]::WriteAllLines($eventsFile, $unsynced, [System.Text.Encoding]::UTF8)
+                    # Arquivo temporario + troca: uma queda no meio nao perde eventos pendentes.
+                    $unsyncedText = if ($unsynced.Count -gt 0) { ($unsynced -join "`r`n") + "`r`n" } else { "" }
+                    Save-BridgeTextAtomic -Path $eventsFile -Text $unsyncedText
                     Write-BridgeLog "Compactada fila local: $($archived.Count) evento(s) arquivados com sucesso." "INFO"
                 }
             } catch {}
@@ -642,12 +632,14 @@ function Sync-SessionSnapshotsToSupabase {
             $isStale = (([DateTime]::UtcNow - $sfile.LastWriteTimeUtc).TotalHours -ge 12)
             if (-not $isClosed -and -not $isStale) { continue }
 
-            $instId = if ($sdata.installation_id) { [string]$sdata.installation_id } elseif ($script:InstallationId) { $script:InstallationId } else { "10000000-0000-4000-8000-000000000001" }
-            $siteVal = if ($sdata.site_id) { [string]$sdata.site_id } elseif ($script:SiteId) { $script:SiteId } else { "Polo-Nordeste" }
+            $instId = if ($sdata.installation_id) { [string]$sdata.installation_id } else { $script:InstallationId }
+            $siteVal = if ($sdata.site_id) { [string]$sdata.site_id } else { $script:SiteId }
+            # Sem identidade da maquina ou da bancada a sessao fica so no computador: nada de valores inventados.
+            if (-not $instId -or -not $siteVal -or -not $sdata.group_id) { continue }
 
             $sessRecord = [System.Collections.Specialized.OrderedDictionary]::new()
             $sessRecord["session_id"] = $sid
-            $sessRecord["group_id"] = if ($sdata.group_id) { [string]$sdata.group_id } else { [Guid]::Empty.ToString() }
+            $sessRecord["group_id"] = [string]$sdata.group_id
             $sessRecord["installation_id"] = $instId
             $sessRecord["site_id"] = $siteVal
             # Sem valor informado, registra "nao_informado" em vez de um codigo generico que pareca real.
@@ -660,6 +652,9 @@ function Sync-SessionSnapshotsToSupabase {
             $sessRecord["instrument_version"] = if ($sdata.instrument_version) { [string]$sdata.instrument_version } else { $null }
             $sessRecord["group_size"] = if ($sdata.group_size) { [int]$sdata.group_size } else { 2 }
             $sessRecord["phase"] = if ($sdata.phase) { [string]$sdata.phase } elseif ($sdata.status -eq "completed") { "completed" } else { "in_progress" }
+            $sessRecord["ended_by"] = if ($sdata.ended_by) { [string]$sdata.ended_by } else { $null }
+            $sessRecord["interrupted"] = if ($null -ne $sdata.interrupted) { [bool]$sdata.interrupted } else { $null }
+            $sessRecord["data_quality"] = if ($sdata.data_quality) { $sdata.data_quality } else { $null }
             $sessRecord["session_payload"] = $sdata
             $sessRecord["created_at"] = if ($sdata.started_at) { [string]$sdata.started_at } else { $nowIso }
             $sessRecord["updated_at"] = if ($sdata.completed_at) { [string]$sdata.completed_at } else { $nowIso }
@@ -776,7 +771,11 @@ function Move-BridgeAtomicFile {
     if (-not (Test-Path -LiteralPath $SourcePath)) { return }
     try {
         if (Test-Path -LiteralPath $DestinationPath) {
-            Move-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+            # Replace troca o arquivo numa unica operacao do sistema de arquivos (ReplaceFile no NTFS).
+            # Move-Item -Force apagava o destino antes de mover: uma queda nesse intervalo perdia o arquivo.
+            $backupPath = "$DestinationPath.bak"
+            [System.IO.File]::Replace($SourcePath, $DestinationPath, $backupPath, $true)
+            try { [System.IO.File]::Delete($backupPath) } catch {}
         } else {
             [System.IO.File]::Move($SourcePath, $DestinationPath)
         }
@@ -866,20 +865,21 @@ function Invoke-BridgeRetentionCleanup {
         } catch {}
     }
 
-    # 2.1 Sessoes interrompidas podem existir apenas em active_schedule.json.
+    # 2.1 A turma em andamento existe em active_session.json.
     # A retomada nunca estende o prazo absoluto contado desde started_at/created_at.
-    if (Test-Path -LiteralPath $scheduleFile) {
+    if (Test-Path -LiteralPath $script:SessionStateFile) {
         try {
-            $activeSchedule = Get-Content -LiteralPath $scheduleFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $activeSchedule = Get-Content -LiteralPath $script:SessionStateFile -Raw -Encoding UTF8 | ConvertFrom-Json
             $activeSid = [string]$activeSchedule.session_id
             $activeCreatedStr = if ($activeSchedule.created_at) { $activeSchedule.created_at } elseif ($activeSchedule.started_at) { $activeSchedule.started_at } elseif ($activeSchedule.startedAt) { $activeSchedule.startedAt } else { $null }
             if ($activeSid -and $activeCreatedStr) {
                 $activeCreatedUtc = if ($activeCreatedStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$activeCreatedStr).UtcDateTime } else { [DateTime]::Parse($activeCreatedStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
                 if ($activeCreatedUtc -lt $cutoffUtc) {
                     [void]$expiredSessionIds.Add($activeSid)
-                    Remove-Item -LiteralPath $scheduleFile -Force -ErrorAction SilentlyContinue
+                    Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
                     if ($script:ActiveSession -and [string]$script:ActiveSession.session_id -eq $activeSid) {
                         $script:ActiveSession = $null
+                        $script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
                     }
                 }
             }
@@ -1047,77 +1047,844 @@ function Get-MimeType([string]$ext) {
     }
 }
 
-function Play-CheckpointSound {
+# ------------------------------------------------------------------------------
+# Sessao da turma (v2.4.0): o bridge e o dono da sessao. Nenhuma pagina fica aberta
+# durante a aula. A sessao abre quando o PulseLab inicia (ou, depois de uma turma
+# encerrada, no primeiro programa SPIKE salvo), registra o programa e um sinal de vida
+# a cada 5 minutos e fecha pelo formulario final (Encerrar turma na bandeja), depois de
+# 3 horas, ou quando o computador ficou desligado/suspenso por mais de 20 minutos.
+# ------------------------------------------------------------------------------
+
+# Proveniencia do instrumento: mesmos valores de web/agent-simulator/lib/contracts.js (teste garante).
+$script:ProtocolVersion = "protocolo-oficinas-rotativas-v2"
+$script:InstrumentVersion = "bancada-2.4.0-rascunho"
+$script:InstrumentConfigHash = "40fa7892e0cb738230e30d19e3a1ea0144712192bc251391ad9d9ec8996425a1"
+
+function Get-BridgeIntSetting([string]$EnvName, [int]$Default, [int]$Min, [int]$Max) {
+    $raw = [Environment]::GetEnvironmentVariable($EnvName)
+    $parsed = 0
+    if ($raw -and [int]::TryParse($raw, [ref]$parsed) -and $parsed -ge $Min -and $parsed -le $Max) { return $parsed }
+    return $Default
+}
+
+# Variaveis de ambiente existem so para os testes automatizados encurtarem os prazos.
+$script:SessionMaxMinutes = Get-BridgeIntSetting "PULSELAB_SESSION_MAX_MINUTES" 180 1 720
+$script:ResumeGapMinutes = Get-BridgeIntSetting "PULSELAB_RESUME_GAP_MINUTES" 20 1 240
+$script:HeartbeatSeconds = Get-BridgeIntSetting "PULSELAB_HEARTBEAT_SECONDS" 300 1 3600
+$script:SpikePollSeconds = Get-BridgeIntSetting "PULSELAB_SPIKE_POLL_SECONDS" 15 1 600
+
+$script:SessionStateFile = Join-Path $DataDir "active_session.json"
+$script:PauseFile = Join-Path $DataDir "collection_pause.json"
+$script:ActiveSession = $null
+$script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
+$script:CollectionPause = $null
+$script:AwaitingActivity = $false
+$script:PendingBaseline = $null
+$script:LastClosedAtUtc = [DateTime]::UtcNow
+$script:LastSessionTick = [DateTime]::UtcNow
+$script:LastHeartbeat = [DateTime]::UtcNow
+$script:LastSpikePoll = [DateTime]::MinValue
+$script:CorruptedLinesFound = 0
+$script:LastSyncOkAt = $null
+$script:SpikeEnvironmentCache = $null
+$script:SpikeEnvironmentCheckedAt = [DateTime]::MinValue
+$script:Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+
+function Get-BridgeNowMs { return [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds() }
+
+function ConvertFrom-BridgeMs([int64]$Ms) { return [DateTimeOffset]::FromUnixTimeMilliseconds($Ms).UtcDateTime }
+
+function ConvertTo-BridgeIso([DateTime]$Utc) { return $Utc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fffZ") }
+
+# Escrita com WriteThrough: o dado chega ao disco antes de seguir (queda de energia ao fim da aula).
+function Write-BridgeFileDurable([string]$Path, [string]$Text) {
+    $bytes = $script:Utf8NoBom.GetBytes($Text)
+    $fs = New-Object System.IO.FileStream($Path, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, 4096, [System.IO.FileOptions]::WriteThrough)
     try {
-        [System.Media.SystemSounds]::Asterisk.Play()
-    } catch {
-        try { [System.Console]::Beep(880, 200) } catch {}
+        $fs.Write($bytes, 0, $bytes.Length)
+        $fs.Flush($true)
+    } finally {
+        $fs.Dispose()
     }
 }
 
-function Show-NativeCheckpointAlert([int]$mark) {
-    Write-BridgeLog "[ALERTA] Hora do checkpoint de $mark minutos!" "WARN"
+function Save-BridgeTextAtomic([string]$Path, [string]$Text) {
+    $tmp = "$Path.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+    Write-BridgeFileDurable -Path $tmp -Text $Text
+    Move-BridgeAtomicFile -SourcePath $tmp -DestinationPath $Path
+}
 
+function Add-BridgeEventLine([string]$Json) {
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    $bytes = $script:Utf8NoBom.GetBytes("$Json`r`n")
+    $fs = New-Object System.IO.FileStream($eventsFile, [System.IO.FileMode]::Append, [System.IO.FileAccess]::Write, [System.IO.FileShare]::Read, 4096, [System.IO.FileOptions]::WriteThrough)
     try {
-        $toastScript = $null
-        if ($PSScriptRoot) {
-            $cToast = Join-Path $PSScriptRoot "pulselab-toast.ps1"
-            if (Test-Path $cToast) { $toastScript = (Resolve-Path $cToast).Path }
-        }
-        if (-not $toastScript -and $env:LOCALAPPDATA) {
-            $cToast = Join-Path $env:LOCALAPPDATA "PulseLab\bridge\pulselab-toast.ps1"
-            if (Test-Path $cToast) { $toastScript = $cToast }
-        }
-
-        if ($toastScript) {
-            Start-Process powershell.exe -WindowStyle Hidden -ArgumentList @(
-                "-STA",
-                "-ExecutionPolicy", "Bypass",
-                "-NoProfile",
-                "-WindowStyle", "Hidden",
-                "-File", "`"$toastScript`"",
-                "-Mark", "$mark",
-                "-Port", "$Port",
-                "-AppRoot", "`"$AppRoot`""
-            ) | Out-Null
-        } else {
-            # Fallback sonoro se o script não for localizado
-            try { [System.Media.SystemSounds]::Asterisk.Play() } catch {}
-        }
-    } catch {
-        Write-BridgeLog "Falha ao disparar alerta visual: $($_.Exception.Message)" "WARN"
+        $fs.Write($bytes, 0, $bytes.Length)
+        $fs.Flush($true)
+    } finally {
+        $fs.Dispose()
     }
 }
 
-function Check-SessionSchedule {
-    if ($NoAlert -or $null -eq $script:ActiveSession) { return }
-
-    $startedAt = $script:ActiveSession.started_at
-    if (-not $startedAt) { return }
-
-    $nowMs = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-    $elapsedMinutes = ($nowMs - $startedAt) / 60000.0
-
-    $marks = @()
-    if ($null -ne $script:ActiveSession.marks) {
-        $marks = $script:ActiveSession.marks
-    }
-
-    $acks = if ($script:ActiveSession.acks) { $script:ActiveSession.acks } else { @() }
-
-    foreach ($m in $marks) {
-        if ($elapsedMinutes -ge $m -and -not ($acks -contains $m)) {
-            $timeSinceLastAlert = ([DateTime]::UtcNow - $script:LastAlertTime).TotalSeconds
-
-            # Se for novo mark ou intervalo de repetição (60 segundos)
-            if ($script:LastAlertMark -ne $m -or ($timeSinceLastAlert -ge 60 -and $script:AlertCount -lt 3)) {
-                $script:LastAlertMark = $m
-                $script:LastAlertTime = [DateTime]::UtcNow
-                $script:AlertCount++
-                Show-NativeCheckpointAlert -mark $m
+# Linha cortada por desligamento brusco: vai para events_corrupted.jsonl e a fila segue.
+# Se um evento inteiro ficou colado depois do pedaco cortado, ele e recuperado.
+function Repair-BridgeEventsFile {
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (-not (Test-Path -LiteralPath $eventsFile)) { return 0 }
+    $raw = ""
+    try { $raw = [System.IO.File]::ReadAllText($eventsFile, [System.Text.Encoding]::UTF8) } catch { return 0 }
+    $good = [System.Collections.Generic.List[string]]::new()
+    $bad = [System.Collections.Generic.List[string]]::new()
+    foreach ($line in ($raw -split "`r?`n")) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $parsed = $null
+        try { $parsed = $line | ConvertFrom-Json -ErrorAction Stop } catch { $parsed = $null }
+        if ($parsed -and $parsed.event_id) {
+            $good.Add($line)
+            continue
+        }
+        $bad.Add($line)
+        $idx = $line.IndexOf('{"', 1)
+        while ($idx -gt 0) {
+            $tail = $line.Substring($idx)
+            $salvaged = $null
+            try { $salvaged = $tail | ConvertFrom-Json -ErrorAction Stop } catch { $salvaged = $null }
+            if ($salvaged -and $salvaged.event_id) {
+                $good.Add($tail)
+                break
             }
-            break
+            $idx = $line.IndexOf('{"', $idx + 1)
         }
+    }
+    $endsClean = ($raw.Length -eq 0) -or $raw.EndsWith("`n")
+    if ($bad.Count -eq 0 -and $endsClean) { return 0 }
+    if ($bad.Count -gt 0) {
+        $foundAt = ConvertTo-BridgeIso ([DateTime]::UtcNow)
+        $records = foreach ($b in $bad) { ([ordered]@{ found_at = $foundAt; line = $b } | ConvertTo-Json -Compress) }
+        [System.IO.File]::AppendAllText((Join-Path $DataDir "events_corrupted.jsonl"), (($records -join "`r`n") + "`r`n"), $script:Utf8NoBom)
+        Write-BridgeLog "$($bad.Count) linha(s) corrompida(s) em events.jsonl separada(s) em events_corrupted.jsonl; a fila de envio segue." "WARN"
+    }
+    $text = if ($good.Count -gt 0) { ($good -join "`r`n") + "`r`n" } else { "" }
+    Save-BridgeTextAtomic -Path $eventsFile -Text $text
+    return $bad.Count
+}
+
+function ConvertTo-BridgeContextValue([object]$Value) {
+    $text = if ($null -ne $Value) { ([string]$Value).Trim() } else { "" }
+    if (-not $text -or $text.StartsWith("CONFIGURE_")) { return "nao_informado" }
+    return $text
+}
+
+function Read-BridgeInstallation {
+    $installationFile = Join-Path $DataDir "installation.json"
+    if (-not (Test-Path -LiteralPath $installationFile)) { return $null }
+    try { return (Get-Content -LiteralPath $installationFile -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
+function Read-BridgePackageConfig {
+    if (-not (Test-Path -LiteralPath $candidateConfig)) { return $null }
+    try { return (Get-Content -LiteralPath $candidateConfig -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
+# Missao do dia: catalogo config\missoes.json do pacote + calendario_missoes do provisionamento do polo.
+function Get-BridgeMissionForToday($Installation) {
+    if (-not (Get-Command Resolve-SpikeMission -ErrorAction SilentlyContinue)) { return $null }
+    if (-not $Installation -or -not $Installation.calendario_missoes) { return $null }
+    $catalogFile = Join-Path (Split-Path -Path $candidateConfig -Parent) "missoes.json"
+    if (-not (Test-Path -LiteralPath $catalogFile)) { return $null }
+    try {
+        $catalog = Get-Content -LiteralPath $catalogFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        return (Resolve-SpikeMission -Catalog $catalog -Calendar @($Installation.calendario_missoes) -Date (Get-Date))
+    } catch {
+        return $null
+    }
+}
+
+# Mesmos criterios fail-closed do PWA (isResearchAuthorized): sem provisionamento valido, nada e registrado.
+function Get-BridgeResearchContext {
+    $inst = Read-BridgeInstallation
+    if (-not $inst) { return $null }
+    if (-not ($inst.research_collection_enabled -is [bool]) -or -not $inst.research_collection_enabled) { return $null }
+    $authVersion = if ($inst.research_authorization_version) { ([string]$inst.research_authorization_version).Trim() } else { "" }
+    if (-not $authVersion) { return $null }
+    if (@($inst.research_authorized_purposes) -notcontains "academic_research") { return $null }
+
+    $cfg = Read-BridgePackageConfig
+    $groupSize = 0
+    if ($cfg -and $null -ne $cfg.group_size) { [void][int]::TryParse([string]$cfg.group_size, [ref]$groupSize) }
+    if ($groupSize -lt 2 -or $groupSize -gt 8) { return $null }
+
+    $installationId = if ($script:InstallationId) { $script:InstallationId } else { [string]$inst.installation_id }
+    if ($installationId -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { return $null }
+    $siteRaw = if ($inst.site_id) { $inst.site_id } else { $script:SiteId }
+    if (-not $siteRaw) { return $null }
+
+    $context = [ordered]@{
+        installation_id = $installationId
+        computer_id = if ($inst.machine_label) { [string]$inst.machine_label } else { "PC-" + $installationId.Substring(0, 6).ToUpperInvariant() }
+        site_id = ConvertTo-BridgeContextValue $siteRaw
+        regional_hub = ConvertTo-BridgeContextValue $(if ($inst.regional_hub) { $inst.regional_hub } elseif ($cfg) { $cfg.regional_hub } else { $null })
+        school_code = ConvertTo-BridgeContextValue $(if ($inst.school_code) { $inst.school_code } elseif ($cfg) { $cfg.school_code } else { $null })
+        workshop_code = ConvertTo-BridgeContextValue $(if ($cfg) { $cfg.workshop_code } else { $null })
+        class_code = ConvertTo-BridgeContextValue $(if ($cfg) { $cfg.class_code } else { $null })
+        activity_id = ConvertTo-BridgeContextValue $(if ($cfg) { $cfg.activity_id } else { $null })
+        group_size = $groupSize
+        research_authorization_version = $authVersion
+        mission = $null
+    }
+    $mission = Get-BridgeMissionForToday $inst
+    if ($mission -and $mission.mission_id) {
+        $context.mission = $mission
+        $context.activity_id = [string]$mission.mission_id
+    }
+    $missing = @()
+    foreach ($field in @("site_id", "regional_hub", "school_code", "workshop_code", "class_code", "activity_id")) {
+        if ($context[$field] -eq "nao_informado") { $missing += $field }
+    }
+    $context.context_missing = $missing
+    return $context
+}
+
+function Get-BridgeSpikeEnvironment([switch]$Refresh) {
+    if (-not (Get-Command Get-SpikeEnvironmentStatus -ErrorAction SilentlyContinue)) {
+        return [ordered]@{ status = "leitor_indisponivel"; directories_found = 0; project_count = 0 }
+    }
+    if ($Refresh -or -not $script:SpikeEnvironmentCache -or ([DateTime]::UtcNow - $script:SpikeEnvironmentCheckedAt).TotalSeconds -ge 60) {
+        try { $script:SpikeEnvironmentCache = Get-SpikeEnvironmentStatus } catch { $script:SpikeEnvironmentCache = [ordered]@{ status = "leitor_indisponivel"; directories_found = 0; project_count = 0 } }
+        $script:SpikeEnvironmentCheckedAt = [DateTime]::UtcNow
+    }
+    return $script:SpikeEnvironmentCache
+}
+
+# Chave do arquivo so para uso local (o caminho contem o usuario do Windows e nunca e exportado).
+function Get-BridgeFileKey([string]$Path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes("$($script:InstallationId)|$($Path.ToLowerInvariant())")
+        return (([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').Substring(0, 16).ToLowerInvariant())
+    } finally {
+        $sha.Dispose()
+    }
+}
+
+function Get-BridgeSpikeFiles([DateTime]$SinceUtc) {
+    if (-not (Get-Command Get-SpikeProjectFiles -ErrorAction SilentlyContinue)) { return @() }
+    try { return @(Get-SpikeProjectFiles -MinLastWriteTime $SinceUtc) } catch { return @() }
+}
+
+# Linha de base: projetos que ja existiam no inicio da turma. Se a turma continuar um deles,
+# a telemetria informa quantos blocos ja estavam la (nao conta o trabalho da turma anterior).
+function Get-BridgeSpikeBaseline([Nullable[DateTime]]$NotAfterUtc = $null) {
+    $baseline = @()
+    if (-not (Get-Command Get-SpikeProjectMetrics -ErrorAction SilentlyContinue)) { return $baseline }
+    $files = @(Get-BridgeSpikeFiles ([DateTime]::MinValue))
+    if ($NotAfterUtc) { $files = @($files | Where-Object { $_.LastWriteTimeUtc -le $NotAfterUtc.Value }) }
+    foreach ($file in ($files | Select-Object -First 3)) {
+        try {
+            $m = Get-SpikeProjectMetrics -ProjectPath $file.FullName
+            $baseline += [pscustomobject][ordered]@{
+                key = Get-BridgeFileKey $file.FullName
+                executable_blocks = [int]$m.executable_blocks
+                structure_hash = [string]$m.structure_hash
+            }
+        } catch {}
+    }
+    return $baseline
+}
+
+function Save-BridgeSessionState {
+    if (-not $script:ActiveSession) { return }
+    Save-BridgeTextAtomic -Path $script:SessionStateFile -Text ($script:ActiveSession | ConvertTo-Json -Depth 10)
+}
+
+function Get-BridgeSessionFile([string]$SessionId) {
+    $safeSessId = ($SessionId -replace '[^a-zA-Z0-9_-]', '_')
+    return (Join-Path (Join-Path $DataDir "sessoes") "sessao_$safeSessId.json")
+}
+
+function New-BridgeSnapshot([string]$Status, [hashtable]$Extra = @{}) {
+    $s = $script:ActiveSession
+    $snapshot = [ordered]@{
+        session_id = $s.session_id
+        group_id = $s.group_id
+        installation_id = $s.context.installation_id
+        computer_id = $s.context.computer_id
+        site_id = $s.context.site_id
+        regional_hub = $s.context.regional_hub
+        school_code = $s.context.school_code
+        workshop_code = $s.context.workshop_code
+        class_code = $s.context.class_code
+        activity_id = $s.context.activity_id
+        protocol_version = $script:ProtocolVersion
+        instrument_version = $script:InstrumentVersion
+        config_hash = $script:InstrumentConfigHash
+        client_version = "bridge/$($script:BridgeVersion)"
+        start_mode = $s.start_mode
+        started_at = $s.started_at
+        group_size = $s.context.group_size
+        status = $Status
+        phase = if ($Status -eq "completed") { "completed" } else { "in_progress" }
+        saved_at = ConvertTo-BridgeIso ([DateTime]::UtcNow)
+        timeline = @($script:SessionTimeline)
+    }
+    foreach ($k in $Extra.Keys) { $snapshot[$k] = $Extra[$k] }
+    return $snapshot
+}
+
+function Save-BridgeSnapshot($Snapshot) {
+    $sessoesDir = Join-Path $DataDir "sessoes"
+    if (-not (Test-Path -LiteralPath $sessoesDir)) { New-Item -ItemType Directory -Path $sessoesDir -Force | Out-Null }
+    Save-BridgeTextAtomic -Path (Get-BridgeSessionFile ([string]$Snapshot.session_id)) -Text ($Snapshot | ConvertTo-Json -Depth 12)
+}
+
+function Update-BridgeSessionCatalog($Snapshot) {
+    $catFile = Join-Path $DataDir "catalogo_sessoes.json"
+    $catalogList = [System.Collections.Generic.List[object]]::new()
+    if (Test-Path -LiteralPath $catFile) {
+        try {
+            foreach ($item in @(Get-Content -LiteralPath $catFile -Raw -Encoding UTF8 | ConvertFrom-Json)) {
+                if ($item -and $item.session_id -ne $Snapshot.session_id) { $catalogList.Add($item) }
+            }
+        } catch {}
+    }
+    $catalogList.Add([pscustomobject][ordered]@{
+        session_id = $Snapshot.session_id
+        group_id = $Snapshot.group_id
+        school_code = $Snapshot.school_code
+        class_code = $Snapshot.class_code
+        workshop_code = $Snapshot.workshop_code
+        started_at = $Snapshot.started_at
+        completed_at = $Snapshot.completed_at
+        duration_seconds = $Snapshot.duration_seconds
+        status = $Snapshot.status
+        ended_by = $Snapshot.ended_by
+        interrupted = $Snapshot.interrupted
+        events_count = @($Snapshot.timeline).Count
+        saved_locally_at = ConvertTo-BridgeIso ([DateTime]::UtcNow)
+        file_path = "sessoes/" + [System.IO.Path]::GetFileName((Get-BridgeSessionFile ([string]$Snapshot.session_id)))
+    })
+    Save-BridgeTextAtomic -Path $catFile -Text (ConvertTo-Json -InputObject $catalogList.ToArray() -Depth 5)
+}
+
+function Add-BridgeSessionEvent {
+    param(
+        [Parameter(Mandatory = $true)][string]$EventType,
+        [string]$Stage = "oficina_coletiva",
+        $Details = $null,
+        [string]$Severity = "info",
+        [string]$ParticipantId = $null,
+        [string]$ParticipantRole = $null,
+        [int64]$OccurredAtMs = 0
+    )
+    $s = $script:ActiveSession
+    if (-not $s) { return $null }
+    $occurredMs = if ($OccurredAtMs -gt 0) { $OccurredAtMs } else { Get-BridgeNowMs }
+    $s.sequence = [int]$s.sequence + 1
+    $mergedDetails = [ordered]@{
+        runtime = "bridge"
+        group_size = $s.context.group_size
+        collective_unit = "bancada"
+    }
+    if ($Details) { foreach ($k in $Details.Keys) { $mergedDetails[$k] = $Details[$k] } }
+    $event = [ordered]@{
+        event_id = [System.Guid]::NewGuid().ToString()
+        session_id = $s.session_id
+        dyad_id = $s.group_id
+        group_id = $s.group_id
+        installation_id = $s.context.installation_id
+        site_id = $s.context.site_id
+        regional_hub = $s.context.regional_hub
+        school_code = $s.context.school_code
+        workshop_code = $s.context.workshop_code
+        class_code = $s.context.class_code
+        activity_id = $s.context.activity_id
+        computer_id = $s.context.computer_id
+        protocol_version = $script:ProtocolVersion
+        config_version = $script:InstrumentVersion
+        config_hash = $script:InstrumentConfigHash
+        client_version = "bridge/$($script:BridgeVersion)"
+        event_type = $EventType
+        severity = $Severity
+        interval_mark = $null
+        participant_id = if ($ParticipantId) { $ParticipantId } else { $null }
+        participant_role = if ($ParticipantRole) { $ParticipantRole } else { $null }
+        activity_stage = $Stage
+        occurred_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $occurredMs)
+        elapsed_ms = [Math]::Max([int64]0, $occurredMs - [int64]$s.started_at_ms)
+        scheduled_at = $null
+        details = $mergedDetails
+        _target_table = "research_session_events"
+        _sequence = [int]$s.sequence
+    }
+    Add-BridgeEventLine -Json ($event | ConvertTo-Json -Depth 10 -Compress)
+    $script:SessionTimeline.Add([pscustomobject]$event)
+    $s.last_alive_ms = [Math]::Max([int64]$s.last_alive_ms, (Get-BridgeNowMs))
+    Save-BridgeSessionState
+    Save-BridgeSnapshot (New-BridgeSnapshot "in_progress")
+    return $event
+}
+
+function Start-BridgeSession {
+    param(
+        [string]$StartMode = "abertura_app",
+        [int64]$StartedAtMs = 0,
+        [int64]$SpikeSinceMs = 0
+    )
+    if ($script:ActiveSession) { return $true }
+    if (Test-BridgeCollectionPaused) { return $false }
+    $ctx = Get-BridgeResearchContext
+    if (-not $ctx) { return $false }
+    $nowMs = Get-BridgeNowMs
+    $startMs = if ($StartedAtMs -gt 0) { $StartedAtMs } else { $nowMs }
+    $sinceMs = if ($SpikeSinceMs -gt 0) { $SpikeSinceMs } else { $startMs }
+    # Depois de uma turma encerrada, a linha de base foi tirada no encerramento: quando o primeiro
+    # programa da nova turma e salvo, o arquivo da turma anterior ja foi sobrescrito.
+    $baseline = if ($null -ne $script:PendingBaseline) { @($script:PendingBaseline) } else { @(Get-BridgeSpikeBaseline -NotAfterUtc (ConvertFrom-BridgeMs $sinceMs)) }
+    $script:PendingBaseline = $null
+    $spikeEnv = Get-BridgeSpikeEnvironment -Refresh
+
+    $script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
+    $script:ActiveSession = [pscustomobject][ordered]@{
+        session_id = [System.Guid]::NewGuid().ToString()
+        group_id = [System.Guid]::NewGuid().ToString()
+        start_mode = $StartMode
+        started_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $startMs)
+        started_at_ms = $startMs
+        spike_since_ms = $sinceMs
+        context = [pscustomobject]$ctx
+        sequence = 0
+        last_alive_ms = $nowMs
+        heartbeat_count = 0
+        max_gap_min = 0
+        bridge_restarts = 0
+        corrupted_lines = 0
+        spike_status = [string]$spikeEnv.status
+        telemetry_events = 0
+        first_program_at = $null
+        baseline = $baseline
+        files = @()
+        last_file_key = $null
+        last_write_ticks = 0
+        last_telemetry_file_key = $null
+        last_structure_hash = $null
+        last_summary = $null
+    }
+    $script:AwaitingActivity = $false
+    $script:LastHeartbeat = [DateTime]::UtcNow
+    $script:LastSpikePoll = [DateTime]::MinValue
+
+    $missionId = if ($ctx.mission) { [string]$ctx.mission.mission_id } else { $null }
+    [void](Add-BridgeSessionEvent -EventType "session_started" -OccurredAtMs $startMs -Details ([ordered]@{
+        start_mode = $StartMode
+        research_authorization_version = $ctx.research_authorization_version
+        context_missing = @($ctx.context_missing)
+        instrument_version = $script:InstrumentVersion
+        spike_environment = $spikeEnv
+        baseline_projects = $baseline.Count
+        mission_id = $missionId
+        session_max_minutes = $script:SessionMaxMinutes
+    }))
+    Write-BridgeLog "Turma iniciada nesta bancada ($StartMode)." "INFO"
+    return $true
+}
+
+function Get-BridgeDataQuality {
+    $s = $script:ActiveSession
+    return [ordered]@{
+        heartbeat_count = [int]$s.heartbeat_count
+        max_heartbeat_gap_min = [Math]::Round([double]$s.max_gap_min, 1)
+        bridge_restarts = [int]$s.bridge_restarts
+        corrupted_lines = [int]$s.corrupted_lines
+        spike_status = [string]$s.spike_status
+        telemetry_events = [int]$s.telemetry_events
+        last_activity_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs ([int64]$s.last_alive_ms))
+    }
+}
+
+function Close-BridgeSession {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet("instrutor", "tempo", "sem_encerramento")][string]$EndedBy,
+        [int64]$EndedAtMs = 0,
+        $Experience = $null,
+        $Rubric = $null
+    )
+    $s = $script:ActiveSession
+    if (-not $s) { return $null }
+    $nowMs = Get-BridgeNowMs
+    $endMs = if ($EndedAtMs -gt 0) { [Math]::Max([int64]$s.started_at_ms, $EndedAtMs) } else { $nowMs }
+
+    $assessmentSkipped = $null
+    if ($EndedBy -eq "instrutor") {
+        $value = $null
+        $label = $null
+        $refused = $true
+        if ($Experience -and -not $Experience.refused -and $null -ne $Experience.value) {
+            $value = [int]$Experience.value
+            $label = [string]$Experience.label
+            $refused = $false
+        }
+        [void](Add-BridgeSessionEvent -EventType "experience_recorded" -Stage "encerramento" -ParticipantId "BANCADA" -ParticipantRole "group" -Details ([ordered]@{
+            item_id = "experiencia_bancada_v1"
+            instrument_version = $script:InstrumentVersion
+            value = $value
+            label = $label
+            refused = $refused
+        }))
+        $assessmentSkipped = (-not $Rubric) -or ($Rubric.skipped -eq $true)
+        [void](Add-BridgeSessionEvent -EventType "rubric_completed" -Stage "encerramento" -ParticipantId "INSTRUTOR" -ParticipantRole "instructor" -Details ([ordered]@{
+            result_item_id = "resultado_bancada_v1"
+            support_item_id = "apoio_instrutor_v1"
+            instrument_version = $script:InstrumentVersion
+            result_level = if ($assessmentSkipped) { $null } else { [int]$Rubric.result_level }
+            support_level = if ($assessmentSkipped) { $null } else { [string]$Rubric.support_level }
+            skipped = $assessmentSkipped
+        }))
+    }
+
+    # Lacunas de sinal de vida acima de dois intervalos indicam computador desligado ou PulseLab parado.
+    $gapLimitMin = 2 * $script:HeartbeatSeconds / 60.0
+    $interrupted = ([int]$s.bridge_restarts -gt 0) -or ([double]$s.max_gap_min -gt $gapLimitMin) -or ([int]$s.corrupted_lines -gt 0)
+    $quality = Get-BridgeDataQuality
+    $durationSeconds = [int][Math]::Round(($endMs - [int64]$s.started_at_ms) / 1000.0)
+    $completedDetails = [ordered]@{
+        ended_by = $EndedBy
+        duration_min = [Math]::Round($durationSeconds / 60.0, 1)
+        interrupted = $interrupted
+        data_quality = $quality
+        recorded_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $nowMs)
+    }
+    if ($null -ne $assessmentSkipped) { $completedDetails.assessment_skipped = $assessmentSkipped }
+    [void](Add-BridgeSessionEvent -EventType "session_completed" -Stage "encerramento" -OccurredAtMs $endMs -Details $completedDetails)
+
+    $firstProgramMin = $null
+    if ($s.first_program_at) {
+        try {
+            $firstUtc = [DateTime]::Parse([string]$s.first_program_at, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            $firstProgramMin = [Math]::Round(($firstUtc - (ConvertFrom-BridgeMs ([int64]$s.started_at_ms))).TotalMinutes, 1)
+        } catch {}
+    }
+    $snapshot = New-BridgeSnapshot "completed" @{
+        completed_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $endMs)
+        duration_seconds = $durationSeconds
+        ended_by = $EndedBy
+        interrupted = $interrupted
+        data_quality = $quality
+        summary = [ordered]@{
+            first_program_at = $s.first_program_at
+            first_program_min = $firstProgramMin
+            telemetry_events = [int]$s.telemetry_events
+            final = $s.last_summary
+        }
+    }
+    Save-BridgeSnapshot $snapshot
+    try { Update-BridgeSessionCatalog $snapshot } catch { Write-BridgeLog "Aviso ao atualizar catalogo: $($_.Exception.Message)" "WARN" }
+
+    Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
+    $script:ActiveSession = $null
+    $script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
+    $script:LastClosedAtUtc = [DateTime]::UtcNow
+    $script:AwaitingActivity = $true
+    try { $script:PendingBaseline = @(Get-BridgeSpikeBaseline) } catch { $script:PendingBaseline = $null }
+    Write-BridgeLog "Turma encerrada ($EndedBy, $([Math]::Round($durationSeconds / 60.0)) min)." "INFO"
+    return $snapshot
+}
+
+function Restore-BridgeSessionState {
+    if (-not (Test-Path -LiteralPath $script:SessionStateFile)) { return $false }
+    $state = $null
+    try { $state = Get-Content -LiteralPath $script:SessionStateFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $state = $null }
+    if (-not $state -or -not $state.session_id -or -not $state.context -or -not $state.started_at_ms) {
+        Write-BridgeLog "Estado de turma ilegivel em active_session.json; descartado." "WARN"
+        Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+    $timeline = [System.Collections.Generic.List[object]]::new()
+    $sessFile = Get-BridgeSessionFile ([string]$state.session_id)
+    if (Test-Path -LiteralPath $sessFile) {
+        try {
+            $snap = Get-Content -LiteralPath $sessFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            foreach ($ev in @($snap.timeline)) { if ($ev) { $timeline.Add($ev) } }
+        } catch {}
+    }
+    $script:ActiveSession = $state
+    $script:SessionTimeline = $timeline
+    return $true
+}
+
+function Read-BridgeCollectionPause {
+    if (-not (Test-Path -LiteralPath $script:PauseFile)) { return $null }
+    try { return (Get-Content -LiteralPath $script:PauseFile -Raw -Encoding UTF8 | ConvertFrom-Json) } catch { return $null }
+}
+
+function Clear-BridgeCollectionPause {
+    $script:CollectionPause = $null
+    Remove-Item -LiteralPath $script:PauseFile -Force -ErrorAction SilentlyContinue
+}
+
+function Test-BridgeCollectionPaused {
+    $pause = $script:CollectionPause
+    if (-not $pause) { return $false }
+    if ((Get-BridgeNowMs) -ge [int64]$pause.until_ms) {
+        Clear-BridgeCollectionPause
+        $script:LastClosedAtUtc = [DateTime]::UtcNow
+        $script:AwaitingActivity = $true
+        try { $script:PendingBaseline = @(Get-BridgeSpikeBaseline) } catch { $script:PendingBaseline = $null }
+        Write-BridgeLog "Pausa do registro encerrada pelo prazo; a proxima turma volta a ser registrada." "INFO"
+        return $false
+    }
+    return $true
+}
+
+# "Nao registrar esta turma" (bandeja): apaga os dados da turma atual e pausa ate a proxima aula.
+function Suspend-BridgeCollection {
+    $sessionId = if ($script:ActiveSession) { [string]$script:ActiveSession.session_id } else { $null }
+    $script:ActiveSession = $null
+    $script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
+    Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
+    $remoteConfirmed = $true
+    if ($sessionId) { $remoteConfirmed = Remove-BridgeSessionData -SessionId $sessionId -Reason "nao_registrar_turma" }
+    $nowMs = Get-BridgeNowMs
+    $script:CollectionPause = [pscustomobject][ordered]@{
+        paused_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $nowMs)
+        until_ms = $nowMs + ([int64]$script:SessionMaxMinutes * 60000)
+        last_alive_ms = $nowMs
+    }
+    Save-BridgeTextAtomic -Path $script:PauseFile -Text ($script:CollectionPause | ConvertTo-Json)
+    $script:AwaitingActivity = $false
+    Write-BridgeLog "Registro desta turma cancelado pelo instrutor; dados apagados e coleta pausada ate a proxima aula." "INFO"
+    return [ordered]@{ purged_session = [bool]$sessionId; remote_pending = (-not $remoteConfirmed) }
+}
+
+function Add-BridgeHeartbeat {
+    $s = $script:ActiveSession
+    $s.heartbeat_count = [int]$s.heartbeat_count + 1
+    [void](Add-BridgeSessionEvent -EventType "heartbeat" -Details ([ordered]@{
+        spike_status = [string]$s.spike_status
+        uptime_min = [Math]::Round(([DateTime]::UtcNow - $script:StartTime).TotalMinutes, 1)
+        pending_sync = Get-BridgePendingSyncCount
+    }))
+}
+
+function Set-BridgeSpikeStatus([string]$Status) {
+    $s = $script:ActiveSession
+    if ($s.spike_status -eq $Status) { return }
+    $s.spike_status = $Status
+    if ($Status -in @("pasta_nao_encontrada", "arquivo_invalido", "arquivo_bloqueado", "leitor_indisponivel")) {
+        [void](Add-BridgeSessionEvent -EventType "quality_issue" -Severity "warning" -Details ([ordered]@{ issue = "spike_$Status" }))
+    } else {
+        Save-BridgeSessionState
+    }
+}
+
+function Update-BridgeSpikeTelemetry {
+    $s = $script:ActiveSession
+    if (-not $s -or -not (Get-Command Get-SpikeProjectMetrics -ErrorAction SilentlyContinue)) { return }
+    $files = @(Get-BridgeSpikeFiles (ConvertFrom-BridgeMs ([int64]$s.spike_since_ms)))
+    if ($files.Count -eq 0) {
+        $envStatus = [string](Get-BridgeSpikeEnvironment).status
+        if ($envStatus -eq "pasta_nao_encontrada") { Set-BridgeSpikeStatus "pasta_nao_encontrada" }
+        elseif ($s.telemetry_events -eq 0) { Set-BridgeSpikeStatus "sem_alteracao" }
+        return
+    }
+    $newest = $files[0]
+    $key = Get-BridgeFileKey $newest.FullName
+    $ticks = [int64]$newest.LastWriteTimeUtc.Ticks
+    if ($s.last_file_key -eq $key -and [int64]$s.last_write_ticks -eq $ticks) { return }
+
+    $m = Get-SpikeProjectMetrics -ProjectPath $newest.FullName
+    $status = if ($m.spike_status) { [string]$m.spike_status } else { "ok" }
+    $s.last_file_key = $key
+    # Arquivo em uso pelo SPIKE: tenta de novo na proxima leitura.
+    $s.last_write_ticks = if ($status -eq "arquivo_bloqueado") { 0 } else { $ticks }
+    Set-BridgeSpikeStatus $status
+    if ($status -notin @("ok", "python")) { Save-BridgeSessionState; return }
+
+    $hash = [string]$m.structure_hash
+    if ($status -eq "ok" -and $hash -and $hash -eq $s.last_structure_hash -and $key -eq $s.last_telemetry_file_key) {
+        Save-BridgeSessionState
+        return
+    }
+
+    $files = @($s.files)
+    $fileEntry = $files | Where-Object { $_.key -eq $key } | Select-Object -First 1
+    if (-not $fileEntry) {
+        $fileEntry = [pscustomobject]@{ key = $key; seq = $files.Count + 1 }
+        $s.files = @($files + $fileEntry)
+    }
+    $base = @($s.baseline) | Where-Object { $_ -and $_.key -eq $key } | Select-Object -First 1
+    $blocks = [int]$m.executable_blocks
+    $baselineBlocks = if ($base) { [int]$base.executable_blocks } else { 0 }
+    $first = (-not $s.first_program_at) -and (($blocks -gt $baselineBlocks) -or ($status -eq "python"))
+    if ($first) { $s.first_program_at = ConvertTo-BridgeIso $newest.LastWriteTimeUtc }
+
+    $details = [ordered]@{
+        file_seq = [int]$fileEntry.seq
+        continued_previous_file = [bool]$base
+        language = [string]$m.language
+        spike_status = $status
+        saved_at = ConvertTo-BridgeIso $newest.LastWriteTimeUtc
+        first_coding_detected = $first
+        executable_blocks = $blocks
+        top_level_stacks = [int]$m.top_level_stacks
+        uses_motor = [bool]$m.uses_motor
+        uses_sensor = [bool]$m.uses_sensor
+        uses_loop = [bool]$m.uses_loop
+        uses_condition = [bool]$m.uses_condition
+        uses_variable = [bool]$m.uses_variable
+        uses_procedure = [bool]$m.uses_procedure
+        opcode_counts = $m.opcode_counts
+        structure_hash = $m.structure_hash
+        ct_score = $m.ct_score
+        ct_score_version = $m.ct_score_version
+    }
+    if ($base) {
+        $details.baseline_executable_blocks = $baselineBlocks
+        $details.blocks_delta_from_baseline = $blocks - $baselineBlocks
+    }
+    $coverage = $null
+    if ($s.context.mission -and (Get-Command Measure-SpikeMissionCoverage -ErrorAction SilentlyContinue)) {
+        try { $coverage = Measure-SpikeMissionCoverage -Metrics $m -Mission $s.context.mission } catch { $coverage = $null }
+        if ($coverage) { $details.mission_coverage = $coverage }
+    }
+    $s.telemetry_events = [int]$s.telemetry_events + 1
+    $s.last_structure_hash = $hash
+    $s.last_telemetry_file_key = $key
+    $s.last_summary = [ordered]@{
+        executable_blocks = $blocks
+        ct_total = if ($m.ct_score) { $m.ct_score.total } else { $null }
+        mission_coverage = if ($coverage) { $coverage.coverage } else { $null }
+    }
+    $stage = if ($first) { "primeira_programacao_detectada" } else { "atualizacao_codigo_spike" }
+    [void](Add-BridgeSessionEvent -EventType "spike_telemetry" -Stage $stage -Details $details)
+}
+
+function Initialize-BridgeSession {
+    $legacySchedule = Join-Path $DataDir "active_schedule.json"
+    if (Test-Path -LiteralPath $legacySchedule) { Remove-Item -LiteralPath $legacySchedule -Force -ErrorAction SilentlyContinue }
+
+    $nowMs = Get-BridgeNowMs
+    $script:CollectionPause = Read-BridgeCollectionPause
+    if ($script:CollectionPause) {
+        # Computador desligado por mais de 20 minutos: e outra aula, a pausa acabou.
+        $pauseGapMin = ($nowMs - [int64]$script:CollectionPause.last_alive_ms) / 60000.0
+        if ($pauseGapMin -ge $script:ResumeGapMinutes -or $nowMs -ge [int64]$script:CollectionPause.until_ms) { Clear-BridgeCollectionPause }
+    }
+
+    if (Restore-BridgeSessionState) {
+        $s = $script:ActiveSession
+        $s.corrupted_lines = [int]$s.corrupted_lines + $script:CorruptedLinesFound
+        $gapMin = ($nowMs - [int64]$s.last_alive_ms) / 60000.0
+        $ageMin = ($nowMs - [int64]$s.started_at_ms) / 60000.0
+        if ($gapMin -ge $script:ResumeGapMinutes) {
+            [void](Close-BridgeSession -EndedBy "sem_encerramento" -EndedAtMs ([int64]$s.last_alive_ms))
+        } elseif ($ageMin -ge $script:SessionMaxMinutes) {
+            [void](Close-BridgeSession -EndedBy "tempo" -EndedAtMs ([int64]$s.started_at_ms + [int64]$script:SessionMaxMinutes * 60000))
+        } else {
+            $s.bridge_restarts = [int]$s.bridge_restarts + 1
+            $s.max_gap_min = [Math]::Max([double]$s.max_gap_min, $gapMin)
+            [void](Add-BridgeSessionEvent -EventType "quality_issue" -Severity "warning" -Details ([ordered]@{
+                issue = "pulselab_reiniciado"
+                gap_min = [Math]::Round($gapMin, 1)
+            }))
+            Write-BridgeLog "Turma em andamento retomada apos reinicio ($([Math]::Round($gapMin, 1)) min sem sinal)." "INFO"
+            return
+        }
+    }
+    [void](Start-BridgeSession -StartMode "abertura_app")
+}
+
+function Invoke-BridgeSessionTick {
+    $now = [DateTime]::UtcNow
+    $sinceLastTickMin = ($now - $script:LastSessionTick).TotalMinutes
+    $script:LastSessionTick = $now
+    $s = $script:ActiveSession
+
+    if ($s) {
+        $nowMs = Get-BridgeNowMs
+        if ($sinceLastTickMin -ge $script:ResumeGapMinutes) {
+            # Computador suspenso entre aulas: a turma acabou quando ele parou.
+            [void](Close-BridgeSession -EndedBy "sem_encerramento" -EndedAtMs ([int64]$s.last_alive_ms))
+            return
+        }
+        if (($nowMs - [int64]$s.started_at_ms) -ge ([int64]$script:SessionMaxMinutes * 60000)) {
+            [void](Close-BridgeSession -EndedBy "tempo")
+            return
+        }
+        if (($now - $script:LastSpikePoll).TotalSeconds -ge $script:SpikePollSeconds) {
+            $script:LastSpikePoll = $now
+            try { Update-BridgeSpikeTelemetry } catch { Write-BridgeLog "Aviso na leitura do SPIKE: $($_.Exception.Message)" "WARN" }
+        }
+        if ($script:ActiveSession -and ($now - $script:LastHeartbeat).TotalSeconds -ge $script:HeartbeatSeconds) {
+            $script:LastHeartbeat = $now
+            Add-BridgeHeartbeat
+        }
+        return
+    }
+
+    if ($script:CollectionPause) {
+        if (-not (Test-BridgeCollectionPaused)) { return }
+        if (($now - $script:LastHeartbeat).TotalSeconds -ge $script:HeartbeatSeconds) {
+            $script:LastHeartbeat = $now
+            $script:CollectionPause.last_alive_ms = Get-BridgeNowMs
+            try { Save-BridgeTextAtomic -Path $script:PauseFile -Text ($script:CollectionPause | ConvertTo-Json) } catch {}
+        }
+        return
+    }
+
+    # Depois de uma turma encerrada, a proxima abre no primeiro programa salvo.
+    if ($script:AwaitingActivity -and ($now - $script:LastSpikePoll).TotalSeconds -ge $script:SpikePollSeconds) {
+        $script:LastSpikePoll = $now
+        $files = @(Get-BridgeSpikeFiles $script:LastClosedAtUtc)
+        if ($files.Count -gt 0) {
+            $firstSave = ($files | Sort-Object LastWriteTimeUtc | Select-Object -First 1).LastWriteTimeUtc
+            $closedMs = [DateTimeOffset]::new($script:LastClosedAtUtc).ToUnixTimeMilliseconds()
+            $startMs = [DateTimeOffset]::new([DateTime]::SpecifyKind($firstSave, [DateTimeKind]::Utc)).ToUnixTimeMilliseconds()
+            [void](Start-BridgeSession -StartMode "atividade_spike" -StartedAtMs $startMs -SpikeSinceMs $closedMs)
+        }
+    }
+}
+
+function Get-BridgePendingSyncCount {
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (-not (Test-Path -LiteralPath $eventsFile)) { return 0 }
+    $pending = 0
+    try {
+        foreach ($line in [System.IO.File]::ReadAllLines($eventsFile)) {
+            if ($line -match '"event_id":"([^"]+)"' -and -not $script:SyncedEventIds.Contains($Matches[1]) -and -not $script:QuarantinedEventIds.Contains($Matches[1])) { $pending++ }
+        }
+    } catch {}
+    return $pending
+}
+
+function Get-BridgeStatus {
+    $s = $script:ActiveSession
+    $ctx = Get-BridgeResearchContext
+    $session = $null
+    if ($s) {
+        $session = [ordered]@{
+            session_id = $s.session_id
+            started_at = $s.started_at
+            elapsed_min = [Math]::Round(((Get-BridgeNowMs) - [int64]$s.started_at_ms) / 60000.0, 1)
+            start_mode = $s.start_mode
+            telemetry_events = [int]$s.telemetry_events
+            heartbeat_count = [int]$s.heartbeat_count
+            spike_status = [string]$s.spike_status
+            mission_id = if ($s.context.mission) { [string]$s.context.mission.mission_id } else { $null }
+        }
+    }
+    return [ordered]@{
+        status = "ok"
+        version = $script:BridgeVersion
+        research_active = [bool]$ctx
+        machine_label = if ($ctx) { $ctx.computer_id } else { $null }
+        paused = [bool]$script:CollectionPause
+        awaiting_activity = [bool]$script:AwaitingActivity
+        session = $session
+        session_max_minutes = $script:SessionMaxMinutes
+        spike_environment = Get-BridgeSpikeEnvironment
+        cloud_enabled = [bool]$script:SupabaseOperationalJwt
+        pending_sync = Get-BridgePendingSyncCount
+        last_sync_ok_at = $script:LastSyncOkAt
     }
 }
 
@@ -1173,6 +1940,158 @@ function Send-BridgeResponse {
         $Response.ContentLength64 = 0
     }
     $Response.Close()
+}
+
+# Expurgo local completo de uma sessao (retirada ou "Nao registrar esta turma"), com tombstone
+# gravado antes de apagar qualquer arquivo e exclusao remota com nova tentativa.
+function Remove-BridgeSessionData {
+    param(
+        [Parameter(Mandatory = $true)][string]$SessionId,
+        [string]$Reason = ""
+    )
+    $reqSessId = $SessionId
+    $reason = $Reason
+    $catFile = Join-Path $DataDir "catalogo_sessoes.json"
+    # Registra o tombstone antes de apagar qualquer arquivo. Assim, mesmo em caso
+    # de queda ou falha de rede, nenhum payload atrasado desta sessao volta a subir.
+    $remotePurgeConfirmed = Register-SessionWithdrawal -SessionId $reqSessId
+
+    # PURGA ATOMICA
+    $safeSessId = ($reqSessId -replace '[^a-zA-Z0-9_-]', '_')
+
+    # Snapshot/arquivo da sessao
+    $sessoesDir = Join-Path $DataDir "sessoes"
+    $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
+    if (Test-Path $sessFile) {
+        try { Remove-Item -LiteralPath $sessFile -Force -ErrorAction SilentlyContinue } catch {}
+    }
+
+    # Eventos de events.jsonl
+    $purgedEventIds = [System.Collections.Generic.HashSet[string]]::new()
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (Test-Path $eventsFile) {
+        try {
+            $allLines = [System.IO.File]::ReadAllLines($eventsFile, [System.Text.Encoding]::UTF8)
+            $survivingLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($line in $allLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $evObj = $line | ConvertFrom-Json
+                    if ($evObj.session_id -eq $reqSessId) {
+                        if ($evObj.event_id) { [void]$purgedEventIds.Add([string]$evObj.event_id) }
+                        continue
+                    }
+                    $survivingLines.Add($line)
+                } catch {
+                    $survivingLines.Add($line)
+                }
+            }
+            $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+            Move-BridgeAtomicFile -SourcePath $eventsTmp -DestinationPath $eventsFile
+        } catch {
+            Write-BridgeLog "Aviso ao purgar eventos de $safeSessId`: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    # Eventos arquivados e payloads de quarentena pertencem ao mesmo registro da sessao.
+    foreach ($jsonlSpec in @(
+        @{ Path = (Join-Path $DataDir "events_archive.jsonl"); Nested = $false; TempPrefix = "events_archive_purge" },
+        @{ Path = (Join-Path $DataDir "events_quarantine.jsonl"); Nested = $true; TempPrefix = "events_quarantine_payloads_purge" }
+    )) {
+        if (-not (Test-Path -LiteralPath $jsonlSpec.Path)) { continue }
+        try {
+            $allLines = [System.IO.File]::ReadAllLines($jsonlSpec.Path, [System.Text.Encoding]::UTF8)
+            $survivingLines = [System.Collections.Generic.List[string]]::new()
+            foreach ($line in $allLines) {
+                if ([string]::IsNullOrWhiteSpace($line)) { continue }
+                try {
+                    $recordObj = $line | ConvertFrom-Json
+                    $recordSessionId = if ($jsonlSpec.Nested) {
+                        if ($recordObj.session_id) { [string]$recordObj.session_id } elseif ($recordObj.event -and $recordObj.event.session_id) { [string]$recordObj.event.session_id } else { "" }
+                    } else {
+                        [string]$recordObj.session_id
+                    }
+                    if ($recordSessionId -eq $reqSessId) {
+                        if ($recordObj.event_id) { [void]$purgedEventIds.Add([string]$recordObj.event_id) }
+                        continue
+                    }
+                    $survivingLines.Add($line)
+                } catch {
+                    $survivingLines.Add($line)
+                }
+            }
+            $jsonlTmp = Join-Path $DataDir "$($jsonlSpec.TempPrefix).tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($jsonlTmp, $survivingLines, [System.Text.Encoding]::UTF8)
+            Move-BridgeAtomicFile -SourcePath $jsonlTmp -DestinationPath $jsonlSpec.Path
+        } catch {
+            Write-BridgeLog "Aviso ao purgar $($jsonlSpec.Path) para $safeSessId`: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    # Catalogo de sessoes
+    if (Test-Path $catFile) {
+        try {
+            $catExisting = Get-Content -Path $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            $survivingCatalog = [System.Collections.Generic.List[object]]::new()
+            if ($catExisting -is [System.Collections.IEnumerable]) {
+                foreach ($item in $catExisting) {
+                    if ($item.session_id -ne $reqSessId) {
+                        $survivingCatalog.Add($item)
+                    }
+                }
+            } elseif ($catExisting -and $catExisting.session_id -ne $reqSessId) {
+                $survivingCatalog.Add($catExisting)
+            }
+            $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
+            $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
+            Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
+        } catch {
+            Write-BridgeLog "Aviso ao purgar catalogo para $safeSessId`: $($_.Exception.Message)" "WARN"
+        }
+    }
+
+    # Trackers locais
+    if ($purgedEventIds.Count -gt 0) {
+        foreach ($purgedId in $purgedEventIds) {
+            [void]$script:SyncedEventIds.Remove($purgedId)
+            [void]$script:QuarantinedEventIds.Remove($purgedId)
+        }
+        if (Test-Path $script:SyncedTrackerFile) {
+            try {
+                $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
+                Move-BridgeAtomicFile -SourcePath $syncTmp -DestinationPath $script:SyncedTrackerFile
+            } catch {}
+        }
+        if (Test-Path $script:QuarantinedTrackerFile) {
+            try {
+                $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+                [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
+                Move-BridgeAtomicFile -SourcePath $quarTmp -DestinationPath $script:QuarantinedTrackerFile
+            } catch {}
+        }
+    }
+
+    [void]$script:SyncedSessionIds.Remove($reqSessId)
+    [void]$script:QuarantinedSessionIds.Remove($reqSessId)
+    if (Test-Path $script:SyncedSessionsTrackerFile) {
+        try {
+            $sessSyncTmp = Join-Path $DataDir "sessions_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($sessSyncTmp, [string[]]$script:SyncedSessionIds, [System.Text.Encoding]::UTF8)
+            Move-BridgeAtomicFile -SourcePath $sessSyncTmp -DestinationPath $script:SyncedSessionsTrackerFile
+        } catch {}
+    }
+    if (Test-Path $script:QuarantinedSessionsTrackerFile) {
+        try {
+            $sessQuarTmp = Join-Path $DataDir "sessions_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($sessQuarTmp, [string[]]$script:QuarantinedSessionIds, [System.Text.Encoding]::UTF8)
+            Move-BridgeAtomicFile -SourcePath $sessQuarTmp -DestinationPath $script:QuarantinedSessionsTrackerFile
+        } catch {}
+    }
+    Write-BridgeLog "Sessao $safeSessId expurgada localmente (motivo: $reason; remoto confirmado: $remotePurgeConfirmed)." "INFO"
+    return $remotePurgeConfirmed
 }
 
 # Executar limpeza de retencao absoluta na inicializacao
@@ -1354,7 +2273,7 @@ $script:LastPeriodicTick = [DateTime]::MinValue
 function Invoke-BridgePeriodicTasks {
     if (([DateTime]::UtcNow - $script:LastPeriodicTick).TotalMilliseconds -lt 1000) { return }
     $script:LastPeriodicTick = [DateTime]::UtcNow
-    Check-SessionSchedule
+    try { Invoke-BridgeSessionTick } catch { Write-BridgeLog "Aviso na sessao da turma: $($_.Exception.Message)" "WARN" }
     if (([DateTime]::UtcNow - $script:LastRetentionCleanup).TotalHours -ge 1) {
         $script:LastRetentionCleanup = [DateTime]::UtcNow
         try { Invoke-BridgeRetentionCleanup -MaxAgeDays (Get-BridgeRetentionDays) } catch {}
@@ -1423,6 +2342,10 @@ try {
     exit 1
 }
 
+# Fila local integra e sessao da turma antes de atender requisicoes.
+try { $script:CorruptedLinesFound = Repair-BridgeEventsFile } catch { Write-BridgeLog "Aviso ao verificar events.jsonl: $($_.Exception.Message)" "WARN" }
+try { Initialize-BridgeSession } catch { Write-BridgeLog "Aviso ao iniciar a sessao da turma: $($_.Exception.Message)" "WARN" }
+
 # 6. Loop de Atendimento Resiliente
 try {
     while ($true) {
@@ -1485,7 +2408,7 @@ try {
 
             # --- RESTRICAO DE METODOS E HEADERS POR ROTA ---
             # 1. Rotas estritamente GET
-            if ($path -in @("/health", "/v1/health", "/config", "/v1/config", "/v1/spike/metrics")) {
+            if ($path -in @("/health", "/v1/health", "/config", "/v1/config", "/v1/status", "/v1/session/current")) {
                 if ($request.HttpMethod -ne "GET") {
                     $response.StatusCode = 405
                     $response.AddHeader("Allow", "GET")
@@ -1496,15 +2419,12 @@ try {
 
             # 2. Rotas estritamente POST
             $postRoutes = @(
-                "/v1/sessions",
-                "/v1/sessions/save",
-                "/v1/events",
-                "/v1/alert",
-                "/v1/sessions/reset",
+                "/v1/session/close",
+                "/v1/session/pause",
                 "/update",
                 "/v1/update"
             )
-            if ($path -in $postRoutes -or $path -match "^/v1/sessions/([^/]+)/checkpoints/(\d+)/ack$") {
+            if ($path -in $postRoutes) {
                 if ($request.HttpMethod -ne "POST") {
                     $response.StatusCode = 405
                     $response.AddHeader("Allow", "POST")
@@ -1514,7 +2434,7 @@ try {
             }
 
             # 3. Endpoints que consomem corpo JSON: exigir Content-Type e limitar Content-Length
-            $jsonBodyRoutes = @("/v1/sessions", "/v1/sessions/save", "/v1/events", "/v1/alert", "/v1/sessions/reset")
+            $jsonBodyRoutes = @("/v1/session/close", "/v1/session/pause")
             if ($path -in $jsonBodyRoutes) {
                 if ($request.ContentLength64 -lt 0) {
                     Write-BridgeLog "Rejeitada requisicao sem Content-Length definido em $path" "WARN"
@@ -1540,17 +2460,14 @@ try {
             # --- ROTAS DA API REST ---
             if ($path -eq "/health" -or $path -eq "/v1/health") {
                 $uptime = ([DateTime]::UtcNow - $script:StartTime).TotalSeconds
-                $spikeDetected = $false
-                if (Get-Command Find-LatestSpikeProject -ErrorAction SilentlyContinue) {
-                    $spikeDetected = (Find-LatestSpikeProject) -ne $null
-                }
+                $spikeDetected = ([int](Get-BridgeSpikeEnvironment).project_count) -gt 0
                 $healthObj = @{
                     status = "ok"
                     version = $script:BridgeVersion
                     uptime_seconds = [Math]::Round($uptime, 1)
                     port = $Port
                     spike_detected = $spikeDetected
-                    has_active_session = ($script:ActiveSession -ne $null)
+                    has_active_session = ($null -ne $script:ActiveSession)
                 }
                 $json = $healthObj | ConvertTo-Json
                 $buf = [System.Text.Encoding]::UTF8.GetBytes($json)
@@ -1644,186 +2561,98 @@ try {
                 continue
             }
 
-            if ($path -eq "/v1/sessions" -and $request.HttpMethod -eq "POST") {
-                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
-                if (-not $readRes.Success) {
-                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
-                    continue
-                }
-
-                $body = $null
-                try {
-                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) {
-                        $body = $readRes.Body | ConvertFrom-Json
-                    }
-                } catch {
-                    $body = $null
-                }
-
-                $sessId = if ($body -and $body.session_id) { [string]$body.session_id } else { $null }
-                if (-not $body -or [string]::IsNullOrWhiteSpace($sessId)) {
-                    Write-BridgeLog "Requisicao /v1/sessions rejeitada: JSON invalido ou session_id ausente" "WARN"
-                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON must be valid object containing session_id" }
-                    continue
-                }
-
-                $parsedStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-                if ($body.started_at) {
-                    $strVal = [string]$body.started_at
-                    if ($strVal -match '^\d+$') {
-                        $parsedStartedAt = [int64]$strVal
-                    } else {
-                        try {
-                            $parsedStartedAt = [DateTimeOffset]::Parse($strVal).ToUnixTimeMilliseconds()
-                        } catch {
-                            $parsedStartedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-                        }
-                    }
-                }
-
-                $marks = @()
-                if ($null -ne $body.marks) {
-                    $marks = @($body.marks)
-                }
-
-                $script:ActiveSession = [PSCustomObject]@{
-                    session_id = $sessId
-                    started_at = $parsedStartedAt
-                    marks = $marks
-                    acks = @()
-                    created_at = [DateTime]::UtcNow.ToString("o")
-                }
-                $schedTmp = Join-Path $DataDir "active_schedule.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                $schedJson = $script:ActiveSession | ConvertTo-Json
-                [System.IO.File]::WriteAllText($schedTmp, $schedJson, [System.Text.Encoding]::UTF8)
-                Move-BridgeAtomicFile -SourcePath $schedTmp -DestinationPath $scheduleFile
-                $script:LastAlertMark = 0
-                $script:AlertCount = 0
-
-                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "scheduled"; session_id = $script:ActiveSession.session_id }
+            if ($path -eq "/v1/status" -and $request.HttpMethod -eq "GET") {
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload (Get-BridgeStatus)
                 continue
             }
 
-            if ($path -eq "/v1/sessions/save" -and $request.HttpMethod -eq "POST") {
-                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
+            if ($path -eq "/v1/session/current" -and $request.HttpMethod -eq "GET") {
+                $s = $script:ActiveSession
+                $current = [ordered]@{
+                    research_active = [bool](Get-BridgeResearchContext)
+                    paused = [bool]$script:CollectionPause
+                    active = [bool]$s
+                    session_id = if ($s) { $s.session_id } else { $null }
+                    started_at = if ($s) { $s.started_at } else { $null }
+                    elapsed_min = if ($s) { [Math]::Round(((Get-BridgeNowMs) - [int64]$s.started_at_ms) / 60000.0, 1) } else { $null }
+                }
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload $current
+                continue
+            }
+
+            # Formulario final (aberto pela bandeja): resposta da bancada + avaliacao do instrutor.
+            if ($path -eq "/v1/session/close" -and $request.HttpMethod -eq "POST") {
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 65536
                 if (-not $readRes.Success) {
                     Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
                     continue
                 }
-
-                $rawBody = $readRes.Body
-                $saveObj = $null
+                $closeObj = $null
                 try {
-                    if (-not [string]::IsNullOrWhiteSpace($rawBody)) {
-                        $saveObj = $rawBody | ConvertFrom-Json
-                    }
+                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) { $closeObj = $readRes.Body | ConvertFrom-Json }
                 } catch {
-                    $saveObj = $null
+                    $closeObj = $null
                 }
-
-                $sessId = if ($saveObj -and $saveObj.session_id) { [string]$saveObj.session_id } else { $null }
-                if (-not $saveObj -or [string]::IsNullOrWhiteSpace($sessId)) {
-                    Write-BridgeLog "Payload de sessao rejeitado em /v1/sessions/save: JSON invalido ou session_id ausente" "WARN"
-                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON must be valid object containing session_id" }
+                if (-not $closeObj) {
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON invalido" }
+                    continue
+                }
+                if ($script:CollectionPause -or -not (Get-BridgeResearchContext)) {
+                    Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "Este computador nao esta registrando turmas agora." }
+                    continue
+                }
+                # A turma precisa ser a mesma que o formulario mostrou: evita gravar respostas na turma errada.
+                $expectedSessId = if ($script:ActiveSession) { [string]$script:ActiveSession.session_id } else { $null }
+                $requestedSessId = if ($closeObj.session_id) { [string]$closeObj.session_id } else { $null }
+                if ($requestedSessId -ne $expectedSessId) {
+                    Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "A turma mudou desde que o formulario foi aberto."; session_id = $expectedSessId }
                     continue
                 }
 
-                $safeSessId = ($sessId -replace '[^a-zA-Z0-9_-]', '_')
-
-                $sessoesDir = Join-Path $DataDir "sessoes"
-                if (-not (Test-Path $sessoesDir)) {
-                    New-Item -ItemType Directory -Path $sessoesDir -Force | Out-Null
+                $exp = $closeObj.experience
+                $rub = $closeObj.rubric
+                $validClose = $true
+                if ($exp -and -not $exp.refused) {
+                    $expValue = 0
+                    if (-not [int]::TryParse([string]$exp.value, [ref]$expValue) -or $expValue -lt 1 -or $expValue -gt 4) { $validClose = $false }
+                    if ($exp.label -and ([string]$exp.label).Length -gt 30) { $validClose = $false }
+                }
+                if ($rub -and -not $rub.skipped) {
+                    $resultLevel = -1
+                    if (-not [int]::TryParse([string]$rub.result_level, [ref]$resultLevel) -or $resultLevel -lt 0 -or $resultLevel -gt 3) { $validClose = $false }
+                    if ([string]$rub.support_level -notin @("nenhum", "algum", "muito")) { $validClose = $false }
+                }
+                if (-not $validClose) {
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "Respostas fora da escala do instrumento" }
+                    continue
                 }
 
-                $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
-                $sessTmp = Join-Path $sessoesDir "sessao_$safeSessId.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                [System.IO.File]::WriteAllText($sessTmp, $rawBody, [System.Text.Encoding]::UTF8)
-                Move-BridgeAtomicFile -SourcePath $sessTmp -DestinationPath $sessFile
-
-                # Atualiza catalogo local de sessoes (catalogo_sessoes.json)
-                $catFile = Join-Path $DataDir "catalogo_sessoes.json"
-                $catalogList = [System.Collections.Generic.List[object]]::new()
-                if (Test-Path $catFile) {
-                    try {
-                        $existingJson = Get-Content -Path $catFile -Raw -Encoding UTF8
-                        $existing = $existingJson | ConvertFrom-Json
-                        if ($existing -is [System.Collections.IEnumerable]) {
-                            foreach ($item in $existing) {
-                                if ($item.session_id -ne $sessId) {
-                                    $catalogList.Add($item)
-                                }
-                            }
-                        } else {
-                            if ($existing -and $existing.session_id -ne $sessId) {
-                                $catalogList.Add($existing)
-                            }
-                        }
-                    } catch {}
+                if (-not $expectedSessId) {
+                    # Nenhum programa foi salvo desde a turma anterior: abre a sessao so para guardar as respostas.
+                    [void](Start-BridgeSession -StartMode "encerramento_sem_atividade")
                 }
-
-                $evCount = 0
-                if ($saveObj -and $saveObj.events) {
-                    if ($saveObj.events -is [System.Collections.IEnumerable]) {
-                        $evCount = $saveObj.events.Count
-                    } else {
-                        $evCount = 1
-                    }
+                $closedSnapshot = Close-BridgeSession -EndedBy "instrutor" -Experience $exp -Rubric $rub
+                if (-not $closedSnapshot) {
+                    Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "Nao foi possivel abrir a turma para registrar as respostas." }
+                    continue
                 }
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "closed"; session_id = $closedSnapshot.session_id }
+                continue
+            }
 
-                $summaryRecord = [PSCustomObject]@{
-                    session_id = $sessId
-                    group_id = if ($saveObj) { [string]$saveObj.group_id } else { "" }
-                    school_code = if ($saveObj) { [string]$saveObj.school_code } else { "" }
-                    class_code = if ($saveObj) { [string]$saveObj.class_code } else { "" }
-                    workshop_code = if ($saveObj) { [string]$saveObj.workshop_code } else { "" }
-                    started_at = if ($saveObj) { [string]$saveObj.started_at } else { "" }
-                    completed_at = if ($saveObj) { [string]$saveObj.completed_at } else { "" }
-                    duration_seconds = if ($saveObj -and $saveObj.duration_seconds) { [int]$saveObj.duration_seconds } else { 0 }
-                    team_role = if ($saveObj) { [string]$saveObj.team_role } else { "" }
-                    status = if ($saveObj) { [string]$saveObj.status } else { "completed" }
-                    events_count = $evCount
-                    saved_locally_at = [DateTime]::UtcNow.ToString("o")
-                    file_path = "sessoes/sessao_$safeSessId.json"
+            # "Nao registrar esta turma" (bandeja): apaga a turma atual e pausa ate a proxima aula.
+            if ($path -eq "/v1/session/pause" -and $request.HttpMethod -eq "POST") {
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 4096
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
                 }
-                $catalogList.Add($summaryRecord)
-
-                $catJson = $catalogList | ConvertTo-Json -Depth 5
-                $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
-                Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
-
-                # Persiste tambem todos os eventos da sessao no events.jsonl
-                if ($saveObj -and $saveObj.events) {
-                    $eventsFile = Join-Path $DataDir "events.jsonl"
-                    $linesToAppend = [System.Collections.Generic.List[string]]::new()
-                    if ($saveObj.events -is [System.Collections.IEnumerable]) {
-                        foreach ($ev in $saveObj.events) {
-                            $linesToAppend.Add(($ev | ConvertTo-Json -Compress -Depth 10))
-                        }
-                    } else {
-                        $linesToAppend.Add(($saveObj.events | ConvertTo-Json -Compress -Depth 10))
-                    }
-                    if ($linesToAppend.Count -gt 0) {
-                        [System.IO.File]::AppendAllLines($eventsFile, $linesToAppend, [System.Text.Encoding]::UTF8)
-                        Sync-EventsToSupabase
-                    }
+                if (-not (Get-BridgeResearchContext)) {
+                    Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "Este computador nao registra dados de pesquisa." }
+                    continue
                 }
-                Sync-SessionSnapshotsToSupabase
-
-                Write-BridgeLog "Sessao $safeSessId salva com sucesso na base local ($sessFile)." "INFO"
-
-                $respObj = @{
-                    status = "saved"
-                    session_id = $sessId
-                    file = "sessao_$safeSessId.json"
-                    data_dir = $DataDir
-                    total_sessions = $catalogList.Count
-                }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
+                $pauseResult = Suspend-BridgeCollection
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "paused"; purged_session = $pauseResult.purged_session; remote_pending = $pauseResult.remote_pending }
                 continue
             }
 
@@ -1848,320 +2677,6 @@ try {
                     version = $script:BridgeVersion
                 }
                 $buf = [System.Text.Encoding]::UTF8.GetBytes(($dbSummary | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
-                continue
-            }
-
-            if ($path -match "^/v1/sessions/([^/]+)/checkpoints/(\d+)/ack$" -and $request.HttpMethod -eq "POST") {
-                $sessId = $Matches[1]
-                $mark = [int]$Matches[2]
-
-                if ($script:ActiveSession) {
-                    $currentAcks = @($script:ActiveSession.acks)
-                    if (-not ($currentAcks -contains $mark)) {
-                        $currentAcks += $mark
-                        $script:ActiveSession.acks = $currentAcks
-                        $schedTmp = Join-Path $DataDir "active_schedule.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                        $schedJson = $script:ActiveSession | ConvertTo-Json
-                        [System.IO.File]::WriteAllText($schedTmp, $schedJson, [System.Text.Encoding]::UTF8)
-                        Move-BridgeAtomicFile -SourcePath $schedTmp -DestinationPath $scheduleFile
-                    }
-                }
-
-                $respObj = @{ status = "acknowledged"; mark = $mark }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($respObj | ConvertTo-Json))
-                $response.ContentType = "application/json; charset=utf-8"
-                $response.ContentLength64 = $buf.Length
-                $response.OutputStream.Write($buf, 0, $buf.Length)
-                $response.Close()
-                continue
-            }
-
-            if ($path -eq "/v1/alert" -and $request.HttpMethod -eq "POST") {
-                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
-                if (-not $readRes.Success) {
-                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
-                    continue
-                }
-
-                $mark = 20
-                if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) {
-                    try {
-                        $body = $readRes.Body | ConvertFrom-Json
-                        if ($body -and $body.mark) { $mark = [int]$body.mark }
-                    } catch {
-                        Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "Invalid JSON in alert request" }
-                        continue
-                    }
-                }
-
-                Show-NativeCheckpointAlert -mark $mark
-                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "triggered"; mark = $mark }
-                continue
-            }
-
-            if ($path -eq "/v1/events" -and $request.HttpMethod -eq "POST") {
-                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
-                if (-not $readRes.Success) {
-                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
-                    continue
-                }
-
-                $rawJson = $readRes.Body
-                $eventObj = $null
-                try {
-                    if (-not [string]::IsNullOrWhiteSpace($rawJson)) {
-                        $eventObj = $rawJson | ConvertFrom-Json
-                    }
-                } catch {
-                    $eventObj = $null
-                }
-
-                $evId = if ($eventObj -and $eventObj.event_id) { [string]$eventObj.event_id } else { $null }
-                $sessId = if ($eventObj -and $eventObj.session_id) { [string]$eventObj.session_id } else { $null }
-
-                if (-not $eventObj -or [string]::IsNullOrWhiteSpace($evId) -or [string]::IsNullOrWhiteSpace($sessId)) {
-                    Write-BridgeLog "Evento rejeitado por JSON invalido ou ausencia de event_id/session_id" "WARN"
-                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON must be valid object containing event_id and session_id" }
-                    continue
-                }
-
-                try {
-                    $eventsFile = Join-Path $DataDir "events.jsonl"
-                    $compactJson = $eventObj | ConvertTo-Json -Depth 10 -Compress
-                    [System.IO.File]::AppendAllText($eventsFile, "$compactJson`r`n", [System.Text.Encoding]::UTF8)
-                    Sync-EventsToSupabase
-                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "persisted"; event_id = $evId; session_id = $sessId }
-                } catch {
-                    Write-BridgeLog "Falha ao gravar evento no disco: $($_.Exception.Message)" "WARN"
-                    Send-BridgeResponse -Response $response -StatusCode 500 -Payload @{ error = "Internal Server Error" }
-                }
-                continue
-            }
-
-            if ($path -eq "/v1/sessions/reset" -and $request.HttpMethod -eq "POST") {
-                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 5242880
-                if (-not $readRes.Success) {
-                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
-                    continue
-                }
-
-                $reqObj = $null
-                try {
-                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) {
-                        $reqObj = $readRes.Body | ConvertFrom-Json
-                    }
-                } catch {
-                    $reqObj = $null
-                }
-
-                $reqSessId = if ($reqObj -and $reqObj.session_id) { [string]$reqObj.session_id } else { $null }
-                if ([string]::IsNullOrWhiteSpace($reqSessId)) {
-                    Write-BridgeLog "Requisicao /v1/sessions/reset rejeitada: session_id e obrigatorio" "WARN"
-                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "session_id is required" }
-                    continue
-                }
-
-                $reason = if ($reqObj -and $reqObj.reason) { [string]$reqObj.reason } else { "" }
-                $explicitPurge = ($reqObj -and ($reqObj.purge -eq $true -or $reqObj.action -eq "purge" -or $reason -in @("ethical_refusal", "abandonment", "withdraw", "refusal", "purge")))
-                $explicitCompleted = ($reqObj -and ($reqObj.completed -eq $true -or $reason -eq "prepare_next"))
-
-                # Verificar se sessao consta como concluida no catalogo local
-                $catFile = Join-Path $DataDir "catalogo_sessoes.json"
-                $isCatalogCompleted = $false
-                if (Test-Path $catFile) {
-                    try {
-                        $catJson = Get-Content -Path $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                        if ($catJson -is [System.Collections.IEnumerable]) {
-                            foreach ($item in $catJson) {
-                                if ($item.session_id -eq $reqSessId -and $item.status -eq "completed") {
-                                    $isCatalogCompleted = $true
-                                    break
-                                }
-                            }
-                        } elseif ($catJson -and $catJson.session_id -eq $reqSessId -and $catJson.status -eq "completed") {
-                            $isCatalogCompleted = $true
-                        }
-                    } catch {}
-                }
-
-                $shouldPurge = $explicitPurge -or (-not $explicitCompleted -and -not $isCatalogCompleted)
-
-                # Resetar estado ativo em memoria e agenda
-                $script:ActiveSession = $null
-                $script:LastAlertMark = 0
-                $script:AlertCount = 0
-                if (Test-Path $scheduleFile) {
-                    try { Remove-Item -LiteralPath $scheduleFile -Force -ErrorAction SilentlyContinue } catch {}
-                }
-
-                if (-not $shouldPurge) {
-                    Write-BridgeLog "Preparando proxima oficina. Sessao concluida $reqSessId preservada na base local." "INFO"
-                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "preserved"; session_id = $reqSessId; purged = $false }
-                    continue
-                }
-
-                # Registra o tombstone antes de apagar qualquer arquivo. Assim, mesmo em caso
-                # de queda ou falha de rede, nenhum payload atrasado desta sessao volta a subir.
-                $remotePurgeConfirmed = Register-SessionWithdrawal -SessionId $reqSessId
-
-                # PURGA ATOMICA
-                $safeSessId = ($reqSessId -replace '[^a-zA-Z0-9_-]', '_')
-
-                # Snapshot/arquivo da sessao
-                $sessoesDir = Join-Path $DataDir "sessoes"
-                $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
-                if (Test-Path $sessFile) {
-                    try { Remove-Item -LiteralPath $sessFile -Force -ErrorAction SilentlyContinue } catch {}
-                }
-
-                # Eventos de events.jsonl
-                $purgedEventIds = [System.Collections.Generic.HashSet[string]]::new()
-                $eventsFile = Join-Path $DataDir "events.jsonl"
-                if (Test-Path $eventsFile) {
-                    try {
-                        $allLines = [System.IO.File]::ReadAllLines($eventsFile, [System.Text.Encoding]::UTF8)
-                        $survivingLines = [System.Collections.Generic.List[string]]::new()
-                        foreach ($line in $allLines) {
-                            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                            try {
-                                $evObj = $line | ConvertFrom-Json
-                                if ($evObj.session_id -eq $reqSessId) {
-                                    if ($evObj.event_id) { [void]$purgedEventIds.Add([string]$evObj.event_id) }
-                                    continue
-                                }
-                                $survivingLines.Add($line)
-                            } catch {
-                                $survivingLines.Add($line)
-                            }
-                        }
-                        $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                        [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-                        Move-BridgeAtomicFile -SourcePath $eventsTmp -DestinationPath $eventsFile
-                    } catch {
-                        Write-BridgeLog "Aviso ao purgar eventos de $safeSessId`: $($_.Exception.Message)" "WARN"
-                    }
-                }
-
-                # Eventos arquivados e payloads de quarentena pertencem ao mesmo registro da sessao.
-                foreach ($jsonlSpec in @(
-                    @{ Path = (Join-Path $DataDir "events_archive.jsonl"); Nested = $false; TempPrefix = "events_archive_purge" },
-                    @{ Path = (Join-Path $DataDir "events_quarantine.jsonl"); Nested = $true; TempPrefix = "events_quarantine_payloads_purge" }
-                )) {
-                    if (-not (Test-Path -LiteralPath $jsonlSpec.Path)) { continue }
-                    try {
-                        $allLines = [System.IO.File]::ReadAllLines($jsonlSpec.Path, [System.Text.Encoding]::UTF8)
-                        $survivingLines = [System.Collections.Generic.List[string]]::new()
-                        foreach ($line in $allLines) {
-                            if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                            try {
-                                $recordObj = $line | ConvertFrom-Json
-                                $recordSessionId = if ($jsonlSpec.Nested) {
-                                    if ($recordObj.session_id) { [string]$recordObj.session_id } elseif ($recordObj.event -and $recordObj.event.session_id) { [string]$recordObj.event.session_id } else { "" }
-                                } else {
-                                    [string]$recordObj.session_id
-                                }
-                                if ($recordSessionId -eq $reqSessId) {
-                                    if ($recordObj.event_id) { [void]$purgedEventIds.Add([string]$recordObj.event_id) }
-                                    continue
-                                }
-                                $survivingLines.Add($line)
-                            } catch {
-                                $survivingLines.Add($line)
-                            }
-                        }
-                        $jsonlTmp = Join-Path $DataDir "$($jsonlSpec.TempPrefix).tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                        [System.IO.File]::WriteAllLines($jsonlTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-                        Move-BridgeAtomicFile -SourcePath $jsonlTmp -DestinationPath $jsonlSpec.Path
-                    } catch {
-                        Write-BridgeLog "Aviso ao purgar $($jsonlSpec.Path) para $safeSessId`: $($_.Exception.Message)" "WARN"
-                    }
-                }
-
-                # Catalogo de sessoes
-                if (Test-Path $catFile) {
-                    try {
-                        $catExisting = Get-Content -Path $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
-                        $survivingCatalog = [System.Collections.Generic.List[object]]::new()
-                        if ($catExisting -is [System.Collections.IEnumerable]) {
-                            foreach ($item in $catExisting) {
-                                if ($item.session_id -ne $reqSessId) {
-                                    $survivingCatalog.Add($item)
-                                }
-                            }
-                        } elseif ($catExisting -and $catExisting.session_id -ne $reqSessId) {
-                            $survivingCatalog.Add($catExisting)
-                        }
-                        $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
-                        $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                        [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
-                        Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
-                    } catch {
-                        Write-BridgeLog "Aviso ao purgar catalogo para $safeSessId`: $($_.Exception.Message)" "WARN"
-                    }
-                }
-
-                # Trackers locais
-                if ($purgedEventIds.Count -gt 0) {
-                    foreach ($purgedId in $purgedEventIds) {
-                        [void]$script:SyncedEventIds.Remove($purgedId)
-                        [void]$script:QuarantinedEventIds.Remove($purgedId)
-                    }
-                    if (Test-Path $script:SyncedTrackerFile) {
-                        try {
-                            $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                            [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
-                            Move-BridgeAtomicFile -SourcePath $syncTmp -DestinationPath $script:SyncedTrackerFile
-                        } catch {}
-                    }
-                    if (Test-Path $script:QuarantinedTrackerFile) {
-                        try {
-                            $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                            [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
-                            Move-BridgeAtomicFile -SourcePath $quarTmp -DestinationPath $script:QuarantinedTrackerFile
-                        } catch {}
-                    }
-                }
-
-                [void]$script:SyncedSessionIds.Remove($reqSessId)
-                [void]$script:QuarantinedSessionIds.Remove($reqSessId)
-                if (Test-Path $script:SyncedSessionsTrackerFile) {
-                    try {
-                        $sessSyncTmp = Join-Path $DataDir "sessions_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                        [System.IO.File]::WriteAllLines($sessSyncTmp, [string[]]$script:SyncedSessionIds, [System.Text.Encoding]::UTF8)
-                        Move-BridgeAtomicFile -SourcePath $sessSyncTmp -DestinationPath $script:SyncedSessionsTrackerFile
-                    } catch {}
-                }
-                if (Test-Path $script:QuarantinedSessionsTrackerFile) {
-                    try {
-                        $sessQuarTmp = Join-Path $DataDir "sessions_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                        [System.IO.File]::WriteAllLines($sessQuarTmp, [string[]]$script:QuarantinedSessionIds, [System.Text.Encoding]::UTF8)
-                        Move-BridgeAtomicFile -SourcePath $sessQuarTmp -DestinationPath $script:QuarantinedSessionsTrackerFile
-                    } catch {}
-                }
-
-                $purgeStatus = if ($remotePurgeConfirmed) { "purged" } else { "purged_local_remote_pending" }
-                Write-BridgeLog "Sessao $safeSessId expurgada localmente (motivo: $reason; remoto confirmado: $remotePurgeConfirmed)." "INFO"
-                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = $purgeStatus; session_id = $reqSessId; purged = $true; remote_pending = (-not $remotePurgeConfirmed); purged_events = $purgedEventIds.Count }
-                continue
-            }
-
-            if ($path -eq "/v1/spike/metrics" -and $request.HttpMethod -eq "GET") {
-                $minTime = [DateTime]::MinValue
-                if ($script:ActiveSession -and $script:ActiveSession.started_at) {
-                    try {
-                        $minTime = [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$script:ActiveSession.started_at).UtcDateTime
-                    } catch {}
-                }
-                $metrics = if (Get-Command Get-SpikeProjectMetrics -ErrorAction SilentlyContinue) {
-                    Get-SpikeProjectMetrics -MinLastWriteTime $minTime
-                } else {
-                    @{ source = "spike_project"; project_saved = $false; error = "parser_not_loaded" }
-                }
-                $buf = [System.Text.Encoding]::UTF8.GetBytes(($metrics | ConvertTo-Json -Depth 5))
                 $response.ContentType = "application/json; charset=utf-8"
                 $response.ContentLength64 = $buf.Length
                 $response.OutputStream.Write($buf, 0, $buf.Length)

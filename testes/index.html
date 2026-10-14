@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
   <meta name="description" content="PulseLab - Área Oculta de Testes e Validação da Versão Offline 100%">
-  <title>PulseLab | Laboratório de Testes (Aba Oculta — v2.3.1 Oficinas Rotativas)</title>
+  <title>PulseLab | Laboratório de Testes (Aba Oculta — v2.4.0 Oficinas Rotativas)</title>
 
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -303,8 +303,8 @@
       <div class="secret-badge">
         <span class="dot"></span> Aba Oculta · Ambiente de Testes
       </div>
-      <h1>PulseLab Offline v2.3.1 (Oficinas Rotativas)</h1>
-      <p class="subtitle">Tela da bancada no Microsoft Edge, serviço local (Bridge) que guarda os registros no computador e leitura de contagens dos projetos do LEGO SPIKE (.llsp3). Perguntas só no encerramento da turma.</p>
+      <h1>PulseLab Offline v2.4.0 (Oficinas Rotativas)</h1>
+      <p class="subtitle">Ícone do PulseLab na bandeja do Windows (nenhuma página aberta durante a aula), serviço local (Bridge) que guarda os registros no computador e leitura da estrutura dos projetos do LEGO SPIKE (.llsp3). Perguntas só no encerramento da turma.</p>
     </header>
 
     <!-- CARD: DOWNLOAD DO PACOTE OFFLINE -->
@@ -317,8 +317,8 @@
       </div>
 
       <div class="action-row">
-        <a href="/instalador/downloads/PulseLab-2.3.1-Windows.zip" download class="btn-download">
-          <span>⬇️</span> Baixar PulseLab-2.3.1-Windows.zip
+        <a href="/instalador/downloads/PulseLab-2.4.0-Windows.zip" download class="btn-download">
+          <span>⬇️</span> Baixar PulseLab-2.4.0-Windows.zip
         </a>
         <a href="/alunos/?lab=1" target="_blank" class="btn-pwa">
           <span>🧪</span> Testar PWA no Navegador (Modo Lab)
@@ -328,10 +328,10 @@
       <div>
         <label style="font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); font-weight: 700;">
           Checksum SHA-256 Oficial:
-          <a href="/instalador/downloads/PulseLab-2.3.1-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(.sha256)</a>
+          <a href="/instalador/downloads/PulseLab-2.4.0-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">(.sha256)</a>
         </label>
         <div class="code-box">
-          <span id="testes-sha256" style="font-size: 0.78rem;">f86a0877d73afbe15845ac327784e0f9316d7ab9652e1e1d17eff62250fec21b  PulseLab-2.3.1-Windows.zip</span>
+          <span id="testes-sha256" style="font-size: 0.78rem;">e5b880b1e03f53823ceac2dfdbcb416583dc64b1e000e6c626d8e4cbe7316a75  PulseLab-2.4.0-Windows.zip</span>
 
           <button type="button" class="copy-btn" onclick="copySnippet(this)">Copiar</button>
         </div>
@@ -349,20 +349,26 @@
 
       <ol class="test-steps">
         <li>
-          <strong>Descompacte o ZIP:</strong> Extraia <code>PulseLab-2.3.1-Windows.zip</code> em uma pasta ou pendrive.
+          <strong>Descompacte o ZIP:</strong> Extraia <code>PulseLab-2.4.0-Windows.zip</code> em uma pasta ou pendrive.
 
         </li>
         <li>
           <strong>Instale localmente:</strong> Dê dois cliques em <code>Instalar-PulseLab.bat</code>. Ele copia os arquivos para <code>%LOCALAPPDATA%\PulseLab</code>, pede um rótulo para o computador (ex.: <code>PET-LAB1-PC03</code>) e cria os atalhos sem pedir senha de administrador.
         </li>
         <li>
-          <strong>Inicie a oficina:</strong> Use o atalho <code>PulseLab - Iniciar Oficina</code> da Área de Trabalho. O Bridge local sobe em <code>http://127.0.0.1:43128/alunos/</code> e abre o Microsoft Edge. A sessão da turma começa sozinha.
+          <strong>Reinicie o Windows:</strong> O PulseLab deve abrir sozinho, com o ícone na bandeja (perto do relógio) indicando registro ativo. O Bridge local sobe na porta 43128 e nenhuma página abre. A sessão da turma começa sozinha. Confira em "Ver situação".
         </li>
         <li>
           <strong>Valide sem internet:</strong> Desconecte o Wi-Fi ou cabo de rede. O app continua funcionando. No pacote genérico nada é registrado para pesquisa; com o pacote do polo, os registros ficam no computador.
         </li>
         <li>
-          <strong>Teste o encerramento:</strong> Toque em "Encerrar turma". Responda a pergunta da bancada (4 carinhas ou "Preferimos não responder") e o registro do instrutor (resultado e apoio, ou pular). Confira se a próxima turma começa em seguida.
+          <strong>Teste o encerramento:</strong> Clique com o botão direito no ícone e escolha "Encerrar turma…". Responda a pergunta da bancada (4 carinhas ou "Preferimos não responder") e o registro do instrutor (resultado e apoio, ou pular). Confira em "Ver situação" que a turma foi encerrada; a próxima sessão começa quando um programa for salvo no SPIKE.
+        </li>
+        <li>
+          <strong>Teste a recusa:</strong> Com uma turma em andamento, escolha "Não registrar esta turma". Os dados da turma atual devem sumir do computador, sem voltar por exportação, e o registro deve ficar pausado até a próxima turma.
+        </li>
+        <li>
+          <strong>Teste o fechamento automático:</strong> Desligue o computador por mais de 20 minutos com uma turma aberta. Na volta, a sessão anterior deve estar fechada como sem encerramento e uma nova sessão deve começar.
         </li>
       </ol>
     </div>
@@ -378,23 +384,23 @@
 
       <div class="feature-grid">
         <div class="feature-item">
-          <h3><span class="pill pill-green">Navegador</span> Interface dos Alunos</h3>
-          <p>Interface web aberta no Microsoft Edge, com Service Worker e IndexedDB. Substitui as janelas WPF do agente legado em PowerShell.</p>
+          <h3><span class="pill pill-green">Bandeja</span> Ícone do PulseLab</h3>
+          <p>Ícone na área de notificação do Windows com o menu "Encerrar turma…", "Não registrar esta turma" e "Ver situação". Reinicia o PulseLab se ele parar. Durante a aula não há página aberta.</p>
         </div>
 
         <div class="feature-item">
           <h3><span class="pill pill-green">Offline</span> Zero Dependência Externa</h3>
-          <p>Durante a oficina, a tela não depende de fontes remotas nem de CDNs. CSS, JS e ícones vêm no pacote.</p>
+          <p>Durante a oficina, o PulseLab não depende de fontes remotas nem de CDNs. Tudo o que ele usa vem no pacote.</p>
         </div>
 
         <div class="feature-item">
           <h3><span class="pill pill-yellow">SPIKE</span> Parser .llsp3</h3>
-          <p>Lê os projetos salvos em <code>Documents\LEGO SPIKE</code> e registra apenas contagens de blocos e o uso de motor, sensor, laço e condição.</p>
+          <p>Lê os projetos salvos em <code>Documents\LEGO SPIKE</code> e registra a estrutura de cada versão salva (só tipos de blocos, nunca textos digitados) e um escore adaptado de pensamento computacional, ainda não validado.</p>
         </div>
 
         <div class="feature-item">
           <h3><span class="pill pill-yellow">LGPD</span> Privacidade por Design</h3>
-          <p>Não coleta nomes, fotos, câmera, áudio, captura de tela, teclado nem identificadores Bluetooth do Hub. Os dados são pseudonimizados (códigos aleatórios de máquina e sessão), não anônimos.</p>
+          <p>Não coleta nomes, fotos, câmera, áudio, captura de tela, teclado nem identificadores Bluetooth do Hub. Os dados são desidentificados (códigos aleatórios de máquina e sessão), não anônimos. Assentimento verbal lido pelo instrutor; não há caixas de assentimento na tela.</p>
         </div>
       </div>
     </div>

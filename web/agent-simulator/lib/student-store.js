@@ -387,3 +387,17 @@ export async function getLocalStoreSummary() {
     return { eventsCount: 0, sessionsCount: 0, totalRecords: 0, pendingCount: 0, quarantinedCount: 0 };
   }
 }
+
+/**
+ * Apaga o banco local das versões até 2.3.x. Desde a 2.4.0 a sessão é do Bridge e o
+ * navegador não guarda eventos; o que restou de versões antigas não deve ficar no computador.
+ */
+export function deleteLocalStore() {
+  if (typeof indexedDB === "undefined") return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const request = indexedDB.deleteDatabase(DATABASE_NAME);
+    request.onsuccess = () => resolve(true);
+    request.onerror = () => resolve(false);
+    request.onblocked = () => resolve(false);
+  });
+}

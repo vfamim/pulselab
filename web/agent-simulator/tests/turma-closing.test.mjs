@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { INSTRUMENT_MANIFEST, INSTRUMENT_VERSION, PROTOCOL_VERSION } from "../lib/contracts.js";
+import { CONFIG_HASH, INSTRUMENT_MANIFEST, INSTRUMENT_VERSION, PROTOCOL_VERSION } from "../lib/contracts.js";
 import {
   DEFAULT_RETENTION_DAYS,
   NOT_INFORMED,
@@ -13,6 +13,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pageCode = fs.readFileSync(path.join(__dirname, "../app/student-page.jsx"), "utf-8");
+const bridgeCode = fs.readFileSync(path.join(__dirname, "../../../bridge/pulselab-bridge.ps1"), "utf-8");
 
 test("Contexto: marcadores CONFIGURE_* e campos ausentes viram nao_informado, sem valores genéricos", () => {
   const ctx = resolveSessionContext({
@@ -58,18 +59,41 @@ test("Instrumento: itens do encerramento em rascunho, versionados e separados en
   assert.doesNotMatch(resultLabels, /ajuda|apoio|autônom/i, "Resultado não pode embutir apoio");
 });
 
-test("Encerramento: registra resposta da bancada (ou recusa), avaliação do instrutor e fim da sessão", () => {
-  assert.match(pageCode, /emitTimeline\("experience_recorded"[\s\S]*?refused: !option/);
-  assert.match(pageCode, /emitTimeline\("rubric_completed"[\s\S]*?result_level: skipped \? null : assessment\.result[\s\S]*?support_level: skipped \? null : assessment\.support/);
-  assert.match(pageCode, /emitTimeline\("session_completed"[\s\S]*?ended_by: "instrutor"/);
-  assert.match(pageCode, /buildSnapshot\(finalTimeline, "completed"/, "Snapshot final sai como concluído");
-  assert.match(pageCode, /resetBridgeSession\(closedSessionId, \{ completed: true, reason: "prepare_next" \}\)/, "Bridge preserva a sessão concluída");
-  assert.match(pageCode, /beginSession\("apos_encerramento"\)/, "Próxima turma começa em seguida");
-  assert.match(pageCode, /start_mode: startMode/);
-  assert.match(pageCode, /context_missing: ctx\.missing/);
+test("Encerramento: formulário envia resposta da bancada (ou recusa) e avaliação para a turma que mostrou", () => {
+  assert.match(pageCode, /bridgePost\("\/v1\/session\/close"/);
+  assert.match(pageCode, /session_id: current\?\.session_id \|\| null/, "Envia o id da turma exibida");
+  assert.match(pageCode, /refused: true/, "Bancada pode preferir não responder");
+  assert.match(pageCode, /result\.status === 409/, "Turma mudou: recomeça em vez de gravar na turma errada");
 });
 
-test("Snapshot carrega proveniência própria para o Bridge não preencher por padrão", () => {
-  assert.match(pageCode, /protocol_version: PROTOCOL_VERSION,\s*instrument_version: INSTRUMENT_VERSION,\s*config_hash: CONFIG_HASH/);
-  assert.match(pageCode, /phase: status === "completed" \? "completed" : "in_progress"/);
+test("Encerramento no Bridge: eventos da bancada, do instrutor e fim da sessão com motivo e qualidade", () => {
+  const idx = bridgeCode.indexOf("function Close-BridgeSession");
+  const block = bridgeCode.slice(idx, bridgeCode.indexOf("\nfunction ", idx + 10));
+  assert.match(block, /ValidateSet\("instrutor", "tempo", "sem_encerramento"\)/);
+  assert.match(block, /"experience_recorded"[\s\S]*?refused = \$refused/);
+  assert.match(block, /"rubric_completed"[\s\S]*?-ParticipantRole "instructor"/);
+  assert.match(block, /"session_completed"[\s\S]*?ended_by = \$EndedBy/);
+  assert.match(block, /interrupted = \$interrupted/);
+  assert.match(block, /data_quality = \$quality/);
+  const route = bridgeCode.slice(bridgeCode.indexOf('$path -eq "/v1/session/close"'), bridgeCode.indexOf('$path -eq "/v1/session/pause"'));
+  assert.match(route, /\$requestedSessId -ne \$expectedSessId[\s\S]*?StatusCode 409/, "Turma diferente da esperada: 409");
+  assert.match(route, /\$expValue -lt 1 -or \$expValue -gt 4/, "Escala da bancada 1..4");
+  assert.match(route, /\$resultLevel -lt 0 -or \$resultLevel -gt 3/, "Resultado 0..3");
+  assert.match(route, /@\("nenhum", "algum", "muito"\)/, "Apoio nenhum/algum/muito");
 });
+
+test("Proveniência do instrumento no Bridge é a mesma do manifesto do PWA", () => {
+  assert.match(bridgeCode, new RegExp(`\\$script:ProtocolVersion = "${PROTOCOL_VERSION}"`));
+  assert.match(bridgeCode, new RegExp(`\\$script:InstrumentVersion = "${INSTRUMENT_VERSION}"`));
+  assert.match(bridgeCode, new RegExp(`\\$script:InstrumentConfigHash = "${CONFIG_HASH}"`));
+});
+
+test("Sessão do Bridge: fecha por tempo (3 h) e por computador desligado/suspenso (20 min), e a próxima abre no primeiro programa", () => {
+  assert.match(bridgeCode, /PULSELAB_SESSION_MAX_MINUTES" 180/);
+  assert.match(bridgeCode, /PULSELAB_RESUME_GAP_MINUTES" 20/);
+  assert.match(bridgeCode, /PULSELAB_HEARTBEAT_SECONDS" 300/);
+  assert.match(bridgeCode, /Close-BridgeSession -EndedBy "tempo"/);
+  assert.match(bridgeCode, /Close-BridgeSession -EndedBy "sem_encerramento" -EndedAtMs \(\[int64\]\$s\.last_alive_ms\)/);
+  assert.match(bridgeCode, /Start-BridgeSession -StartMode "atividade_spike"/);
+});
+

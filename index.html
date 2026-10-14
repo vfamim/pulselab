@@ -372,7 +372,7 @@
                 <ul class="nav-links">
                     <li><a href="#projeto">Projeto-mãe</a></li>
                     <li><a href="#metodologia">Metodologia</a></li>
-                    <li><a href="#experiencia">PulseLab v2.3.1</a></li>
+                    <li><a href="#experiencia">PulseLab v2.4.0</a></li>
                     <li><a href="#arquitetura">Arquitetura</a></li>
                     <li><a href="/tutorial/">Tutorial</a></li>
                 </ul>
@@ -391,14 +391,14 @@
                     <div class="hero__badge"><span aria-hidden="true"></span>UNIVASF · Ensino, Pesquisa e Extensão</div>
                     <h1>Acompanhar a oficina é <em>aprender com ela.</em></h1>
                     <p class="hero__lead">
-                        O PulseLab integra o projeto Robótica Educativa da UNIVASF. É um aplicativo para Windows que funciona sem internet. Cada computador é uma bancada: no fim da turma, a bancada e o instrutor respondem perguntas curtas, e o app lê contagens de blocos dos projetos salvos no LEGO SPIKE.
+                        O PulseLab integra o projeto Robótica Educativa da UNIVASF. É um aplicativo para Windows que funciona sem internet. Cada computador é uma bancada. Durante a aula o app fica só como um ícone na bandeja do Windows e lê a estrutura dos projetos salvos no LEGO SPIKE; no fim da turma, a bancada e o instrutor respondem perguntas curtas.
                     </p>
                     <div class="hero__actions">
                         <a class="button button--primary" href="/instalador/" style="font-size: 0.95rem; padding: 13px 24px;">⬇️ Baixar Instalador PulseLab (ZIP) <span aria-hidden="true">→</span></a>
                         <a class="button button--secondary" href="/tutorial/">📖 Ver Guia & Tutorial</a>
                     </div>
                     <div class="hero__tags" aria-label="Áreas do projeto">
-                        <span class="tag tag--blue">v2.3.1 Oficinas Rotativas</span>
+                        <span class="tag tag--blue">v2.4.0 Oficinas Rotativas</span>
 
                         <span class="tag tag--yellow">LEGO SPIKE 3</span>
                         <span class="tag tag--dark">Funciona offline</span>
@@ -544,18 +544,18 @@
                     </article>
                     <article class="pillar-card">
                         <div class="pillar-card__icon">02</div>
-                        <h3>Perguntas só no encerramento</h3>
-                        <p>Quando o instrutor encerra a turma, a bancada responde uma pergunta com 4 carinhas ou escolhe não responder. O instrutor registra resultado e apoio recebido em 2 toques. Esses itens são rascunho até a validação do pesquisador.</p>
+                        <h3>Assentimento verbal e perguntas só no encerramento</h3>
+                        <p>No início da aula, o instrutor explica às crianças o que é registrado e que ninguém é obrigado a participar. Se alguém da bancada não quiser, aquele computador não registra a turma. No fim, a bancada responde uma pergunta com 4 carinhas ou escolhe não responder, e o instrutor registra resultado e apoio recebido. Esses itens são rascunho até a validação do pesquisador.</p>
                     </article>
                     <article class="pillar-card">
                         <div class="pillar-card__icon">03</div>
-                        <h3>Contagens do LEGO SPIKE (.llsp3)</h3>
-                        <p>Dos projetos salvos no LEGO SPIKE, o app lê apenas a contagem de blocos e se o projeto usa motor, sensor, laço ou condição. Nada além disso é extraído.</p>
+                        <h3>Estrutura dos programas do LEGO SPIKE (.llsp3)</h3>
+                        <p>De cada versão salva do projeto, o app guarda só os tipos de blocos e como estão organizados, nunca textos digitados pelas crianças. Daí calcula um escore de pensamento computacional adaptado (ainda não validado). Essas medidas descrevem o programa, não a aprendizagem de cada criança.</p>
                     </article>
                     <article class="pillar-card">
                         <div class="pillar-card__icon">04</div>
                         <h3>Privacidade e LGPD (Art. 14)</h3>
-                        <p>Os dados são pseudonimizados, não anônimos: máquina e sessão recebem códigos aleatórios. O computador é identificado por esse código e por um rótulo escolhido na instalação (ex.: PET-LAB1-PC03), nunca pelo nome do Windows ou do usuário.</p>
+                        <p>Os dados são desidentificados, não anônimos: máquina e sessão recebem códigos aleatórios, mas a escola sabe quem sentou em cada bancada. O computador é identificado por esse código e por um rótulo escolhido na instalação (ex.: PET-LAB1-PC03), nunca pelo nome do Windows ou do usuário.</p>
                     </article>
                 </div>
             </div>
@@ -567,7 +567,7 @@
                 <div class="section-heading section-heading--center">
                     <span class="eyebrow">O papel do PulseLab</span>
                     <h2>Da preparação ao encerramento da oficina.</h2>
-                    <p>A tela da bancada fica aberta no Microsoft Edge durante a oficina. As perguntas aparecem só quando a turma é encerrada.</p>
+                    <p>Durante a aula nenhuma página fica aberta: o PulseLab fica como um ícone na área de notificação do Windows (bandeja). As perguntas aparecem só quando o instrutor encerra a turma.</p>
                 </div>
 
                 <article class="experience-chapter">
@@ -575,16 +575,16 @@
                         <span class="chapter-number">01</span>
                         <span class="chapter-kicker">Início da turma</span>
                         <h3>A sessão começa sozinha.</h3>
-                        <p>A sessão da turma começa quando o app abre ou logo depois que a turma anterior é encerrada. Não há perguntas no início nem cadastro de crianças.</p>
+                        <p>O PulseLab inicia com o Windows e a sessão da turma começa sozinha. O instrutor lê às crianças um roteiro curto: o que é registrado, o que não é, e que qualquer um pode dizer que não quer, a qualquer momento, sem consequência.</p>
                         <ul class="chapter-points">
                             <li>Sem nomes nem dados pessoais das crianças</li>
-                            <li>Um computador, uma bancada</li>
+                            <li>Recusa: o instrutor escolhe "Não registrar esta turma" no ícone daquele computador</li>
                             <li>Coleta de pesquisa só com o pacote do polo (CAAE)</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
                         <img src="assets/images/app-context.jpg" alt="Preparação da oficina no simulador PulseLab" loading="lazy">
-                        <figcaption>Tela da bancada aberta no navegador</figcaption>
+                        <figcaption>Imagem da versão anterior, com a tela no navegador</figcaption>
                     </figure>
                 </article>
 
@@ -593,9 +593,9 @@
                         <span class="chapter-number">02</span>
                         <span class="chapter-kicker">Durante a atividade</span>
                         <h3>Leitura dos projetos do LEGO SPIKE 3.</h3>
-                        <p>Enquanto as crianças trabalham, o PulseLab lê os projetos salvos do LEGO SPIKE (.llsp3). Registra só contagens de blocos e o uso de motor, sensor, laço e condição.</p>
+                        <p>Enquanto as crianças trabalham, o PulseLab lê os projetos salvos do LEGO SPIKE (.llsp3). Registra a estrutura de cada versão salva (tipos de blocos) e, quando o polo tem calendário de missões, quanto da missão do dia o programa alcançou.</p>
                         <ul class="chapter-points">
-                            <li>Sem perguntas durante a atividade</li>
+                            <li>Sem página aberta nem perguntas durante a atividade</li>
                             <li>Lê apenas arquivos de projeto salvos</li>
                             <li>Não captura tela nem teclado</li>
                         </ul>
@@ -610,17 +610,18 @@
                     <div class="chapter-copy">
                         <span class="chapter-number">03</span>
                         <span class="chapter-kicker">Depois da oficina</span>
-                        <h3>Encerrar turma em poucos toques.</h3>
-                        <p>O instrutor toca em "Encerrar turma". A bancada responde: "Como foi a oficina para a sua bancada hoje?". Depois o instrutor registra o resultado e o apoio recebido. A próxima turma começa em seguida.</p>
+                        <h3>Encerrar turma em poucos cliques.</h3>
+                        <p>O instrutor clica com o botão direito no ícone do PulseLab e escolhe "Encerrar turma…". A bancada responde: "Como foi a oficina para a sua bancada hoje?". Depois o instrutor registra o resultado e o apoio recebido. Se ninguém encerrar, a sessão fecha sozinha depois de 3 horas ou se o computador ficar desligado por mais de 20 minutos.</p>
                         <ul class="chapter-points">
                             <li>Bancada: 4 carinhas ou "Preferimos não responder"</li>
                             <li>Instrutor: resultado (0 a 3) e apoio (Nenhum, Algum, Muito), com opção de pular</li>
+                            <li>Cada sessão registra como terminou e se a coleta foi interrompida</li>
                             <li>Registros no computador por até 180 dias (prazo pendente de aprovação)</li>
                         </ul>
                     </div>
                     <figure class="screen-card">
                         <img src="assets/images/app-summary.jpg" alt="Resumo da oficina do PulseLab" loading="lazy">
-                        <figcaption>Encerramento da turma</figcaption>
+                        <figcaption>Encerramento da turma (imagem da versão anterior)</figcaption>
                     </figure>
                 </article>
             </div>
@@ -633,7 +634,7 @@
                     <h2>Funciona sem internet na escola.</h2>
                     <p>Os registros ficam no computador. Saem por pendrive, com o atalho "PulseLab - Exportar Dados", ou vão para a nuvem quando a máquina está cadastrada e conectada.</p>
                 </div>
-                <div class="architecture-flow" role="img" aria-label="Fluxo da arquitetura PulseLab: bancada, PWA no navegador, parser SPIKE, registro local, pendrive e nuvem">
+                <div class="architecture-flow" role="img" aria-label="Fluxo da arquitetura PulseLab: bancada, ícone na bandeja e serviço local, parser SPIKE, registro local, pendrive e nuvem">
                     <article>
                         <div class="architecture-icon architecture-icon--yellow">
                             <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="11" cy="11" r="5"></circle><circle cx="22" cy="12" r="4"></circle><path d="M3 27c1-6 4-9 8-9s8 3 9 9M18 27c.5-4 2-7 5-7 3.5 0 5.5 3 6 7"></path></svg>
@@ -646,8 +647,8 @@
                         <div class="architecture-icon">
                             <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="5" width="24" height="18" rx="3"></rect><path d="M11 28h10M16 23v5M10 12h5l2-4 3 9 2-5h2"></path></svg>
                         </div>
-                        <strong>PWA + Bridge</strong>
-                        <small>Tela no Edge e serviço local</small>
+                        <strong>Bandeja + Bridge</strong>
+                        <small>Ícone no Windows e serviço local</small>
                     </article>
                     <span class="flow-connector" aria-hidden="true"></span>
                     <article>
@@ -655,7 +656,7 @@
                             <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 10h22v16H5zM9 6h14v4M10 17h12M10 21h8"></path></svg>
                         </div>
                         <strong>Parser SPIKE</strong>
-                        <small>Contagens .llsp3</small>
+                        <small>Estrutura dos blocos .llsp3</small>
                     </article>
                     <span class="flow-connector" aria-hidden="true"></span>
                     <article>
@@ -685,7 +686,7 @@
                     <div class="research-card__actions">
                         <a class="button button--primary" href="/relatorio/">📄 Ver relatório metodológico <span aria-hidden="true">→</span></a>
                         <a class="button button--secondary" href="/tutorial/">📖 Guia Operacional Ilustrado</a>
-                        <small>PulseLab v2.3.1 · Instrumento em preparação</small>
+                        <small>PulseLab v2.4.0 · Instrumento em preparação</small>
 
                     </div>
                 </article>

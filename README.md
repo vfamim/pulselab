@@ -1,31 +1,44 @@
 # PulseLab
 
-Camada de observação das oficinas do projeto Robótica Educativa (UNIVASF). A tela das
-crianças roda no Microsoft Edge; um servidor local em PowerShell (porta 43128) guarda
-os registros no próprio computador, lê contagens de blocos dos projetos LEGO SPIKE e
-exporta para pendrive.
+Camada de observação das oficinas do projeto Robótica Educativa (UNIVASF). O PulseLab
+inicia com o Windows e fica como um ícone na área de notificação (bandeja); nenhuma página
+fica aberta durante a aula. Um servidor local em PowerShell (porta 43128) guarda os
+registros no próprio computador, lê a estrutura dos projetos LEGO SPIKE e exporta para
+pendrive.
 
 ## Estado
 
 - A coleta de pesquisa vem **desligada** no pacote genérico. Ela só liga com o pacote
   do polo, que traz `provisionamento.json` com a sede e o CAAE do parecer ético.
 - A unidade de análise é a bancada. Não há nomes, fotos, câmera, captura de tela nem teclado.
-- A sessão de uma turma vai da abertura do app (ou do fim da turma anterior) até o toque em
-  **Encerrar turma**. No encerramento, a bancada responde uma pergunta com 4 carinhas e o
-  instrutor registra resultado (0 a 3) e apoio (nenhum, algum, muito). Os itens estão em
+- Assentimento verbal: no início de cada aula o instrutor lê um roteiro padronizado às crianças.
+  Não há caixas de assentimento nem botão de retirada na tela. Se alguém recusar, o instrutor
+  escolhe **Não registrar esta turma** no menu da bandeja daquele computador: os dados da turma
+  atual são apagados (com marca de exclusão) e o registro pausa até a próxima turma. Depende de
+  emenda ao CEP. Veja [assentimento verbal](docs/assentimento-verbal.md).
+- A sessão começa quando o PulseLab inicia (ou, depois de uma turma encerrada, no primeiro programa
+  salvo) e termina por **Encerrar turma…** no menu da bandeja
+  (pergunta coletiva com 4 carinhas ou "Preferimos não responder"; resultado 0 a 3 e apoio
+  nenhum/algum/muito, que o instrutor pode pular). Sem encerramento, fecha sozinha depois de
+  3 horas ou de mais de 20 minutos com o computador desligado. Os itens estão em
   `web/agent-simulator/lib/contracts.js` como rascunho até validação do pesquisador.
+- Cada sessão registra como terminou (instrutor, tempo, sem encerramento), interrupções e a
+  situação da pasta do SPIKE. Do programa: estrutura de cada versão salva (só tipos de blocos),
+  escore de pensamento computacional adaptado de Dr. Scratch (não validado) e, com calendário de
+  missões, a cobertura da missão.
 - Escola, oficina e turma não informadas ficam como `nao_informado`, nunca com valores genéricos.
 - Os registros ficam no computador por `retention_days` do pacote do polo (padrão 180 dias),
   mesmo depois de exportados ou enviados. O prazo precisa constar no protocolo e no TCLE.
 - Os itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica.
-  Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md) e
-  [plano de validação](docs/plano-validacao-v2.md).
+  Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md),
+  [plano de validação](docs/plano-validacao-v2.md) e [roadmap](docs/roadmap.md).
 
 ## Para os polos
 
 1. Baixe o pacote do seu polo e extraia o ZIP.
 2. Rode `Instalar-PulseLab.bat` e, se quiser, informe o nome da máquina (ex.: `PET-LAB1-PC03`).
-3. Use os atalhos **PulseLab - Iniciar Oficina** e **PulseLab - Exportar Dados**.
+3. O PulseLab abre com o Windows. Use o menu do ícone na bandeja durante a aula e o atalho
+   **PulseLab - Exportar Dados** para copiar os registros para pendrive.
 
 Reinstalar com um pacote de polo mais novo mantém a identificação da máquina e os registros.
 
@@ -44,7 +57,8 @@ Cada computador guarda tudo localmente e envia ao Supabase quando tiver internet
 
 O token vai dentro do ZIP do polo. Se o pacote circular fora do polo, revogue o token
 (`revoked_at` em `device_enrollment_tokens`) e gere outro pacote. O snapshot da sessão sobe uma
-vez, quando a turma é encerrada (ou abandonada há mais de 12 horas); os eventos sobem um a um.
+vez, quando a sessão é encerrada (pelo instrutor ou automaticamente); os eventos sobem um a um.
+O painel mostra as máquinas que estão sem enviar dados há alguns dias.
 
 Antes do primeiro uso, aplique no Supabase a migração `20261011150000_site_enrollment_tokens.sql`
 e publique a função `enroll-device`.

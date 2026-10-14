@@ -1,5 +1,10 @@
 # Arquitetura proposta — aplicação dos alunos
 
+> **Documento histórico.** Proposta de arquitetura da PWA dos alunos, anterior à v2. Não descreve a versão atual: não há mais
+> caixas de assentimento, checkpoints, itens individuais nem botão de retirada na
+> tela. Ver [protocolo v2](protocolo-pesquisa-v2-teste.md) e
+> [assentimento verbal](assentimento-verbal.md).
+
 ## Decisão
 
 O fluxo de coleta dos alunos passa a ser uma PWA. O PowerShell atual permanece

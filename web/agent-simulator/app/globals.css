@@ -2892,7 +2892,7 @@ select:focus-visible {
   gap: 8px;
   justify-items: center;
   padding: 18px 8px;
-  border: 2px solid var(--line);
+  border: 2px solid var(--muted);
   border-radius: var(--radius-md);
   background: var(--canvas);
   color: var(--ink);
@@ -2940,7 +2940,7 @@ select:focus-visible {
 
 .choice {
   padding: 10px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--muted);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);

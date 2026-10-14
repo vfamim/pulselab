@@ -1,0 +1,5 @@
+{
+  "versao": "rascunho",
+  "descricao": "Catálogo de missões do currículo. Cada missão lista o que um programa completo precisa ter; o calendário de cada polo (gerar-pacote-polo.py --calendario) diz qual missão é de cada dia.",
+  "missoes": []
+}

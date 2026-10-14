@@ -1,42 +1,42 @@
-# Inventário de dados — v2 de teste
+# Inventário de dados — v2 (a partir da 2.4.0)
 
-Fonte executável das perguntas: `web/agent-simulator/lib/protocol.js`.
-O export inclui o manifesto completo, versão e SHA-256 desse conteúdo; códigos
-v1 não são reutilizados para construtos que mudaram.
+O que o PulseLab registra quando a coleta está ligada pelo pacote do polo.
+Fonte dos itens de encerramento: `web/agent-simulator/lib/contracts.js`
+(manifesto do instrumento, com versão e SHA-256). Protocolo:
+[protocolo v2](protocolo-pesquisa-v2-teste.md). Assentimento:
+[assentimento verbal](assentimento-verbal.md).
 
-| Família | Campos/representação | Finalidade | Limite/minimização |
+| Família | Conteúdo | Finalidade | Limite/minimização |
 |---|---|---|---|
-| Contexto | sede, escola, turma, oficina, instrutor por códigos; faixa escolar; plataforma | Agrupamento e fidelidade | Sem nomes, datas de nascimento, renda ou diagnósticos |
-| Sessão | UUID da sessão/bancada, tamanho real, ambiente test | Vinculação intrassessão e exclusão de testes | Não identifica uma criança longitudinalmente |
-| Assentimento | slots A–D e aceites na sessão aceita | Confirmar escolha de cada integrante | Recusa inicial não cria registro; não substitui processo ético |
-| Experiência | none/some/all/unknown | Composição da bancada | Não é experiência individual nem competência |
-| Confiança/esforço/participação/compreensão/intenção | categorias 1–4 separadas | Percepções coletivas | Sem escore psicológico global ou média presumida |
-| Etapa/bloqueio/afeto | categorias nominais | Descrição do momento e experiência | Sem inferência emocional automática |
-| Conhecimento | alternativas em dois itens pré e dois pós | Teste de alinhamento e compreensão dos itens | Formas não validadas/equiparadas |
-| Papéis | slot estável e tarefa confirmada | Exposição descritiva | Não prova participação efetiva |
-| Ajuda | pedido/reconhecimento/início/resolução | Descrever mediação e latência | Atendimento local, não sistema remoto de emergência |
-| Artefato | contagens, categorias, versão do parser, horário e ID local | Descrição do arquivo selecionado | Sem arquivo bruto, nome, caminho, comentários, variáveis ou IDs de blocos |
-| Resultado | tentativas bem-sucedidas 0–3; explicação 0–3 | Resultado imediato observado da bancada | Não é aprendizagem individual ou retenção |
-| Implementação | intervenções, minutos de preparo, dificuldade, próxima ação | Custo parcial e utilidade pedagógica | Categorias fechadas; sem texto livre identificável |
-| Tempo/qualidade | início real, prompts, respostas, antecipações, atrasos, recusas | Ônus e disponibilidade de evidências | Relógio do cliente; não garantia de execução física |
+| Contexto | polo, escola, oficina e turma por códigos (`nao_informado` quando ausentes) | Agrupamento e fidelidade | Sem nomes de crianças, datas de nascimento, renda ou diagnósticos |
+| Máquina | `installation_id` aleatório e rótulo escolhido na instalação | Identificar a bancada/computador e separar polos | Nunca nome do Windows, do usuário ou caminhos pessoais |
+| Sessão | identificador aleatório da sessão, início e fim, versões de protocolo, instrumento e software | Delimitar a turma e rastrear versões | Não identifica criança nem acompanha ninguém entre aulas |
+| Encerramento | `ended_by`: `instrutor`, `tempo` (limite de 3 horas) ou `sem_encerramento` (fechada pelo Bridge, p. ex. computador desligado por mais de 20 minutos) | Qualidade: separar turmas fechadas pelo instrutor das fechadas automaticamente | Sem dado pessoal |
+| Continuidade | `interrupted`; sinal de vida (`heartbeat`) a cada 5 minutos; maior intervalo sem sinal; reinícios do Bridge | Saber se a coleta foi interrompida | Só horários técnicos |
+| Pasta do SPIKE | `spike_status`: se a pasta de projetos foi encontrada | Distinguir "sem projeto" de "pasta ausente" | Sem nomes de arquivos ou caminhos pessoais |
+| Estrutura do programa | por versão salva: contagem por tipo de bloco (`opcode_counts`), uso de motor, sensor, laço, condição, variável e procedimento, `structure_hash` | Descrever como o programa evoluiu | Nunca textos digitados (nomes de variáveis, mensagens, comentários), arquivo bruto ou nome do projeto |
+| Escore de pensamento computacional | `ct_score`, adaptado de Dr. Scratch, marcado "adaptado, não validado" | Descrever a complexidade do programa | Mede o programa, não a criança |
+| Cobertura da missão | `mission_coverage`: proporção dos elementos esperados presentes no programa final, só com calendário de missões configurado | Relacionar o programa à missão do dia | Sem calendário: ausente, não zero |
+| Pergunta da bancada | 4 carinhas ou "Preferimos não responder" | Experiência coletiva da aula | Uma resposta por bancada; recusa não é ponto neutro |
+| Itens do instrutor | resultado 0–3; apoio nenhum/algum/muito; ou pulado | Resultado prático e mediação | Sobre a bancada; pular não é zero |
+| Turma não registrada | marca de exclusão: só o identificador da sessão apagada | Impedir que dados apagados voltem por pendrive ou reenvio | Não guarda motivo nem quem recusou |
 
-`null` significa item recusado; `no_consensus` significa ausência de resposta
-conjunta. Campo/etapa ausente é outra situação. O parser rejeita formato não
-suportado; ausência de artefato não vira “zero aprendizagem”.
+Não registra: nomes, fotos, vídeo, áudio, teclas, cliques, captura de tela,
+identificadores Bluetooth do hub, texto livre.
 
-Armazenamento: uma sessão inteira em uma transação do IndexedDB
-`pulselab-test-bancada-v2`. Não há outbox, arquivo Bridge, nuvem, respostas em
-localStorage ou varredura do computador. O histórico usa o mesmo registro, não
-uma cópia independente. Prazo absoluto: sete dias desde a criação, sem extensão
-por retomada. Apagar/retirar elimina esse registro com todos os eventos juntos.
+Armazenamento e prazo: no computador, pelo `retention_days` do pacote do polo
+(padrão 180 dias, faixa de 1 a 365), mesmo depois de exportado ou enviado. Saída
+por pendrive (atalho "PulseLab - Exportar Dados") ou envio à nuvem do projeto
+quando a máquina está cadastrada e conectada. "Não registrar esta turma" apaga
+os dados da turma atual naquele computador e grava a marca de exclusão.
 
-A limpeza automática só executa com o app aberto. Exportações e backups do
-próprio navegador/computador não podem ser apagados pelo aplicativo; devem
-constar dos procedimentos do responsável. O armazenamento não é cifrado pela
-aplicação e é acessível a quem usa o mesmo perfil do navegador. Por isso esta
-branch admite somente dados fictícios e não promete anonimato absoluto.
+Os dados são desidentificados, não anônimos: rótulo do computador e data,
+combinados com informação da escola sobre quem sentou em cada bancada, podem
+apontar para um grupo de crianças. Tratar como dados pessoais.
 
-O export é rastreável quanto à versão, mas não possui assinatura de origem:
-não se apresenta como prova criptográfica de que uma oficina aconteceu.
-Autenticidade científica e backend v2 exigem desenvolvimento/validação antes
-de produção. A migração atual restringe o banco legado por dispositivo/sede.
+O armazenamento local não é cifrado pela aplicação e é acessível a quem usa o
+mesmo perfil do Windows. Exportações em pendrive e cópias fora do PulseLab não
+são apagadas pelo aplicativo; devem constar dos procedimentos do responsável.
+
+A versão anterior deste inventário (branch de teste com aceites por
+integrante, itens pré/pós e check-ins) está no histórico do git.

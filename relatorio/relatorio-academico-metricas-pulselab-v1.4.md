@@ -1,3 +1,10 @@
+> **Documento histórico.** Descreve versões anteriores do PulseLab e não foi
+> reescrito. As hipóteses H1–H4, os itens individuais (pré/pós, check-ins e
+> autorrelatos por participante), as capturas de tela e as contagens de teclas
+> descritas aqui não fazem parte da versão atual. Protocolo vigente:
+> [protocolo v2](https://github.com/vfamim/pulselab/blob/main/docs/protocolo-pesquisa-v2-teste.md). Assentimento:
+> [assentimento verbal](https://github.com/vfamim/pulselab/blob/main/docs/assentimento-verbal.md).
+
 # PulseLab como infraestrutura de mensuração em oficinas de robótica educacional
 
 ## Relatório acadêmico sobre métricas, validade e contribuição científica

@@ -1,5 +1,10 @@
 # Roteiro de teste isolado — PulseLab v2
 
+> **Documento histórico.** Roteiro de teste da branch v2 com dados fictícios. Não descreve a versão atual: não há mais
+> caixas de assentimento, checkpoints, itens individuais nem botão de retirada na
+> tela. Ver [protocolo v2](protocolo-pesquisa-v2-teste.md) e
+> [assentimento verbal](assentimento-verbal.md).
+
 Use somente pessoas fictícias e projetos de exemplo. Esta versão não representa
 aprovação ética ou instrumento validado. Não aplique migrações na produção.
 

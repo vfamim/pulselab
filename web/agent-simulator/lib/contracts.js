@@ -1,14 +1,14 @@
 // Manifesto formal do instrumento versionado (auditoria e integridade científica)
 // Itens em rascunho: aguardam validação do pesquisador responsável antes de qualquer análise confirmatória.
 export const PROTOCOL_VERSION = "protocolo-oficinas-rotativas-v2";
-export const INSTRUMENT_VERSION = "bancada-2.3.0-rascunho";
+export const INSTRUMENT_VERSION = "bancada-2.4.0-rascunho";
 
 export const INSTRUMENT_MANIFEST = {
   version: INSTRUMENT_VERSION,
   protocol_version: PROTOCOL_VERSION,
   status: "rascunho_pendente_validacao",
   unit_of_analysis: "bancada",
-  session_boundary: "da abertura do app (ou do encerramento da turma anterior) até o toque em Encerrar turma",
+  session_boundary: "da abertura do PulseLab (ou do primeiro programa salvo depois da turma anterior) até Encerrar turma na bandeja, 3 horas ou computador desligado por mais de 20 minutos",
   target_constructs: [
     "experiencia_bancada",
     "resultado_pratico_bancada",
@@ -58,13 +58,25 @@ export const INSTRUMENT_MANIFEST = {
       "uses_motor",
       "uses_sensor",
       "uses_loop",
-      "uses_condition"
+      "uses_condition",
+      "uses_variable",
+      "uses_procedure",
+      "opcode_counts",
+      "structure_hash",
+      "ct_score",
+      "mission_coverage"
+    ],
+    quality: [
+      "heartbeat",
+      "ended_by",
+      "interrupted",
+      "spike_status"
     ]
   }
 };
 
 // SHA-256 canônico do manifesto do instrumento (auditoria e integridade científica)
-export const CONFIG_HASH = "cd0b2f54d78ed9dafad54741ee0fd6622cb1317cceafa39ad7020699bac19ee9";
+export const CONFIG_HASH = "40fa7892e0cb738230e30d19e3a1ea0144712192bc251391ad9d9ec8996425a1";
 
 export const TIMELINE_EVENT_TYPES = [
   "session_started",

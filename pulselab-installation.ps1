@@ -19,6 +19,7 @@ $script:PulseLabProvisioningFields = @(
     "research_authorization_version",
     "research_authorized_purposes",
     "retention_days",
+    "calendario_missoes",
     "enrollment_token"
 )
 

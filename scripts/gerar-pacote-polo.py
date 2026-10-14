@@ -12,11 +12,15 @@ dentro do ZIP: distribua o pacote só para o polo e revogue o token se o ZIP cir
 Exemplo:
   python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234
   python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
+
+Com --calendario (CSV com as colunas data,mission_id; data no formato AAAA-MM-DD), o bridge
+sabe qual missão do catálogo config/missoes.json é a do dia e mede quanto o programa final atingiu.
 """
 
 from __future__ import annotations
 
 import argparse
+import csv
 import importlib.util
 import json
 import re
@@ -47,6 +51,29 @@ def read_enrollment_token(bundle_path: Path, polo: str) -> str:
     if len(token) < 32:
         raise ValueError("Arquivo de token de cadastro sem enrollment_token válido.")
     return token
+
+
+DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def read_mission_calendar(csv_path: Path, catalog_path: Path = ROOT / "config" / "missoes.json") -> list[dict]:
+    """Lê o calendário de missões do polo e confere cada missão contra o catálogo do pacote."""
+    known = set()
+    if catalog_path.is_file():
+        catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+        known = {str(m.get("mission_id")) for m in catalog.get("missoes", []) if m.get("mission_id")}
+    entries = []
+    with csv_path.open(encoding="utf-8-sig", newline="") as handle:
+        for row in csv.DictReader(handle):
+            day = (row.get("data") or "").strip()
+            mission = (row.get("mission_id") or "").strip()
+            if not DATE_PATTERN.match(day):
+                raise ValueError(f"Data inválida no calendário: {day!r} (use AAAA-MM-DD).")
+            datetime.strptime(day, "%Y-%m-%d")
+            if mission not in known:
+                raise ValueError(f"Missão {mission!r} do calendário não existe em config/missoes.json.")
+            entries.append({"data": day, "mission_id": mission})
+    return entries
 
 
 def build_provisioning(polo: str, regional: str, caae: str | None, school: str | None, retention_days: int = 180) -> dict:
@@ -82,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
     group.add_argument("--sem-pesquisa", action="store_true", help="Identifica o polo sem ligar a coleta")
     parser.add_argument("--token-cadastro", default=None, help="Arquivo do token do polo (provision_device.py --token-polo)")
     parser.add_argument("--retencao-dias", type=int, default=180, help="Dias que os registros ficam no computador (1 a 365)")
+    parser.add_argument("--calendario", default=None, help="CSV data,mission_id com a missão de cada dia (catálogo em config/missoes.json)")
     parser.add_argument("--out-dir", default=str(ROOT / "dist-polos"))
     args = parser.parse_args(argv)
 
@@ -89,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
         provisioning = build_provisioning(args.polo, args.regional, args.caae, args.escola, args.retencao_dias)
         if args.token_cadastro:
             provisioning["enrollment_token"] = read_enrollment_token(Path(args.token_cadastro), args.polo)
+        if args.calendario:
+            provisioning["calendario_missoes"] = read_mission_calendar(Path(args.calendario))
     except ValueError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 2

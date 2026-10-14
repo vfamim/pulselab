@@ -25,11 +25,11 @@ test("Persistência local Bridge: ausência de File::Replace incompatível e var
   assert.ok(fs.existsSync(bridgePath), "pulselab-bridge.ps1 deve existir");
   const bridgeCode = fs.readFileSync(bridgePath, "utf-8");
 
-  // Não deve conter chamadas quebradas a File::Replace com $null
+  // File::Replace com $null como backup quebra no PowerShell 5.1; só é aceito com arquivo de backup
   assert.doesNotMatch(
     bridgeCode,
-    /\[System\.IO\.File\]::Replace\(/,
-    "Bridge não deve usar [System.IO.File]::Replace que quebra no PowerShell 5.1"
+    /\[System\.IO\.File\]::Replace\([^)]*\$null/,
+    "Bridge não deve usar [System.IO.File]::Replace sem backup"
   );
 
   // Deve implementar função auxiliar segura Move-BridgeAtomicFile
