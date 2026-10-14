@@ -18,12 +18,15 @@ PUBLIC_ENTRIES = (
     "pulselab.ico",
     "assets",
     "alunos",
-    "instrutor",
     "instalador",
     "tutorial",
     "testes",
     "relatorio",
 )
+
+# Binários ficam nas Releases do GitHub; o Hosting serve só o site estático.
+EXCLUDED_PREFIXES = ("instalador/downloads/",)
+EXCLUDED_SUFFIXES = (".zip", ".sha256")
 
 # Defesa em profundidade: mesmo dentro das pastas públicas, estes padrões nunca são publicados.
 FORBIDDEN_PATTERNS = (
@@ -59,6 +62,9 @@ def build(repo_root: Path, output: Path) -> list[str]:
         files = [source] if source.is_file() else sorted(p for p in source.rglob("*") if p.is_file())
         for file_path in files:
             relative = file_path.relative_to(repo_root)
+            posix = relative.as_posix()
+            if posix.startswith(EXCLUDED_PREFIXES) or posix.endswith(EXCLUDED_SUFFIXES):
+                continue
             if is_forbidden(relative) or any(part.startswith(".") for part in relative.parts):
                 continue
             target = output / relative

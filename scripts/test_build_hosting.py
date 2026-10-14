@@ -23,7 +23,7 @@ class BuildHostingTest(unittest.TestCase):
         (root / "dados_locais").mkdir()
         (root / "dados_locais" / "pulselab_consolidado.sqlite").write_text("x", encoding="utf-8")
         (root / "instalador" / "algo-adminsdk-y.json").write_text("{}", encoding="utf-8")
-        (root / "instrutor" / ".env").write_text("SECRET=1", encoding="utf-8")
+        (root / "alunos" / ".env").write_text("SECRET=1", encoding="utf-8")
 
     def test_publishes_only_allowlist(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -37,9 +37,26 @@ class BuildHostingTest(unittest.TestCase):
             self.assertFalse(any(p.endswith(".env") for p in published))
             self.assertEqual(list(out.rglob("*adminsdk*")), [])
 
+    def test_instrutor_and_downloads_not_published(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.make_repo(root)
+            (root / "instrutor").mkdir()
+            (root / "instrutor" / "index.html").write_text("ok", encoding="utf-8")
+            (root / "instalador" / "downloads").mkdir()
+            (root / "instalador" / "downloads" / "PulseLab-9.9.9-Windows.zip").write_text("z", encoding="utf-8")
+            (root / "instalador" / "downloads" / "PulseLab-9.9.9-Windows.zip.sha256").write_text("h", encoding="utf-8")
+            out = root / "hosting-dist"
+            published = build_hosting.build(root, out)
+            self.assertNotIn("instrutor", build_hosting.PUBLIC_ENTRIES)
+            self.assertFalse(any(p.startswith("instrutor/") for p in published))
+            self.assertFalse(any(p.endswith((".zip", ".sha256")) for p in published))
+            self.assertIn("instalador/index.html", published)
+
     def test_firebase_points_to_dedicated_folder(self):
         config = json.loads((ROOT / "firebase.json").read_text(encoding="utf-8"))
         self.assertEqual(config["hosting"]["public"], build_hosting.OUTPUT_DIR_NAME)
+        self.assertFalse(any("instrutor" in r["source"] for r in config["hosting"]["rewrites"]))
 
 
 if __name__ == "__main__":
