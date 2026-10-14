@@ -1,17 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { INSTRUMENT_MANIFEST } from "../lib/contracts.js";
 import { deleteLocalStore } from "../lib/student-store.js";
 
-// Formulário final da turma (v2.4.0). Durante a aula nenhuma página fica aberta: a sessão é
-// do Bridge e o ícone na bandeja abre esta página em "Encerrar turma...". Aqui só se registra a
-// resposta da bancada e a avaliação do instrutor; nada fica gravado no navegador.
+// Página da bancada / encerramento silencioso (v3.0.2).
+// Durante a aula nenhuma página precisa ficar aberta. O encerramento no PC é direto e silencioso:
+// zero formulários para os alunos ou instrutor no computador da bancada.
+// A avaliação pedagógica do instrutor é realizada separadamente no portal/celular.
 
-const CLIENT_VERSION = "student-pwa/3.0.1";
+const CLIENT_VERSION = "student-pwa/3.0.2";
 const BRIDGE_URL = "http://127.0.0.1:43128";
-
-const BANCADA_ITEM = INSTRUMENT_MANIFEST.items.bancada.experiencia;
-const RESULT_ITEM = INSTRUMENT_MANIFEST.items.instrutor.resultado;
-const SUPPORT_ITEM = INSTRUMENT_MANIFEST.items.instrutor.apoio;
 
 // Chaves das versões até 2.3.x, quando a página ficava aberta e guardava a sessão no navegador.
 const LEGACY_STORAGE_KEYS = [
@@ -87,7 +83,7 @@ function LabPanel() {
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v3.0.1 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.2 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>
@@ -118,8 +114,6 @@ export default function StudentPage() {
 
   const [step, setStep] = useState("carregando");
   const [current, setCurrent] = useState(null);
-  const [experience, setExperience] = useState(null);
-  const [assessment, setAssessment] = useState({ result: null, support: null });
   const [notice, setNotice] = useState("");
 
   const loadCurrent = useCallback(async () => {
@@ -138,20 +132,10 @@ export default function StudentPage() {
     void loadCurrent();
   }, [loadCurrent]);
 
-  function answerBancada(option) {
-    setExperience(option ? { value: option[0], label: option[2], refused: false } : { value: null, label: null, refused: true });
-    setAssessment({ result: null, support: null });
-    setStep("instrutor");
-  }
-
-  async function finish({ skipped }) {
+  async function finish() {
     setStep("enviando");
     const payload = {
-      session_id: current?.session_id || null,
-      experience,
-      rubric: skipped
-        ? { skipped: true }
-        : { skipped: false, result_level: assessment.result, support_level: assessment.support }
+      session_id: current?.session_id || null
     };
     const result = await bridgePost("/v1/session/close", payload).catch(() => ({ status: 0, body: {} }));
     if (result.status === 200) {
@@ -160,19 +144,18 @@ export default function StudentPage() {
     }
     if (result.status === 409) {
       // A turma mudou (encerrada pelo tempo ou outra já começou): recomeça para não gravar na turma errada.
-      setNotice("A turma deste computador mudou enquanto o formulário estava aberto. Responda de novo, por favor.");
-      setExperience(null);
+      setNotice("A turma deste computador mudou enquanto a página estava aberta. Tente novamente.");
       await loadCurrent();
       return;
     }
-    setNotice("Não foi possível registrar agora. Tente de novo em 1 minuto.");
-    setStep("instrutor");
+    setNotice("Não foi possível encerrar agora. Tente de novo em 1 minuto.");
+    setStep("confirmar");
   }
 
   let content;
   if (step === "carregando" || step === "enviando") {
     content = (
-      <Card title={step === "enviando" ? "Registrando..." : "Abrindo..."}>
+      <Card title={step === "enviando" ? "Encerrando..." : "Abrindo..."}>
         <p>Um instante.</p>
       </Card>
     );
@@ -202,17 +185,16 @@ export default function StudentPage() {
         {isFreeMode ? (
           <p>
             Este computador opera em Modo Livre (sem gravação de pesquisa).
-            A dinâmica de encerramento da bancada e a avaliação do instrutor podem ser realizadas normalmente.
           </p>
         ) : (
           <p>
             {current?.active
-              ? "Use no fim da aula. Primeiro a bancada responde uma pergunta; depois o instrutor avalia."
-              : "Nenhum programa foi salvo desde a turma anterior. As respostas serão registradas mesmo assim."}
+              ? "A gravação desta aula será finalizada imediatamente. Não há formulários ou perguntas a preencher."
+              : "Nenhum programa foi salvo nesta sessão."}
           </p>
         )}
         <div className="turma-actions">
-          <button className="button button--primary" type="button" onClick={() => { setNotice(""); setStep("bancada"); }}>Encerrar turma</button>
+          <button className="button button--primary" type="button" onClick={() => void finish()}>Encerrar turma</button>
           <button className="button button--ghost" type="button" onClick={() => setStep("cancelado")}>Agora não</button>
         </div>
       </Card>
@@ -223,69 +205,10 @@ export default function StudentPage() {
         <p>Pode fechar esta janela.</p>
       </Card>
     );
-  } else if (step === "bancada") {
-    content = (
-      <Card title={BANCADA_ITEM.legend} wide>
-        <div className="face-options">
-          {BANCADA_ITEM.options.map((option) => (
-            <button key={option[0]} className="face-option" type="button" onClick={() => answerBancada(option)}>
-              <span className="face-option__face" aria-hidden="true">{option[1]}</span>
-              <span>{option[2]}</span>
-            </button>
-          ))}
-        </div>
-        <button className="turma-skip" type="button" onClick={() => answerBancada(null)}>
-          {BANCADA_ITEM.action_skip}
-        </button>
-      </Card>
-    );
-  } else if (step === "instrutor") {
-    const ready = assessment.result !== null && assessment.support !== null;
-    content = (
-      <Card title="Como foi esta bancada?" eyebrow="Para o instrutor">
-        {notice && <p role="status">{notice}</p>}
-        <fieldset className="choice-group">
-          <legend>{RESULT_ITEM.legend}</legend>
-          {RESULT_ITEM.options.map((option) => (
-            <button
-              key={option[0]}
-              type="button"
-              className={`choice${assessment.result === option[0] ? " choice--selected" : ""}`}
-              aria-pressed={assessment.result === option[0]}
-              onClick={() => setAssessment({ ...assessment, result: option[0] })}
-            >
-              {option[1]}
-            </button>
-          ))}
-        </fieldset>
-        <fieldset className="choice-group">
-          <legend>{SUPPORT_ITEM.legend}</legend>
-          {SUPPORT_ITEM.options.map((option) => (
-            <button
-              key={option[0]}
-              type="button"
-              className={`choice${assessment.support === option[0] ? " choice--selected" : ""}`}
-              aria-pressed={assessment.support === option[0]}
-              onClick={() => setAssessment({ ...assessment, support: option[0] })}
-            >
-              {option[1]}
-            </button>
-          ))}
-        </fieldset>
-        <div className="turma-actions">
-          <button className="button button--primary" type="button" disabled={!ready} onClick={() => void finish({ skipped: false })}>
-            Registrar
-          </button>
-          <button className="button button--ghost" type="button" onClick={() => void finish({ skipped: true })}>
-            {INSTRUMENT_MANIFEST.items.instrutor.action_skip}
-          </button>
-        </div>
-      </Card>
-    );
   } else {
     content = (
       <Card title="Turma encerrada">
-        <p>Pode fechar esta janela. A próxima turma começa a ser registrada quando salvar o primeiro programa no LEGO SPIKE.</p>
+        <p>Pode fechar esta janela. A gravação foi concluída com sucesso. A próxima turma começará automaticamente quando o primeiro programa for salvo no LEGO SPIKE.</p>
       </Card>
     );
   }
