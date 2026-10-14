@@ -12,7 +12,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "2.4.0"
+VERSION = "3.0.0"
 
 
 INSTRUCTIONS = """====================================================================
@@ -181,8 +181,10 @@ def build_package(
         if provisioning is not None:
             shutil.copy2(provisioning, stage / "provisionamento.json")
         shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
-        if (repo_root / "pulselab.ico").is_file():
-            shutil.copy2(repo_root / "pulselab.ico", stage / "pulselab.ico")
+        for icon_name in ("pulselab.ico", "pulselab-green.ico", "pulselab-yellow.ico", "pulselab-red.ico"):
+            icon_file = repo_root / icon_name
+            if icon_file.is_file():
+                shutil.copy2(icon_file, stage / icon_name)
         if (repo_root / "tutorial" / "PulseLab-Guia-Ilustrado.pdf").is_file():
             shutil.copy2(repo_root / "tutorial" / "PulseLab-Guia-Ilustrado.pdf", stage / "PulseLab-Guia-Ilustrado.pdf")
 

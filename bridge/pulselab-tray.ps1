@@ -1,4 +1,4 @@
-﻿# ==============================================================================
+# ==============================================================================
 # PulseLab — Ícone na bandeja do Windows (área de notificação)
 # ==============================================================================
 # Mostra que o PulseLab está ligado sem abrir janelas durante a aula.
@@ -63,11 +63,23 @@ function Restart-PulseLab {
     Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcher`" -NoUpdate"
 }
 
-$notify = New-Object System.Windows.Forms.NotifyIcon
-$iconPath = Join-Path $InstallRoot "pulselab.ico"
-$script:OkIcon = if (Test-Path -LiteralPath $iconPath) { New-Object System.Drawing.Icon($iconPath) } else { [System.Drawing.SystemIcons]::Application }
-$script:WarnIcon = [System.Drawing.SystemIcons]::Warning
-$notify.Icon = $script:OkIcon
+$greenIconPath = Join-Path $InstallRoot "pulselab-green.ico"
+$yellowIconPath = Join-Path $InstallRoot "pulselab-yellow.ico"
+$redIconPath = Join-Path $InstallRoot "pulselab-red.ico"
+$defaultIconPath = Join-Path $InstallRoot "pulselab.ico"
+
+$script:IconGreen = if (Test-Path -LiteralPath $greenIconPath) { New-Object System.Drawing.Icon($greenIconPath) } else { $null }
+$script:IconYellow = if (Test-Path -LiteralPath $yellowIconPath) { New-Object System.Drawing.Icon($yellowIconPath) } else { $null }
+$script:IconRed = if (Test-Path -LiteralPath $redIconPath) { New-Object System.Drawing.Icon($redIconPath) } else { $null }
+
+if (-not $script:IconYellow -and (Test-Path -LiteralPath $defaultIconPath)) {
+    try { $script:IconYellow = New-Object System.Drawing.Icon($defaultIconPath) } catch {}
+}
+if (-not $script:IconGreen) { $script:IconGreen = if ($script:IconYellow) { $script:IconYellow } else { [System.Drawing.SystemIcons]::Application } }
+if (-not $script:IconYellow) { $script:IconYellow = [System.Drawing.SystemIcons]::Warning }
+if (-not $script:IconRed) { $script:IconRed = [System.Drawing.SystemIcons]::Error }
+
+$notify.Icon = $script:IconYellow
 $notify.Text = "PulseLab"
 $notify.Visible = $true
 
@@ -90,7 +102,7 @@ function Update-TrayStatus {
     if (-not $status) {
         $script:Failures++
         $script:LastStatus = $null
-        $notify.Icon = $script:WarnIcon
+        $notify.Icon = $script:IconRed
         Set-TrayText "PulseLab parado - religando..."
         $itemClose.Enabled = $false
         $itemPause.Enabled = $false
@@ -99,12 +111,23 @@ function Update-TrayStatus {
     }
     $script:Failures = 0
     $script:LastStatus = $status
-    $itemClose.Enabled = [bool]$status.research_active -and -not $status.paused
+    # Encerrar turma fica sempre habilitado enquanto o PulseLab estiver ativo
+    $itemClose.Enabled = $true
     $itemPause.Enabled = [bool]$status.research_active -and -not $status.paused
     $spikeMissing = $status.spike_environment -and $status.spike_environment.status -eq "pasta_nao_encontrada"
-    $notify.Icon = if ($spikeMissing) { $script:WarnIcon } else { $script:OkIcon }
+
+    # Selecao do icone por estado:
+    # Verde: Bridge ativo, pesquisa ativa, sem erros de pasta SPIKE.
+    # Amarelo mostarda: Modo Livre (sem pesquisa), aguardando turma, pausado ou pasta SPIKE nao encontrada.
+    # Vermelho: Bridge desligado / parado (tratado acima).
+    if ($status.research_active -and -not $status.paused -and -not $spikeMissing) {
+        $notify.Icon = $script:IconGreen
+    } else {
+        $notify.Icon = $script:IconYellow
+    }
+
     if (-not $status.research_active) {
-        Set-TrayText "PulseLab ligado - sem registro de pesquisa"
+        Set-TrayText "PulseLab ligado - Modo Livre (sem pesquisa)"
     } elseif ($status.paused) {
         Set-TrayText "PulseLab - esta turma não está sendo registrada"
     } elseif ($status.session) {

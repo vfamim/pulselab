@@ -6,7 +6,7 @@ import { deleteLocalStore } from "../lib/student-store.js";
 // do Bridge e o ícone na bandeja abre esta página em "Encerrar turma...". Aqui só se registra a
 // resposta da bancada e a avaliação do instrutor; nada fica gravado no navegador.
 
-const CLIENT_VERSION = "student-pwa/2.4.0";
+const CLIENT_VERSION = "student-pwa/3.0.0";
 const BRIDGE_URL = "http://127.0.0.1:43128";
 
 const BANCADA_ITEM = INSTRUMENT_MANIFEST.items.bancada.experiencia;
@@ -87,7 +87,7 @@ function LabPanel() {
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v2.4.0 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.0 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>
@@ -126,8 +126,7 @@ export default function StudentPage() {
     try {
       const data = await bridgeGet("/v1/session/current");
       setCurrent(data);
-      if (!data.research_active) setStep("sem_pesquisa");
-      else if (data.paused) setStep("pausado");
+      if (data.paused) setStep("pausado");
       else setStep("confirmar");
     } catch {
       setStep("indisponivel");
@@ -196,14 +195,22 @@ export default function StudentPage() {
       </Card>
     );
   } else if (step === "confirmar") {
+    const isFreeMode = current && !current.research_active;
     content = (
-      <Card title="Encerrar a turma desta bancada?">
+      <Card title={isFreeMode ? "Encerrar oficina (Modo Livre)?" : "Encerrar a turma desta bancada?"}>
         {notice && <p role="status">{notice}</p>}
-        <p>
-          {current?.active
-            ? "Use no fim da aula. Primeiro a bancada responde uma pergunta; depois o instrutor avalia."
-            : "Nenhum programa foi salvo desde a turma anterior. As respostas serão registradas mesmo assim."}
-        </p>
+        {isFreeMode ? (
+          <p>
+            Este computador opera em Modo Livre (sem gravação de pesquisa).
+            A dinâmica de encerramento da bancada e a avaliação do instrutor podem ser realizadas normalmente.
+          </p>
+        ) : (
+          <p>
+            {current?.active
+              ? "Use no fim da aula. Primeiro a bancada responde uma pergunta; depois o instrutor avalia."
+              : "Nenhum programa foi salvo desde a turma anterior. As respostas serão registradas mesmo assim."}
+          </p>
+        )}
         <div className="turma-actions">
           <button className="button button--primary" type="button" onClick={() => { setNotice(""); setStep("bancada"); }}>Encerrar turma</button>
           <button className="button button--ghost" type="button" onClick={() => setStep("cancelado")}>Agora não</button>
