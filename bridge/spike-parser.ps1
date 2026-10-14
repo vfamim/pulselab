@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # PulseLab — Parser Seguro e Offline de Projetos LEGO SPIKE (.llsp3 / .llsp)
 # ==============================================================================
 # Extrai métricas agregadas de programação Scratch/Word-blocks para inferência
