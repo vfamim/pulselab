@@ -1,4 +1,4 @@
-# ==============================================================================
+﻿# ==============================================================================
 # PulseLab — Ícone na bandeja do Windows (área de notificação)
 # ==============================================================================
 # Mostra que o PulseLab está ligado sem abrir janelas durante a aula.
@@ -23,6 +23,114 @@ if (-not $mutex.WaitOne(0)) { exit 0 }
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
+[System.Windows.Forms.Application]::EnableVisualStyles()
+
+function Show-ModernDialog {
+    param(
+        [string]$Message,
+        [string]$Title = "PulseLab",
+        [System.Windows.Forms.MessageBoxButtons]$Buttons = [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]$Icon = [System.Windows.Forms.MessageBoxIcon]::Information
+    )
+
+    $form = New-Object System.Windows.Forms.Form
+    $form.Text = $Title
+    $form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+    $form.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::FixedDialog
+    $form.MaximizeBox = $false
+    $form.MinimizeBox = $false
+    $form.ShowInTaskbar = $true
+    $form.TopMost = $true
+    $form.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+    $form.BackColor = [System.Drawing.Color]::FromArgb(250, 250, 252)
+
+    if ($script:IconYellow) {
+        try { $form.Icon = $script:IconYellow } catch {}
+    }
+
+    $iconBox = New-Object System.Windows.Forms.PictureBox
+    $iconBox.Location = New-Object System.Drawing.Point(22, 22)
+    $iconBox.Size = New-Object System.Drawing.Size(38, 38)
+    $iconBox.SizeMode = [System.Windows.Forms.PictureBoxSizeMode]::StretchImage
+
+    $systemIcon = switch ($Icon) {
+        ([System.Windows.Forms.MessageBoxIcon]::Warning)     { [System.Drawing.SystemIcons]::Warning }
+        ([System.Windows.Forms.MessageBoxIcon]::Question)    { [System.Drawing.SystemIcons]::Question }
+        ([System.Windows.Forms.MessageBoxIcon]::Error)       { [System.Drawing.SystemIcons]::Error }
+        default                                              { [System.Drawing.SystemIcons]::Information }
+    }
+    try { $iconBox.Image = $systemIcon.ToBitmap() } catch {}
+    $form.Controls.Add($iconBox)
+
+    $lbl = New-Object System.Windows.Forms.Label
+    $lbl.Location = New-Object System.Drawing.Point(74, 20)
+    $lbl.Text = $Message
+    $lbl.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+    $lbl.ForeColor = [System.Drawing.Color]::FromArgb(30, 41, 59)
+    $lbl.AutoSize = $false
+
+    $calcSize = [System.Windows.Forms.TextRenderer]::MeasureText($Message, $lbl.Font, (New-Object System.Drawing.Size(390, 2000)), [System.Windows.Forms.TextFormatFlags]::WordBreak)
+    $lbl.Width = 390
+    $lbl.Height = [Math]::Max(50, $calcSize.Height + 10)
+    $form.Controls.Add($lbl)
+
+    $pnlHeight = 52
+    $formWidth = 490
+    $formHeight = [Math]::Max(165, $lbl.Location.Y + $lbl.Height + $pnlHeight + 45)
+    $form.ClientSize = New-Object System.Drawing.Size($formWidth, $formHeight)
+
+    $pnl = New-Object System.Windows.Forms.Panel
+    $pnl.Dock = [System.Windows.Forms.DockStyle]::Bottom
+    $pnl.Height = $pnlHeight
+    $pnl.BackColor = [System.Drawing.Color]::FromArgb(241, 245, 249)
+    $form.Controls.Add($pnl)
+
+    if ($Buttons -eq [System.Windows.Forms.MessageBoxButtons]::YesNo) {
+        $btnYes = New-Object System.Windows.Forms.Button
+        $btnYes.Text = "Sim"
+        $btnYes.DialogResult = [System.Windows.Forms.DialogResult]::Yes
+        $btnYes.Location = New-Object System.Drawing.Point(($formWidth - 195), 11)
+        $btnYes.Size = New-Object System.Drawing.Size(85, 30)
+        $btnYes.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+        $btnYes.BackColor = [System.Drawing.Color]::FromArgb(239, 68, 68)
+        $btnYes.ForeColor = [System.Drawing.Color]::White
+        $btnYes.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $btnYes.FlatAppearance.BorderSize = 0
+
+        $btnNo = New-Object System.Windows.Forms.Button
+        $btnNo.Text = "Não"
+        $btnNo.DialogResult = [System.Windows.Forms.DialogResult]::No
+        $btnNo.Location = New-Object System.Drawing.Point(($formWidth - 100), 11)
+        $btnNo.Size = New-Object System.Drawing.Size(85, 30)
+        $btnNo.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+        $btnNo.BackColor = [System.Drawing.Color]::FromArgb(226, 232, 240)
+        $btnNo.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $btnNo.FlatAppearance.BorderSize = 0
+
+        $pnl.Controls.Add($btnYes)
+        $pnl.Controls.Add($btnNo)
+        $form.AcceptButton = $btnNo
+        $form.CancelButton = $btnNo
+    } else {
+        $btnOk = New-Object System.Windows.Forms.Button
+        $btnOk.Text = "OK"
+        $btnOk.DialogResult = [System.Windows.Forms.DialogResult]::OK
+        $btnOk.Location = New-Object System.Drawing.Point(($formWidth - 105), 11)
+        $btnOk.Size = New-Object System.Drawing.Size(85, 30)
+        $btnOk.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Bold)
+        $btnOk.BackColor = [System.Drawing.Color]::FromArgb(14, 165, 233)
+        $btnOk.ForeColor = [System.Drawing.Color]::White
+        $btnOk.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
+        $btnOk.FlatAppearance.BorderSize = 0
+
+        $pnl.Controls.Add($btnOk)
+        $form.AcceptButton = $btnOk
+    }
+
+    $res = $form.ShowDialog()
+    $form.Dispose()
+    return $res
+}
 
 if (-not $InstallRoot) { $InstallRoot = Split-Path -Path $PSScriptRoot -Parent }
 $script:BaseUrl = "http://127.0.0.1:$Port"
@@ -84,6 +192,8 @@ $notify.Text = "PulseLab"
 $notify.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
+$menu.Font = New-Object System.Drawing.Font("Segoe UI", 9.5, [System.Drawing.FontStyle]::Regular)
+$menu.RenderMode = [System.Windows.Forms.ToolStripRenderMode]::System
 $itemClose = $menu.Items.Add("Encerrar turma...")
 $itemPause = $menu.Items.Add("Não registrar esta turma")
 [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
@@ -141,12 +251,11 @@ function Update-TrayStatus {
 $itemClose.add_Click({ Open-ClosingForm })
 
 $itemPause.add_Click({
-    $answer = [System.Windows.Forms.MessageBox]::Show(
-        "Use quando alguém da turma (ou a família) não quiser participar.`n`nOs dados desta turma neste computador serão apagados e o registro fica pausado até a próxima aula. A bancada continua funcionando normalmente.`n`nNão registrar esta turma?",
-        "PulseLab",
-        [System.Windows.Forms.MessageBoxButtons]::YesNo,
-        [System.Windows.Forms.MessageBoxIcon]::Question,
-        [System.Windows.Forms.MessageBoxDefaultButton]::Button2)
+    $answer = Show-ModernDialog `
+        -Message "Use quando alguém da turma (ou a família) não quiser participar.`n`nOs dados desta turma neste computador serão apagados e o registro fica pausado até a próxima aula. A bancada continua funcionando normalmente.`n`nNão registrar esta turma?" `
+        -Title "PulseLab" `
+        -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
+        -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
     try {
         $result = Invoke-TrayApi "/v1/session/pause" "POST"
@@ -154,7 +263,7 @@ $itemPause.add_Click({
         if ($result.remote_pending) { $message += " A cópia na nuvem será apagada quando houver internet." }
         $notify.ShowBalloonTip(6000, "PulseLab", $message, [System.Windows.Forms.ToolTipIcon]::Info)
     } catch {
-        [System.Windows.Forms.MessageBox]::Show("Não foi possível falar com o PulseLab agora. Tente de novo em 1 minuto.", "PulseLab") | Out-Null
+        Show-ModernDialog -Message "Não foi possível falar com o PulseLab agora. Tente de novo em 1 minuto." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
     }
     Update-TrayStatus
 })
@@ -163,7 +272,7 @@ $itemStatus.add_Click({
     Update-TrayStatus
     $s = $script:LastStatus
     if (-not $s) {
-        [System.Windows.Forms.MessageBox]::Show("O PulseLab não está respondendo. Ele será religado automaticamente.", "PulseLab") | Out-Null
+        Show-ModernDialog -Message "O PulseLab não está respondendo. Ele será religado automaticamente." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
         return
     }
     $lines = @("Computador: $(if ($s.machine_label) { $s.machine_label } else { 'sem identificação' })")
@@ -182,7 +291,7 @@ $itemStatus.add_Click({
     }
     $lines += "Registros esperando envio: $($s.pending_sync)."
     $lines += if ($s.cloud_enabled) { "Envio para a nuvem: ativo." } else { "Envio para a nuvem: não configurado (use o pendrive)." }
-    [System.Windows.Forms.MessageBox]::Show(($lines -join "`n"), "PulseLab $($s.version)") | Out-Null
+    Show-ModernDialog -Message ($lines -join "`n") -Title "PulseLab $($s.version)" -Icon ([System.Windows.Forms.MessageBoxIcon]::Information) | Out-Null
 })
 
 $timer = New-Object System.Windows.Forms.Timer
