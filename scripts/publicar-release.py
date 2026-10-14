@@ -5,8 +5,8 @@ Subcomandos:
   gerar-chave  Cria o par de chaves RSA. A chave privada fica fora do repositório;
                a pública é gravada em release-public-key.json e vai no pacote.
   assinar      Gera pulselab-update.json para um ZIP e assina com a chave privada.
-  publicar     Assina e cria a release no GitHub (gh release create), com o ZIP,
-               o manifesto e a assinatura. Use --pre para publicar como pré-release
+  publicar     Assina e cria a release no GitHub (gh release create), com o ZIP, o
+               .sha256 (exigido pelo canal legado), o manifesto e a assinatura. Use --pre para publicar como pré-release
                (não é entregue às máquinas até ser promovida a release normal).
 
 O launcher (pulselab-update.ps1) só aceita manifestos assinados por esta chave.
@@ -127,6 +127,11 @@ def cmd_publish(args: argparse.Namespace) -> int:
     if not zip_path.is_file():
         print(f"Pacote não encontrado: {zip_path}. Rode scripts/build-offline-package.sh antes.", file=sys.stderr)
         return 1
+    sha_path = Path(str(zip_path) + ".sha256")
+    if not sha_path.is_file():
+        # O canal legado (máquinas até 2.2.7) baixa "<package_url>.sha256": precisa ser asset da release.
+        print(f"Checksum não encontrado: {sha_path}. Rode scripts/build-offline-package.sh antes.", file=sys.stderr)
+        return 1
     if not PUBLIC_KEY_FILE.is_file():
         print("release-public-key.json ausente: gere a chave com 'gerar-chave' e commite a pública.", file=sys.stderr)
         return 1
@@ -136,7 +141,7 @@ def cmd_publish(args: argparse.Namespace) -> int:
     )
     cmd = [
         "gh", "release", "create", f"v{version}",
-        str(zip_path), str(manifest), str(sig),
+        str(zip_path), str(zip_path) + ".sha256", str(manifest), str(sig),
         "--repo", REPO, "--title", f"PulseLab {version}", "--notes", args.notes or f"PulseLab {version}",
     ]
     if args.pre:

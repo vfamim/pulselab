@@ -38,8 +38,8 @@ texto_explicativo_slides_pulselab.md
 # Temporary root archives
 *.zip
 *.zip.sha256
-!instalador/downloads/*.zip
-!instalador/downloads/*.zip.sha256
+# Binários de release vão para as Releases do GitHub (scripts/publicar-release.py), não para o git
+instalador/downloads/
 
 # OS artifacts
 Thumbs.db

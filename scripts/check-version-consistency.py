@@ -73,8 +73,8 @@ def check_version_consistency(repo_root: Path) -> list[str]:
             errors.append(f"version.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
         if data.get("auto_update_enabled") is not True:
             errors.append("version.json: auto_update_enabled deve ser true para permitir atualizações automáticas verificadas")
-        expected_pkg_url = f"PulseLab-{canonical}-Windows.zip"
-        if expected_pkg_url not in data.get("package_url", ""):
+        expected_pkg_url = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/PulseLab-{canonical}-Windows.zip"
+        if data.get("package_url") != expected_pkg_url:
             errors.append(f"version.json: package_url deve referenciar {expected_pkg_url}")
 
     # 5. config/defaults.json e config/config.json
@@ -142,9 +142,8 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         zip_name = f"PulseLab-{canonical}-Windows.zip"
         if zip_name not in content:
             errors.append(f"scripts/build-offline-package.sh: deve referenciar '{zip_name}'")
-        offline_name = f"PulseLab-Alunos-Offline-v{canonical}.zip"
-        if offline_name not in content:
-            errors.append(f"scripts/build-offline-package.sh: deve referenciar '{offline_name}'")
+        if "Alunos-Offline" in content:
+            errors.append("scripts/build-offline-package.sh: não gerar mais a cópia PulseLab-Alunos-Offline (duplicata do ZIP)")
 
     # 12. Scripts Batch de instalação e atualização
     instalar_bat = repo_root / "Instalar-PulseLab.bat"
@@ -175,6 +174,9 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         zip_name = f"PulseLab-{canonical}-Windows.zip"
         if zip_name not in content:
             errors.append(f"instalador/index.html: link de download deve referenciar '{zip_name}'")
+        release_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{zip_name}"
+        if release_link not in content:
+            errors.append(f"instalador/index.html: download deve apontar para a Release do GitHub ({release_link})")
         if f"PulseLab Protocol v{canonical}" not in content and f"PulseLab v{canonical}" not in content:
             errors.append(f"instalador/index.html: cabeçalho deve referenciar v{canonical}")
 
@@ -184,6 +186,9 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         zip_name = f"PulseLab-{canonical}-Windows.zip"
         if zip_name not in content:
             errors.append(f"testes/index.html: link de download deve referenciar '{zip_name}'")
+        release_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{zip_name}"
+        if release_link not in content:
+            errors.append(f"testes/index.html: download deve apontar para a Release do GitHub ({release_link})")
         if f"PulseLab Offline v{canonical}" not in content:
             errors.append(f"testes/index.html: título deve conter 'PulseLab Offline v{canonical}'")
 
@@ -231,7 +236,7 @@ def check_version_consistency(repo_root: Path) -> list[str]:
     public_key = repo_root / "release-public-key.json"
     if not public_key.is_file():
         errors.append("release-public-key.json ausente: gere com scripts/publicar-release.py gerar-chave")
-    elif pkg_dist.is_file():
+    elif pkg_dist.is_file():  # o ZIP não é versionado; a checagem roda localmente após o build
         import zipfile
 
         with zipfile.ZipFile(pkg_dist) as archive:

@@ -26,7 +26,7 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - Scripts de empacotamento (`installer/build-installer.py` na constante `VERSION` e `scripts/build-offline-package.sh`);
    - Importador e consolidador (`scripts/importar-para-supabase.py` nos defaults de versão);
    - Scripts em lote (`Instalar-PulseLab.bat` e `Atualizar-Site-Firebase.bat`);
-   - Nomes dos pacotes binários distribuíveis e checksums (`PulseLab-X.Y.Z-Windows.zip`, `.sha256`, `PulseLab-Alunos-Offline-vX.Y.Z.zip`);
+   - Nomes dos pacotes binários distribuíveis e checksums (`PulseLab-X.Y.Z-Windows.zip` e `.sha256`, publicados como assets da Release `vX.Y.Z` no GitHub e não versionados no git; não existe mais o ZIP `PulseLab-Alunos-Offline`);
    - Páginas públicas e documentação operacional (`index.html`, `instalador/index.html`, `testes/index.html`, `tutorial/index.html`, `relatorio/index.html`).
 
 3. **Bloqueio Fail-Closed contra Versões Divergentes**:
