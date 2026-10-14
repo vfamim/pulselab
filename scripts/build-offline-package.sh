@@ -5,4 +5,4 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${ROOT_DIR}/web/agent-simulator"
 npm run build
 cd "${ROOT_DIR}"
-python3 installer/build-installer.py --output instalador/downloads/PulseLab-3.0.1-Windows.zip
+python3 installer/build-installer.py --output instalador/downloads/PulseLab-3.0.2-Windows.zip

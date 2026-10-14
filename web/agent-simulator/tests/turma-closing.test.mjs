@@ -106,3 +106,17 @@ test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegado
   assert.doesNotMatch(tray, /\$itemClose\.add_Click\(\{\s*Open-ClosingForm\s*\}\)/);
 });
 
+test("Encerramento completo e fechamento do aplicativo (não persistente)", () => {
+  const trayPath = path.join(__dirname, "../../../bridge/pulselab-tray.ps1");
+  const tray = fs.readFileSync(trayPath, "utf-8");
+  assert.match(bridgeCode, /\$path -eq "\/v1\/shutdown" -and \$request\.HttpMethod -eq "POST"/);
+  assert.match(bridgeCode, /"\/v1\/shutdown"/);
+  assert.match(bridgeCode, /\$script:ShutdownRequested = \$true/);
+  assert.match(tray, /function Exit-PulseLabApp/);
+  assert.match(tray, /Fechar PulseLab/);
+  assert.match(tray, /Invoke-TrayApi "\/v1\/shutdown" "POST"/);
+  assert.match(pageCode, /bridgePost\("\/v1\/shutdown"\)/);
+  assert.match(pageCode, /window\.close\(\)/);
+});
+
+

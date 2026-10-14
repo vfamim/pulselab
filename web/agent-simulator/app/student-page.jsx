@@ -6,7 +6,7 @@ import { deleteLocalStore } from "../lib/student-store.js";
 // do Bridge e o ícone na bandeja abre esta página em "Encerrar turma...". Aqui só se registra a
 // resposta da bancada e a avaliação do instrutor; nada fica gravado no navegador.
 
-const CLIENT_VERSION = "student-pwa/3.0.1";
+const CLIENT_VERSION = "student-pwa/3.0.2";
 const BRIDGE_URL = "http://127.0.0.1:43128";
 
 const BANCADA_ITEM = INSTRUMENT_MANIFEST.items.bancada.experiencia;
@@ -87,7 +87,7 @@ function LabPanel() {
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v3.0.1 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.2 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>
@@ -138,6 +138,15 @@ export default function StudentPage() {
     void loadCurrent();
   }, [loadCurrent]);
 
+  useEffect(() => {
+    if (step === "concluido") {
+      const timer = setTimeout(() => {
+        try { window.close(); } catch {}
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
+
   function answerBancada(option) {
     setExperience(option ? { value: option[0], label: option[2], refused: false } : { value: null, label: null, refused: true });
     setAssessment({ result: null, support: null });
@@ -155,6 +164,7 @@ export default function StudentPage() {
     };
     const result = await bridgePost("/v1/session/close", payload).catch(() => ({ status: 0, body: {} }));
     if (result.status === 200) {
+      void bridgePost("/v1/shutdown").catch(() => {});
       setStep("concluido");
       return;
     }
@@ -285,7 +295,12 @@ export default function StudentPage() {
   } else {
     content = (
       <Card title="Turma encerrada">
-        <p>Pode fechar esta janela. A próxima turma começa a ser registrada quando salvar o primeiro programa no LEGO SPIKE.</p>
+        <p>A gravação foi finalizada. O PulseLab está sendo encerrado e esta janela fechará automaticamente...</p>
+        <div className="turma-actions">
+          <button className="button button--primary" type="button" onClick={() => { try { window.close(); } catch {} }}>
+            Fechar agora
+          </button>
+        </div>
       </Card>
     );
   }
