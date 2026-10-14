@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab - Instalador Local (v3.0.0)
+title PulseLab - Instalador Local (v3.0.1)
 echo ====================================================================
-echo                   PULSELAB - INSTALADOR OFFLINE (v3.0.0)
+echo                   PULSELAB - INSTALADOR OFFLINE (v3.0.1)
 
 echo ====================================================================
 echo.
@@ -66,7 +66,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . (Join-Path $env:LO
 echo.
 
 echo [3/3] Criando atalho silencioso na Area de Trabalho com icone oficial...
-:: Limpar atalhos ou pastas de versoes legadas (v3.0.0)
+:: Limpar atalhos ou pastas de versoes legadas (v3.0.1)
 if exist "%INSTALL_DIR%\app\agent" rd /s /q "%INSTALL_DIR%\app\agent" >nul 2>&1
 if exist "%INSTALL_DIR%\app\pulselab-agent.ps1" del /f /q "%INSTALL_DIR%\app\pulselab-agent.ps1" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$desktop = [Environment]::GetFolderPath('Desktop'); $startup = [Environment]::GetFolderPath('Startup'); Remove-Item -LiteralPath (Join-Path $desktop 'Iniciar Pulselab - Oficina de Robotica.lnk') -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $startup 'PulseLab.lnk') -Force -ErrorAction SilentlyContinue" >nul 2>&1

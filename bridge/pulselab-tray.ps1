@@ -3,7 +3,7 @@
 # ==============================================================================
 # Mostra que o PulseLab está ligado sem abrir janelas durante a aula.
 # Menu (clique direito), para o instrutor:
-#   - Encerrar turma...         abre o formulário final (pergunta da bancada + avaliação)
+#   - Encerrar turma...         encerra a turma atual silenciosamente (sem abrir janelas)
 #   - Não registrar esta turma  apaga os dados da turma atual e pausa até a próxima aula
 #   - Ver situação              resumo do registro neste computador
 # Também religa o PulseLab se o servidor local parar de responder.
@@ -147,19 +147,26 @@ function Invoke-TrayApi {
     return Invoke-RestMethod -Uri "$($script:BaseUrl)$Path" -TimeoutSec 3
 }
 
-function Open-ClosingForm {
-    $url = "$($script:BaseUrl)/alunos/"
-    $edgeCandidates = @(
-        (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
-        (Join-Path $env:LOCALAPPDATA "Microsoft\Edge\Application\msedge.exe")
-    )
-    $edgePath = $edgeCandidates | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -First 1
-    if ($edgePath) {
-        Start-Process -FilePath $edgePath -ArgumentList "--app=`"$url`" --disable-features=Translate,InterestFeedContentSuggestions"
-    } else {
-        Start-Process $url
+function Close-CurrentTurma {
+    Update-TrayStatus
+    $s = $script:LastStatus
+    if (-not $s -or -not $s.session) {
+        $notify.ShowBalloonTip(3000, "PulseLab", "Nenhuma turma ativa sendo registrada no momento.", [System.Windows.Forms.ToolTipIcon]::Info)
+        return
     }
+    $answer = Show-ModernDialog `
+        -Message "Deseja encerrar a turma deste computador agora?`n`nA gravação desta aula será finalizada e a próxima começará automaticamente quando o próximo programa for salvo no LEGO SPIKE." `
+        -Title "PulseLab — Encerrar Turma" `
+        -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
+        -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
+    if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
+    try {
+        $result = Invoke-TrayApi "/v1/session/close" "POST"
+        $notify.ShowBalloonTip(4000, "PulseLab", "Turma encerrada com sucesso. Pronto para a próxima aula.", [System.Windows.Forms.ToolTipIcon]::Info)
+    } catch {
+        Show-ModernDialog -Message "Não foi possível encerrar a turma agora. Tente de novo em 1 minuto." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+    }
+    Update-TrayStatus
 }
 
 function Restart-PulseLab {
@@ -248,7 +255,7 @@ function Update-TrayStatus {
     }
 }
 
-$itemClose.add_Click({ Open-ClosingForm })
+$itemClose.add_Click({ Close-CurrentTurma })
 
 $itemPause.add_Click({
     $answer = Show-ModernDialog `
