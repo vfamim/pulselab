@@ -5,7 +5,9 @@ oficinas, o PulseLab inicia com o Windows e fica só como um ícone na bandeja, 
 Um servidor local em PowerShell (porta 43128) registra a atividade de cada bancada no LEGO SPIKE,
 guarda os dados no próprio computador e envia à nuvem quando há internet.
 
-Nenhuma tela aparece para as crianças durante a aula.
+Para as crianças, só uma aba do navegador fica aberta: o **questionário do fim da aula**, opcional e
+sem nome, que a bandeja abre quando o PulseLab inicia com a coleta ligada. Nenhuma outra tela,
+contador ou alerta aparece durante a aula.
 
 ## Na aula
 
@@ -29,8 +31,9 @@ registrar esta turma** vale para a aula que fechou sozinha.
 
 - **Coleta desligada por padrão.** O pacote genérico não registra dados de pesquisa. A coleta só
   liga com o pacote do polo, que traz o CAAE do parecer ético em `provisionamento.json`.
-- **A unidade de análise é a bancada**, nunca a criança. Sem nomes, fotos, câmera, áudio, captura
-  de tela ou teclado.
+- **A unidade de análise é a bancada**, nunca uma criança identificada. Sem nomes, fotos, câmera,
+  áudio, captura de tela ou teclado. As respostas individuais do questionário do fim da aula são
+  anônimas e só aparecem somadas por polo e mês.
 - **Assentimento verbal.** No início da aula o instrutor lê o
   [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
   turma**: a aula é marcada como não autorizada e nunca entra em análise. A exclusão definitiva é
@@ -39,6 +42,14 @@ registrar esta turma** vale para a aula que fechou sozinha.
   cada versão salva do programa, só os tipos de blocos. Daí saem um escore de pensamento
   computacional adaptado de Dr. Scratch (ainda não validado) e, com calendário de missões, a
   cobertura da missão do dia.
+- **Questionário do fim da aula** (instrumento `bancada-3.2.0`): na aba `http://127.0.0.1:43128/alunos/`,
+  a bancada responde uma vez por aula como foram os testes com os carrinhos (linha preta, corrida,
+  jogo de perguntas) e cada criança, sozinha, responde cinco frases com Sim / Mais ou menos / Não.
+  Toda pergunta tem **Não quero responder**. Só códigos fixos (`sim`, `em_parte`, `recusou`...), sem
+  nome, idade ou texto livre. Cada resposta vira um evento da aula (`bancada_result_recorded` ou
+  `student_feedback_recorded`) com um código aleatório por rodada (`submission_id`), que só junta as
+  respostas da mesma criança naquela rodada. Vão para a aula ativa ou, sem ela, para a última
+  encerrada; em Modo Livre, com o registro pausado ou em aula não autorizada, nada é gravado.
 - **Retenção local** de `retention_days` do pacote do polo (1 a 365, padrão 180 dias), mesmo depois
   de exportar ou enviar. O prazo precisa constar no protocolo e no TCLE.
 - A máquina é identificada por um código aleatório e por um rótulo escolhido na instalação, nunca
@@ -55,7 +66,7 @@ O ZIP da release tem só duas coisas: `Instalar-PulseLab.bat` e a pasta `arquivo
 2. Dê dois cliques em `Instalar-PulseLab.bat` e, se quiser, informe o rótulo da máquina
    (ex.: `PET-LAB1-PC03`).
 3. Pronto: o PulseLab abre com o Windows. O atalho **PulseLab - Exportar Dados** copia os
-   registros para um pendrive.
+   registros para um pendrive e o atalho **Questionário PulseLab** reabre a aba do questionário.
 
 Para ligar a coleta, use o pacote do polo em vez do genérico. Reinstalar por cima mantém a
 identificação da máquina e os registros. Guia para instrutores:
@@ -67,7 +78,8 @@ Tudo fica em `dados_locais/` no computador, pasta que nenhuma atualização ou r
 Com internet, o bridge envia ao Supabase a cada 30 segundos: os eventos um a um e o resumo da
 sessão quando ela fecha. Polos sem internet enviam quando o instrutor conecta ou exportam por
 pendrive (veja abaixo).
-O relatório das aulas (uma linha por aula e resumo semanal por polo) sai com
+O relatório das aulas (uma linha por aula, resumo semanal por polo, testes com os carrinhos e o que
+as crianças disseram no questionário, por polo e mês) sai com
 `python3 tooling/data/relatorio-pulselab.py`: veja [docs/pesquisa/relatorio.md](docs/pesquisa/relatorio.md).
 
 Aulas marcadas como não autorizadas sobem com `authorization_status = "nao_autorizada"` (e saem no
@@ -132,7 +144,7 @@ subir. Pré-releases não chegam às máquinas.
 | Pasta | Conteúdo |
 |---|---|
 | `runtime/windows/` | O que roda nas máquinas: launcher, atualizador, bridge, bandeja e instalador (mesmo layout da pasta `arquivos/` do ZIP) |
-| `apps/student-pwa/` | Página da bancada (React + Vite); o build vai para `alunos/`, fora do git |
+| `apps/student-pwa/` | Questionário do fim da aula (React + Vite); o build vai para `alunos/`, fora do git |
 | `apps/site/` | Site público: início, instalador, tutorial, testes e relatório |
 | `config/` | Configuração empacotada e catálogo de missões |
 | `supabase/` | Migrações, testes SQL, função `enroll-device` e scripts de cadastro |

@@ -7,7 +7,22 @@ import uuid
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 name = 'pulselab-test-' + uuid.uuid4().hex[:10]
-image = 'public.ecr.aws/supabase/postgres:17.6.1.147'
+# Mesma imagem em dois registros: o ECR público limita downloads anônimos dos runners do GitHub.
+IMAGES = ('public.ecr.aws/supabase/postgres:17.6.1.147', 'supabase/postgres:17.6.1.147')
+
+
+def pull_image():
+    """Baixa a imagem com novas tentativas; devolve a primeira que vier. Mostra o erro do Docker se nada vier."""
+    errors = []
+    for attempt in range(4):
+        for candidate in IMAGES:
+            result = subprocess.run(['docker', 'pull', '-q', candidate], text=True, capture_output=True)
+            if result.returncode == 0:
+                return candidate
+            errors.append(f'{candidate}: {(result.stderr or result.stdout).strip()}')
+        time.sleep(5 * 2 ** attempt)
+    raise RuntimeError('Não foi possível baixar a imagem do Postgres:\n' + '\n'.join(errors))
+
 
 def sql(path):
     result = subprocess.run(['docker','exec','-i',name,'psql','-U','supabase_admin','-d','pulselab_test','-v','ON_ERROR_STOP=1','-At'], input=path.read_text(), text=True, capture_output=True)
@@ -16,7 +31,10 @@ def sql(path):
     return result.stdout
 
 try:
-    subprocess.run(['docker','run','-d','--name',name,'--network','none','-e','POSTGRES_PASSWORD=local-test-only','-e','POSTGRES_DB=pulselab_test','--tmpfs','/var/lib/postgresql/data',image],check=True,capture_output=True)
+    image = pull_image()
+    started = subprocess.run(['docker','run','-d','--name',name,'--network','none','-e','POSTGRES_PASSWORD=local-test-only','-e','POSTGRES_DB=pulselab_test','--tmpfs','/var/lib/postgresql/data',image],text=True,capture_output=True)
+    if started.returncode:
+        raise RuntimeError(f'docker run falhou ({started.returncode}): {started.stderr.strip()}')
     for _ in range(50):
         check = subprocess.run(['docker','exec',name,'pg_isready','-U','supabase_admin','-d','pulselab_test'],capture_output=True)
         if check.returncode == 0:

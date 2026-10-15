@@ -1,7 +1,7 @@
 {
-  "version": "3.1.1",
+  "version": "3.2.0",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.1.1/PulseLab-3.1.1-Windows.zip",
-  "notes": "PulseLab v3.1.1 - a aula se encerra sozinha depois de 40 minutos sem programa salvo no SPIKE."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.0/PulseLab-3.2.0-Windows.zip",
+  "notes": "PulseLab v3.2.0 - question\u00e1rio do fim da aula para as crian\u00e7as (opcional e an\u00f4nimo) e novas se\u00e7\u00f5es no relat\u00f3rio."
 }

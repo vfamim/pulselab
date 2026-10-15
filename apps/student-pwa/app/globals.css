@@ -2964,3 +2964,182 @@ select:focus-visible {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ==========================================================================
+   Questionário do fim da aula (rota padrão /alunos/)
+   Paleta extraída do mascote public/robot.png (PNG decodificado com zlib, cor mais frequente
+   de cada parte): tela #86c9e3, contorno do visor #2677ac, esteiras #efa71f, antena #e4d286,
+   traço #000000. Contraste conferido pelo auditor visual dos testes e2e.
+   Seletores com .student-app.quiz: precisam vencer .student-app :is(button, ...) de 44 px.
+   ========================================================================== */
+.quiz {
+  --q-blue: #2677ac;        /* contorno do visor: cor primária (branco sobre ela: 4,9:1) */
+  --q-blue-strong: #1b5a82; /* contorno escurecido: hover e foco */
+  --q-screen: #86c9e3;      /* tela do robô: fundo dos ícones e da etiqueta individual */
+  --q-orange: #efa71f;      /* esteiras: destaque (etiqueta da bancada) */
+  --q-cream: #e4d286;       /* antena: detalhe da barra de progresso */
+  --q-stroke: #000000;      /* traço preto do desenho: contorno dos cartões e botões */
+  --q-bg: #eef7fb;          /* fundo claro: tela do robô bem clareada */
+  --q-ink: #0b1a26;         /* texto escuro: traço preto com um toque do contorno azul */
+  --q-muted: #2f4558;
+  --q-surface: #ffffff;
+  display: flex;
+  min-height: 100vh;
+  padding-bottom: 0;
+  color: var(--q-ink);
+  background: var(--q-bg);
+  font-size: 1.125rem;
+  line-height: 1.35;
+}
+.quiz-frame {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: min(1240px, 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(16px, 3vh, 32px) clamp(16px, 3vw, 40px);
+}
+.quiz-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 2vh, 18px);
+  text-align: center;
+}
+.quiz-mascot {
+  width: auto;
+  height: clamp(140px, 30vh, 240px);
+  max-width: 100%;
+  object-fit: contain;
+}
+.quiz-mascot--small { height: 120px; }
+.quiz-title {
+  max-width: 24ch;
+  margin: 0;
+  color: var(--q-ink);
+  font-size: clamp(2rem, 4.2vw, 3rem);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.quiz-title--question {
+  max-width: none;
+  font-size: clamp(1.75rem, 3.4vw, 2.625rem);
+}
+.quiz-lead {
+  margin: 0;
+  color: var(--q-ink);
+  font-size: clamp(1.25rem, 2.2vw, 1.625rem);
+  font-weight: 600;
+}
+.quiz-note {
+  max-width: 42ch;
+  margin: 0;
+  color: var(--q-muted);
+  font-size: 1.125rem;
+}
+.student-app.quiz .quiz-start {
+  min-width: 260px;
+  min-height: 80px;
+  margin-top: 8px;
+  padding: 0 48px;
+  border: 3px solid var(--q-stroke);
+  border-radius: 999px;
+  color: #ffffff;
+  background: var(--q-blue);
+  box-shadow: 0 6px 0 var(--q-stroke);
+  font-size: 1.75rem;
+  font-weight: 800;
+  touch-action: manipulation;
+}
+.student-app.quiz .quiz-start:hover { background: var(--q-blue-strong); }
+.student-app.quiz .quiz-start:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--q-stroke); }
+
+.quiz-question {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2.6vh, 28px);
+}
+.quiz-question__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.quiz-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 4px 18px;
+  border: 2px solid var(--q-stroke);
+  border-radius: 999px;
+  color: var(--q-ink);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.quiz-chip--bancada { background: var(--q-orange); }
+.quiz-chip--crianca { background: var(--q-screen); }
+.quiz-progress {
+  padding: 4px 14px;
+  border-radius: 999px;
+  color: var(--q-ink);
+  background: var(--q-cream);
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.quiz-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: clamp(12px, 1.8vw, 20px);
+}
+.quiz-options--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.student-app.quiz .quiz-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: clamp(150px, 30vh, 220px);
+  padding: 16px 12px;
+  border: 3px solid var(--q-stroke);
+  border-radius: 22px;
+  color: var(--q-ink);
+  background: var(--q-surface);
+  box-shadow: 0 6px 0 var(--q-stroke);
+  font-size: clamp(1.25rem, 2vw, 1.5rem);
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  touch-action: manipulation;
+}
+/* Sem hover: o cursor (ou o toque) fica onde a criança tocou e destacaria a resposta anterior. */
+.student-app.quiz .quiz-option:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--q-stroke); }
+.student-app.quiz .quiz-option:disabled { cursor: progress; opacity: 1; }
+.quiz-option__icon {
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+  padding: 6px;
+  border: 2px solid var(--q-stroke);
+  border-radius: 50%;
+  color: var(--q-stroke);
+  background: var(--q-screen);
+}
+.student-app.quiz :is(button, [tabindex="0"]):focus-visible {
+  outline: 4px solid var(--q-blue-strong);
+  outline-offset: 4px;
+}
+@media (max-width: 1100px) {
+  .quiz-options--5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .student-app.quiz .quiz-options--5 .quiz-option { min-height: clamp(130px, 22vh, 200px); }
+}
+@media (max-width: 900px) {
+  .quiz-options,
+  .quiz-options--5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .student-app.quiz .quiz-option { min-height: 130px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .student-app.quiz :is(.quiz-option, .quiz-start):active { transform: none; }
+}

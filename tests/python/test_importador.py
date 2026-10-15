@@ -693,6 +693,18 @@ class TestProvenienciaNaoImputada(unittest.TestCase):
             payload = imp.sanitize_event_for_supabase(self.base_event(event_type=event_type), "research_session_events")
             self.assertNotIn("_is_quarantine", payload, event_type)
 
+    def test_respostas_do_questionario_do_fim_da_aula_sao_aceitas(self):
+        details = {"item_id": "crianca_confianca_agora_v1", "value": "recusou", "refused": True,
+                   "instrument_version": "bancada-3.2.0", "submission_id": "55555555-5555-4555-8555-555555555555",
+                   "item_order": 4, "session_active": False, "minutes_since_session_start": 62.5}
+        for event_type, role in (("bancada_result_recorded", "group"), ("student_feedback_recorded", "individual")):
+            event = self.base_event(event_type=event_type, participant_role=role, activity_stage="questionario_fim_aula", details=details)
+            payload = imp.sanitize_event_for_supabase(event, "research_session_events")
+            self.assertNotIn("_is_quarantine", payload, event_type)
+            self.assertEqual(payload["event_type"], event_type)
+            self.assertEqual(payload["participant_role"], role)
+            self.assertEqual(payload["details"], details, "respostas chegam à nuvem sem mudança")
+
 
 class TestRetiradaEQualidadeDaBancada(unittest.TestCase):
     """Sessões retiradas nunca entram (SQLite e nuvem); snapshot encerrado não regride."""

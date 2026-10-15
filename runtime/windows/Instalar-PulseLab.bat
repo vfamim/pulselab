@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab - Instalador Local (v3.1.1)
+title PulseLab - Instalador Local (v3.2.0)
 echo ====================================================================
-echo                   PULSELAB - INSTALADOR OFFLINE (v3.1.1)
+echo                   PULSELAB - INSTALADOR OFFLINE (v3.2.0)
 
 echo ====================================================================
 echo.
@@ -40,7 +40,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . (Join-Path $env:LO
 echo.
 
 echo [3/3] Criando atalho silencioso na Area de Trabalho com icone oficial...
-:: Limpar atalhos ou pastas de versoes legadas (v3.1.1)
+:: Limpar atalhos ou pastas de versoes legadas (v3.2.0)
 if exist "%INSTALL_DIR%\app\agent" rd /s /q "%INSTALL_DIR%\app\agent" >nul 2>&1
 if exist "%INSTALL_DIR%\app\pulselab-agent.ps1" del /f /q "%INSTALL_DIR%\app\pulselab-agent.ps1" >nul 2>&1
 if exist "%INSTALL_DIR%\Install-PulseLab.ps1" del /f /q "%INSTALL_DIR%\Install-PulseLab.ps1" >nul 2>&1
@@ -48,6 +48,8 @@ if exist "%INSTALL_DIR%\Desinstalar-PulseLab.bat" del /f /q "%INSTALL_DIR%\Desin
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$desktop = [Environment]::GetFolderPath('Desktop'); $startup = [Environment]::GetFolderPath('Startup'); Remove-Item -LiteralPath (Join-Path $desktop 'Iniciar Pulselab - Oficina de Robotica.lnk') -Force -ErrorAction SilentlyContinue; Remove-Item -LiteralPath (Join-Path $startup 'PulseLab.lnk') -Force -ErrorAction SilentlyContinue" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'PulseLab - Iniciar Oficina.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:SystemRoot, 'System32\wscript.exe'); $s.Arguments = '\"' + [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\iniciar-silencioso.vbs') + '\"'; $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'Iniciar oficina de robotica do PulseLab'; $s.Save()" >nul 2>&1
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ws = New-Object -ComObject WScript.Shell; $s = $ws.CreateShortcut([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), 'PulseLab - Exportar Dados.lnk')); $s.TargetPath = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\Exportar-Dados-Pendrive.bat'); $s.WorkingDirectory = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab'); $s.IconLocation = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico') + ',0'; $s.Description = 'Copiar os registros da oficina para o pendrive'; $s.Save()" >nul 2>&1
+:: Atalho "Questionario PulseLab" (.url) para reabrir a aba do questionario do fim da aula; o nome leva acento, montado no PowerShell.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$name = 'Question' + [char]0x00E1 + 'rio PulseLab.url'; $ico = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'PulseLab\pulselab.ico'); $lines = @('[InternetShortcut]', 'URL=http://127.0.0.1:43128/alunos/', ('IconFile=' + $ico), 'IconIndex=0'); [System.IO.File]::WriteAllLines([System.IO.Path]::Combine([Environment]::GetFolderPath('Desktop'), $name), [string[]]$lines, [System.Text.Encoding]::Default)" >nul 2>&1
 
 :: Inicia com o Windows: a sessao da turma abre quando o computador liga e o icone fica na bandeja.
 :: Os computadores sao dedicados as oficinas; use --sem-inicializacao para nao criar o atalho.
@@ -61,6 +63,7 @@ echo ====================================================================
 echo [OK] Instalacao concluida com sucesso!
 echo      O PulseLab inicia com o Windows e fica como icone na bandeja.
 echo      Para iniciar agora, use o atalho 'PulseLab - Iniciar Oficina'.
+echo      Questionario do fim da aula: abre sozinho; para reabrir, use o atalho 'Questionario PulseLab'.
 echo      Ao fim da aula: clique direito no icone ^> Encerrar turma.
 echo ====================================================================
 echo.

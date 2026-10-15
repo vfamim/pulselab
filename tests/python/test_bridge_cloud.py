@@ -20,6 +20,7 @@ import tempfile
 import threading
 import time
 import unittest
+import uuid
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -531,6 +532,185 @@ class BridgeIdleTest(unittest.TestCase):
         self.assertNotEqual(second, first)
         second_start = [e for e in read_events(data) if e["session_id"] == second and e["event_type"] == "session_started"][0]
         self.assertEqual(second_start["details"]["start_mode"], "atividade_spike")
+
+
+BANCADA_OK = [
+    {"item_id": "bancada_linha_v1", "value": "em_parte"},
+    {"item_id": "bancada_corrida_v1", "value": "recusou"},
+    {"item_id": "bancada_quiz_v1", "value": "sem_quiz"},
+]
+CRIANCA_ITENS = ["crianca_gostou_v1", "crianca_outra_aula_v1", "crianca_confianca_antes_v1",
+                 "crianca_confianca_agora_v1", "crianca_ajudou_v1"]
+
+
+def crianca(*valores: str) -> list[dict]:
+    return [{"item_id": i, "value": v} for i, v in zip(CRIANCA_ITENS, valores)]
+
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeQuestionarioTest(unittest.TestCase):
+    """Questionário do fim da aula: respostas viram eventos da sessão certa, sem nada que identifique a criança."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-questionario-"))
+        self.bridge = BridgeProcess(self.tmp, "http://127.0.0.1:9")
+        write_json(self.bridge.data / "installation.json", authorized_installation())
+
+    def tearDown(self):
+        self.bridge.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def start_and_get_session(self) -> str:
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/session/current")["active"]))
+        return self.bridge.get("/v1/session/current")["session_id"]
+
+    def respostas(self, tipo: str) -> list[dict]:
+        return [e for e in read_events(self.bridge.data) if e["event_type"] == tipo]
+
+    def post(self, parte: str, answers: list[dict], submission_id: str | None = None):
+        return self.bridge.post(f"/v1/questionario/{parte}", {"submission_id": submission_id or str(uuid.uuid4()), "answers": answers})
+
+    def test_grava_na_sessao_ativa_e_bancada_uma_vez_por_aula(self):
+        sid = self.start_and_get_session()
+        estado = self.bridge.get("/v1/questionario/estado")
+        self.assertEqual((estado["coleta_ativa"], estado["motivo"], estado["bancada_respondida"]), (True, None, False))
+        self.assertNotIn("session_id", estado, "a aba das crianças não vê o id da aula")
+
+        # Validação antes de gravar: fora do instrumento, item faltando ou repetido, envio sem id
+        invalidos = [
+            ("bancada", [dict(BANCADA_OK[0], value="talvez"), *BANCADA_OK[1:]], None),
+            ("bancada", BANCADA_OK[:2], None),
+            ("bancada", [BANCADA_OK[0], BANCADA_OK[0], BANCADA_OK[2]], None),
+            ("bancada", [dict(BANCADA_OK[0], value="SIM"), *BANCADA_OK[1:]], None),
+            ("crianca", crianca("sim", "sim", "sim", "sim", "em_parte"), None),
+            ("crianca", BANCADA_OK, None),
+        ]
+        for parte, answers, _ in invalidos:
+            status, _ = self.post(parte, answers)
+            self.assertEqual(status, 400, (parte, answers))
+        status, _ = self.bridge.post("/v1/questionario/crianca", {"submission_id": "joao", "answers": crianca("sim", "sim", "sim", "sim", "sim")})
+        self.assertEqual(status, 400, "submission_id precisa ser um código aleatório")
+        self.assertEqual(self.respostas("bancada_result_recorded") + self.respostas("student_feedback_recorded"), [])
+
+        envio_bancada = str(uuid.uuid4())
+        status, body = self.post("bancada", BANCADA_OK, envio_bancada)
+        self.assertEqual((status, body["status"], body["respostas"]), (200, "gravado", 3))
+        bancada = self.respostas("bancada_result_recorded")
+        self.assertEqual([(e["details"]["item_id"], e["details"]["value"]) for e in bancada],
+                         [(a["item_id"], a["value"]) for a in BANCADA_OK])
+        for e in bancada:
+            self.assertEqual(e["session_id"], sid)
+            self.assertEqual((e["participant_id"], e["participant_role"], e["activity_stage"]), ("BANCADA", "group", "questionario_fim_aula"))
+            self.assertEqual(e["details"]["instrument_version"], "bancada-3.2.0")
+            self.assertEqual(e["config_version"], "bancada-3.2.0")
+            self.assertEqual(e["details"]["submission_id"], envio_bancada)
+            self.assertTrue(e["details"]["session_active"])
+        self.assertEqual([e["details"]["refused"] for e in bancada], [False, True, False])
+        self.assertTrue(self.bridge.get("/v1/questionario/estado")["bancada_respondida"])
+
+        # Uma vez por aula: o segundo envio não grava
+        status, body = self.post("bancada", BANCADA_OK)
+        self.assertEqual((status, body["status"]), (200, "ja_respondido"))
+        self.assertEqual(len(self.respostas("bancada_result_recorded")), 3)
+
+        # Duas crianças, cada uma com o próprio envio
+        self.assertEqual(self.post("crianca", crianca("sim", "mais_ou_menos", "nao", "sim", "recusou"))[1]["status"], "gravado")
+        self.assertEqual(self.post("crianca", crianca("nao", "sim", "mais_ou_menos", "mais_ou_menos", "sim"))[1]["status"], "gravado")
+        individuais = self.respostas("student_feedback_recorded")
+        self.assertEqual(len(individuais), 10)
+        self.assertEqual(len({e["details"]["submission_id"] for e in individuais}), 2)
+        for e in individuais:
+            self.assertEqual((e["session_id"], e["participant_id"], e["participant_role"]), (sid, None, "individual"))
+        self.assertEqual([e["details"]["item_order"] for e in individuais[:5]], [1, 2, 3, 4, 5])
+        # A aula ativa continua aberta e o snapshot leva as respostas
+        self.assertTrue(self.bridge.get("/v1/session/current")["active"])
+        snap = read_json(self.bridge.data / "sessoes" / f"sessao_{sid}.json")
+        tipos = [e["event_type"] for e in snap["timeline"]]
+        self.assertEqual(tipos.count("bancada_result_recorded"), 3)
+        self.assertEqual(tipos.count("student_feedback_recorded"), 10)
+
+    def test_sem_aula_ativa_grava_na_ultima_aula_encerrada(self):
+        sid = self.start_and_get_session()
+        status, body = self.bridge.post("/v1/session/close", {})
+        self.assertEqual((status, body["session_id"]), (200, sid))
+        self.assertFalse(self.bridge.get("/v1/session/current")["active"])
+        estado = self.bridge.get("/v1/questionario/estado")
+        self.assertEqual((estado["coleta_ativa"], estado["bancada_respondida"]), (True, False))
+
+        self.assertEqual(self.post("bancada", BANCADA_OK)[1]["status"], "gravado")
+        self.assertEqual(self.post("bancada", BANCADA_OK)[1]["status"], "ja_respondido")
+        self.assertEqual(self.post("crianca", crianca("sim", "sim", "nao", "sim", "sim"))[1]["status"], "gravado")
+        for e in self.respostas("bancada_result_recorded") + self.respostas("student_feedback_recorded"):
+            self.assertEqual(e["session_id"], sid)
+            self.assertFalse(e["details"]["session_active"])
+            self.assertGreaterEqual(e["details"]["minutes_since_session_start"], 0)
+            self.assertGreaterEqual(e["elapsed_ms"], 0)
+            self.assertEqual(e["installation_id"], INSTALLATION_ID)
+            self.assertEqual(e["site_id"], "PET")
+            self.assertRegex(e["config_hash"], r"^[0-9a-f]{64}$")
+        snap = read_json(self.bridge.data / "sessoes" / f"sessao_{sid}.json")
+        self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "instrutor"), "a aula continua encerrada")
+        self.assertEqual([e["event_type"] for e in snap["timeline"]][-8:], ["bancada_result_recorded"] * 3 + ["student_feedback_recorded"] * 5)
+        sequencias = [e["_sequence"] for e in snap["timeline"]]
+        self.assertEqual(sequencias, sorted(set(sequencias)), "sequência continua depois do encerramento")
+        self.assertFalse(self.bridge.get("/v1/session/current")["active"], "responder não abre outra aula")
+
+    def test_aula_pausada_nao_grava(self):
+        sid = self.start_and_get_session()
+        status, body = self.bridge.post("/v1/session/pause", {"session_id": sid})
+        self.assertEqual((status, body["marked"]), (200, True))
+        estado = self.bridge.get("/v1/questionario/estado")
+        self.assertEqual((estado["coleta_ativa"], estado["motivo"]), (False, "pausado"))
+        status, body = self.post("crianca", crianca("sim", "sim", "sim", "sim", "sim"))
+        self.assertEqual((status, body["status"], body["motivo"]), (200, "nao_gravado", "pausado"))
+        status, body = self.post("bancada", BANCADA_OK)
+        self.assertEqual((status, body["status"]), (200, "nao_gravado"))
+        self.assertEqual(self.respostas("bancada_result_recorded") + self.respostas("student_feedback_recorded"), [])
+
+    def test_aula_nao_autorizada_sem_pausa_nao_grava(self):
+        # Limite da aula (e da pausa) de 1 min: a pausa vence e a última aula encerrada continua marcada.
+        self.bridge = BridgeProcess(self.tmp / "curta", "http://127.0.0.1:9", {"PULSELAB_SESSION_MAX_MINUTES": "1"})
+        write_json(self.bridge.data / "installation.json", authorized_installation())
+        sid = self.start_and_get_session()
+        self.assertEqual(self.bridge.post("/v1/session/pause", {"session_id": sid})[0], 200)
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/questionario/estado")["motivo"] == "nao_autorizada", timeout=100),
+                        "pausa vencida: a última aula continua não autorizada")
+        self.assertFalse(self.bridge.get("/v1/status")["paused"])
+        status, body = self.post("crianca", crianca("sim", "sim", "sim", "sim", "sim"))
+        self.assertEqual((status, body["status"], body["motivo"]), (200, "nao_gravado", "nao_autorizada"))
+        self.assertEqual(self.respostas("student_feedback_recorded"), [])
+
+    def test_modo_livre_nao_grava(self):
+        write_json(self.bridge.data / "installation.json", {"installation_id": INSTALLATION_ID, "site_id": "PET", "research_collection_enabled": False})
+        self.bridge.start()
+        estado = self.bridge.get("/v1/questionario/estado")
+        self.assertEqual((estado["coleta_ativa"], estado["motivo"], estado["bancada_respondida"]), (False, "modo_livre", False))
+        status, body = self.post("crianca", crianca("sim", "sim", "sim", "sim", "sim"))
+        self.assertEqual((status, body["status"], body["motivo"]), (200, "nao_gravado", "modo_livre"))
+        self.assertEqual(read_events(self.bridge.data), [])
+
+    def test_rotas_exigem_origem_local_e_json(self):
+        self.start_and_get_session()
+        req = urllib.request.Request(
+            f"{self.bridge.base}/v1/questionario/crianca",
+            data=json.dumps({"submission_id": str(uuid.uuid4()), "answers": crianca("sim", "sim", "sim", "sim", "sim")}).encode(),
+            headers={"Content-Type": "application/json", "Origin": "http://exemplo.com"}, method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=10)
+        self.assertEqual(ctx.exception.code, 403)
+        req = urllib.request.Request(
+            f"{self.bridge.base}/v1/questionario/crianca", data=b"x=1",
+            headers={"Content-Type": "text/plain", "Origin": self.bridge.base}, method="POST",
+        )
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(req, timeout=10)
+        self.assertEqual(ctx.exception.code, 415)
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            urllib.request.urlopen(f"{self.bridge.base}/v1/questionario/crianca", timeout=10)
+        self.assertEqual(ctx.exception.code, 405)
+        self.assertEqual(self.respostas("student_feedback_recorded"), [])
 
 
 if __name__ == "__main__":

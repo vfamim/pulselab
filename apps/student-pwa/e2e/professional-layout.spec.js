@@ -23,7 +23,7 @@ test.beforeEach(async ({ context }) => {
 for (const [width, height] of viewports) {
   test(`professional ${width}x${height}: encerramento legível, contraste AA e alvos de toque`, async ({ page }) => {
     await page.setViewportSize({ width, height });
-    await page.goto('/alunos/');
+    await page.goto('/alunos/?encerrar=1');
     await expect(page.getByRole('heading', { name: 'Encerrar a turma desta bancada?' })).toBeVisible();
     await audit(page, `confirmar ${width}x${height}`);
     await page.getByRole('button', { name: 'Encerrar turma' }).click();
@@ -38,7 +38,7 @@ for (const [width, height] of viewports) {
 
 test('reflow at 320px: encerramento sem rolagem horizontal', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto('/alunos/');
+  await page.goto('/alunos/?encerrar=1');
   await audit(page, '320px confirmar');
   await page.getByRole('button', { name: 'Encerrar turma' }).click();
   await expect(page.getByRole('heading', { name: 'Turma encerrada' })).toBeVisible();
