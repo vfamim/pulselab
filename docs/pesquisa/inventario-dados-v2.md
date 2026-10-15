@@ -19,7 +19,8 @@ Fonte dos itens de encerramento: `apps/student-pwa/lib/contracts.js`
 | Cobertura da missão | `mission_coverage`: proporção dos elementos esperados presentes no programa final, só com calendário de missões configurado | Relacionar o programa à missão do dia | Sem calendário: ausente, não zero |
 | Pergunta da bancada | 4 carinhas ou "Preferimos não responder" | Experiência coletiva da aula | Uma resposta por bancada; recusa não é ponto neutro |
 | Itens do instrutor | resultado 0–3; apoio nenhum/algum/muito; ou pulado | Resultado prático e mediação | Sobre a bancada; pular não é zero |
-| Turma não registrada | marca de exclusão: só o identificador da sessão apagada | Impedir que dados apagados voltem por pendrive ou reenvio | Não guarda motivo nem quem recusou |
+| Aula não autorizada | `authorization_status = "nao_autorizada"` e `marked_at` no snapshot da sessão; `sessions_unauthorized.txt` no computador (`session_id` e data da marcação); `research_unauthorized_sessions` na nuvem | Garantir que a aula recusada nunca entre em relatório ou análise até a revisão do pesquisador | Não guarda motivo nem quem recusou; restauração exige motivo registrado pelo pesquisador |
+| Aula apagada na revisão | marca de exclusão (`research_withdrawals` na nuvem, `withdrawn_sessions` no SQLite): só o identificador da sessão apagada | Impedir que dados apagados voltem por pendrive ou reenvio | Não guarda motivo nem quem recusou |
 
 Não registra: nomes, fotos, vídeo, áudio, teclas, cliques, captura de tela,
 identificadores Bluetooth do hub, texto livre.
@@ -27,8 +28,18 @@ identificadores Bluetooth do hub, texto livre.
 Armazenamento e prazo: no computador, pelo `retention_days` do pacote do polo
 (padrão 180 dias, faixa de 1 a 365), mesmo depois de exportado ou enviado. Saída
 por pendrive (atalho "PulseLab - Exportar Dados") ou envio à nuvem do projeto
-quando a máquina está cadastrada e conectada. "Não registrar esta turma" apaga
-os dados da turma atual naquele computador e grava a marca de exclusão.
+quando a máquina está cadastrada e conectada.
+
+"Não registrar esta turma" marca como não autorizada a aula em andamento ou, sem
+ela, a última aula encerrada (se outra não começou depois). Nada é apagado na hora:
+há polos sem internet que entregam o pendrive meses depois, então não existe prazo
+automático para apagar. A aula marcada segue para a nuvem ou para o pendrive com a
+marca e fica fora de todas as views de análise e de qualidade
+(`research_session_is_authorized`) e das views `*_autorizad*` do SQLite
+consolidado. O pesquisador, único com acesso aos dados, revisa as aulas marcadas
+com `tooling/data/revisar-nao-autorizadas.py`: o padrão é apagar (nuvem e SQLite,
+com marca de exclusão contra reenvio); restaurar exige motivo, que fica gravado. A
+cópia no computador da bancada segue a retenção normal.
 
 Os dados são desidentificados, não anônimos: rótulo do computador e data,
 combinados com informação da escola sobre quem sentou em cada bancada, podem

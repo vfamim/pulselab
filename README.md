@@ -14,7 +14,7 @@ O instrutor usa o menu do ícone da bandeja (botão direito):
 | Item | O que faz |
 |---|---|
 | **Encerrar turma…** | Fecha a gravação da turma. A próxima começa sozinha no primeiro programa salvo no SPIKE. |
-| **Não registrar esta turma** | Para recusas: apaga os dados da turma atual neste computador e pausa o registro até a próxima aula. |
+| **Não registrar esta turma** | Para recusas: mostra a aula ("Aula que começou às 14:05 (50 min)"), marca como não autorizada e pausa o registro até a próxima aula. Vale para a aula em andamento ou, sem ela, para a última encerrada. |
 | **Ver situação** | Mostra se o registro está ativo, pausado ou desligado. |
 | **Fechar PulseLab** | Desliga tudo até o computador ser ligado de novo ou o atalho ser usado. |
 
@@ -29,7 +29,8 @@ Sem encerramento, a sessão fecha sozinha depois de 3 horas ou quando o computad
   de tela ou teclado.
 - **Assentimento verbal.** No início da aula o instrutor lê o
   [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
-  turma**: os dados da turma são apagados e marcados contra reenvio, no computador e na nuvem.
+  turma**: a aula é marcada como não autorizada e nunca entra em análise. A exclusão definitiva é
+  feita na revisão do pesquisador, com marca contra reenvio (veja "Dados e nuvem").
 - **O que é registrado:** como a sessão terminou, interrupções, situação da pasta do SPIKE e, de
   cada versão salva do programa, só os tipos de blocos. Daí saem um escore de pensamento
   computacional adaptado de Dr. Scratch (ainda não validado) e, com calendário de missões, a
@@ -62,6 +63,21 @@ Tudo fica em `dados_locais/` no computador, pasta que nenhuma atualização ou r
 Com internet, o bridge envia ao Supabase a cada 30 segundos: os eventos um a um e o resumo da
 sessão quando ela fecha. Polos sem internet enviam quando o instrutor conecta ou exportam por
 pendrive, e o pesquisador importa com `tooling/data/Importar-Para-Supabase.bat`.
+
+Aulas marcadas como não autorizadas sobem com `authorization_status = "nao_autorizada"` (e saem no
+pendrive em `sessions_unauthorized.txt`), ficam guardadas e fora das views de análise e de qualidade
+(`research_session_is_authorized`). Não há prazo automático para apagar, porque há polos que entregam
+pendrive meses depois. O pesquisador revisa:
+
+```sh
+python3 tooling/data/revisar-nao-autorizadas.py                       # lista (nuvem e SQLite consolidado)
+python3 tooling/data/revisar-nao-autorizadas.py --apagar <session_id>  # ou --apagar-todas: o padrão
+python3 tooling/data/revisar-nao-autorizadas.py --restaurar <session_id> --motivo "texto"
+```
+
+Apagar grava o tombstone em `research_withdrawals` (e no SQLite) antes de remover, o que barra reenvio
+pelo bridge e reimportação por pendrive. Usa as mesmas credenciais do importador
+(`PULSELAB_SERVICE_ROLE_KEY`).
 
 O cadastro das máquinas na nuvem é automático, com um token por polo:
 

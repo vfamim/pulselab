@@ -105,7 +105,7 @@ Ficam dois atalhos na Área de Trabalho, **PulseLab - Iniciar Oficina** e **Puls
 2. Leia para a turma o **roteiro de assentimento verbal** entregue pela coordenação e responda às dúvidas.
 3. Comece a oficina normalmente.
 
-O registro da turma começa sozinho, no primeiro programa salvo no LEGO SPIKE.
+O registro da primeira aula começa sozinho quando o PulseLab abre, junto com o Windows. Depois de **Encerrar turma...**, a próxima começa no primeiro programa salvo no LEGO SPIKE.
 
 Se o ícone não aparecer, use o atalho **PulseLab - Iniciar Oficina**.
 
@@ -128,7 +128,7 @@ Passe o mouse sobre o ícone para ler a situação, por exemplo `PulseLab - regi
 | Item | O que faz |
 |---|---|
 | **Encerrar turma...** | Pergunta se quer encerrar. Em **Sim**, finaliza a gravação desta aula. Não há formulário nem perguntas. |
-| **Não registrar esta turma** | Apaga os dados desta turma neste computador e pausa o registro até a próxima aula. A bancada continua usando tudo normalmente. |
+| **Não registrar esta turma** | Mostra a aula, por exemplo "Aula que começou às 14:05 (50 min)", e pergunta se pode marcar. Em **Sim**, a aula fica marcada como não autorizada: os dados não serão usados na pesquisa e o pesquisador apaga depois. O registro pausa até a próxima aula e a bancada continua usando tudo normalmente. |
 | **Ver situação** | Mostra o nome do computador, se a turma está sendo registrada, quantos programas SPIKE foram vistos e se há dados esperando envio. |
 | **Fechar PulseLab** | Desliga o PulseLab até o próximo início do Windows. Use só quando pedirem. |
 
@@ -142,8 +142,9 @@ Passe o mouse sobre o ícone para ler a situação, por exemplo `PulseLab - regi
 ## Faça
 
 1. Agradeça e **não pergunte o motivo**.
-2. No computador daquela bancada: botão direito no ícone, **Não registrar esta turma**, **Sim**.
-3. Siga a aula normalmente. A bancada continua montando e programando.
+2. No computador daquela bancada: botão direito no ícone, **Não registrar esta turma**.
+3. Aparece **Aula que começou às 14:05 (50 min). Marcar esta aula como não autorizada?** Clique **Sim**.
+4. Siga a aula normalmente. A bancada continua montando e programando.
 
 </div>
 <div>
@@ -158,7 +159,7 @@ Passe o mouse sobre o ícone para ler a situação, por exemplo `PulseLab - regi
 </div>
 </div>
 
-Recusa avisada depois da aula: informe à equipe de pesquisa o nome do computador, a data e o horário. Se o roteiro não foi lido, use **Não registrar esta turma** em todos os computadores da turma.
+Já encerrou a turma? Use do mesmo jeito: vale para a última aula encerrada, se outra ainda não começou. Fora disso, avise a equipe de pesquisa com o nome do computador, a data e o horário. Se o roteiro não foi lido, use **Não registrar esta turma** em todos os computadores da turma.
 
 ---
 

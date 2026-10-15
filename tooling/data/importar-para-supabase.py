@@ -253,7 +253,7 @@ def validate_manifest(
         for cand_path in target_dir.rglob("*"):
             if cand_path.is_file() and (
                 cand_path.suffix.lower() in (".json", ".jsonl")
-                or cand_path.name.lower() == WITHDRAWN_SESSIONS_FILE
+                or cand_path.name.lower() in (WITHDRAWN_SESSIONS_FILE, UNAUTHORIZED_SESSIONS_FILE)
             ):
                 if cand_path.name.startswith("relatorio_") or cand_path.name.startswith("rejeicoes_"):
                     continue
@@ -303,7 +303,21 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
                 imported_at TEXT,
                 ended_by TEXT,
                 interrupted INTEGER,
-                data_quality_json TEXT
+                data_quality_json TEXT,
+                computer_id TEXT
+            )
+        """)
+
+        # Aulas marcadas como não autorizadas ("Não registrar esta turma"). Os dados ficam no
+        # banco, fora das views *_autorizad*, até a revisão do pesquisador apagar ou restaurar.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS unauthorized_sessions (
+                session_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'nao_autorizada',
+                marked_at TEXT,
+                recorded_at TEXT,
+                restored_at TEXT,
+                restore_reason TEXT
             )
         """)
 
@@ -365,12 +379,22 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_id);")
 
+        # Base para relatórios e análises: nunca inclui aula marcada como não autorizada.
+        for view, table in (("sessions_autorizadas", "sessions"), ("events_autorizados", "events"),
+                            ("session_events_autorizados", "session_events")):
+            conn.execute(f"""
+                CREATE VIEW IF NOT EXISTS {view} AS
+                SELECT * FROM {table} WHERE lower(coalesce(session_id, '')) NOT IN (
+                    SELECT lower(session_id) FROM unauthorized_sessions WHERE status = 'nao_autorizada'
+                )
+            """)
+
     # Migração retrocompatível de colunas se o banco já existia
     cur = conn.cursor()
     for tbl, cols in [
         ("events", ["occurred_at", "response_status", "knowledge_answers_json", "prior_robotics", "mission_performance", "primary_issue"]),
         ("session_events", ["occurred_at"]),
-        ("sessions", ["ended_by", "interrupted INTEGER", "data_quality_json"]),
+        ("sessions", ["ended_by", "interrupted INTEGER", "data_quality_json", "computer_id"]),
     ]:
         existing = {row[1] for row in cur.execute(f"PRAGMA table_info({tbl})").fetchall()}
         for col_def in cols:
@@ -579,6 +603,9 @@ def ensure_uuid(val: str | None) -> str:
 
 
 WITHDRAWN_SESSIONS_FILE = "sessions_withdrawn.txt"
+# Uma linha por aula marcada pelo bridge: session_id<TAB>marked_at (ISO-8601 UTC), UTF-8 com ou sem BOM.
+UNAUTHORIZED_SESSIONS_FILE = "sessions_unauthorized.txt"
+UNAUTHORIZED_STATUS = "nao_autorizada"
 ALLOWED_ENDED_BY = {"instrutor", "tempo", "sem_encerramento"}
 
 
@@ -634,6 +661,87 @@ def purge_withdrawn_sqlite(conn: sqlite3.Connection, withdrawn: set[str]) -> int
     return removed
 
 
+def read_unauthorized_sessions(target_dir: Path) -> dict[str, str | None]:
+    """Lê sessions_unauthorized.txt da coleta: {session_id canônico: marked_at ou None}."""
+    path = target_dir / UNAUTHORIZED_SESSIONS_FILE
+    marks: dict[str, str | None] = {}
+    if not path.is_file():
+        return marks
+    for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        parts = line.split()
+        key = session_key(parts[0]) if parts else None
+        if key:
+            marks[key] = parts[1] if len(parts) > 1 else marks.get(key)
+    return marks
+
+
+def snapshot_mark(data: dict) -> tuple[str, str | None] | None:
+    """Marca gravada pelo bridge no próprio snapshot (authorization_status + marked_at)."""
+    if data.get("authorization_status") != UNAUTHORIZED_STATUS:
+        return None
+    key = session_key(data.get("session_id"))
+    return (key, data.get("marked_at")) if key else None
+
+
+def apply_mark_to_snapshot(data: dict, marks: dict[str, str | None]) -> dict:
+    """Garante a marca no session_payload enviado à nuvem quando ela só veio na lista da coleta."""
+    key = session_key(data.get("session_id"))
+    if key in marks and data.get("authorization_status") != UNAUTHORIZED_STATUS:
+        data = {**data, "authorization_status": UNAUTHORIZED_STATUS}
+        if marks[key]:
+            data["marked_at"] = marks[key]
+    return data
+
+
+def record_unauthorized_sqlite(conn: sqlite3.Connection, marks: dict[str, str | None], now_iso: str) -> None:
+    """Grava as marcas no SQLite. INSERT OR IGNORE: restauração feita na revisão não é desfeita."""
+    with conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO unauthorized_sessions (session_id, status, marked_at, recorded_at) VALUES (?, ?, ?, ?)",
+            [(sid, UNAUTHORIZED_STATUS, marks[sid], now_iso) for sid in sorted(marks)],
+        )
+
+
+def send_unauthorized_marks_remote(
+    marks: dict[str, str | None], supabase_url: str, supabase_key: str, now_iso: str, chunk_size: int = 50
+) -> tuple[int, str | None]:
+    """
+    Grava as marcas em research_unauthorized_sessions (service_role). Cobre aula marcada cujo
+    snapshot não veio na coleta; com snapshot, o trigger da nuvem já marca pelo session_payload.
+    """
+    if not marks or not supabase_url or not supabase_key:
+        return 0, None
+    if not is_service_role_key(supabase_key):
+        return 0, "marcas diretas exigem service_role; snapshots marcados seguem pelo session_payload"
+    endpoint = supabase_url.rstrip("/") + "/rest/v1/research_unauthorized_sessions?on_conflict=session_id"
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Prefer": "resolution=ignore-duplicates,return=minimal",
+    }
+    ids = sorted(marks)
+    sent = 0
+    try:
+        for i in range(0, len(ids), chunk_size):
+            chunk = ids[i : i + chunk_size]
+            body = json.dumps([{"session_id": sid, "marked_at": marks[sid] or now_iso} for sid in chunk]).encode("utf-8")
+            req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp.read()
+            sent += len(chunk)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            pass
+        return sent, f"HTTP {exc.code}: {detail or exc.reason}"
+    except Exception as exc:
+        return sent, str(exc)
+    return sent, None
+
+
 def bancada_phase(data: dict) -> str:
     """Mesma regra do bridge: phase explícita; senão status; snapshot legado sem ambos conta como encerrado."""
     if data.get("phase"):
@@ -677,8 +785,8 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
                 workshop_code, class_code, activity_id, started_at, completed_at,
                 duration_seconds, team_role, status, pre_answers_json,
                 post_answers_json, spike_telemetry_json, events_count,
-                source_file, imported_at, ended_by, interrupted, data_quality_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_file, imported_at, ended_by, interrupted, data_quality_json, computer_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
                 group_id = excluded.group_id,
                 site_id = excluded.site_id,
@@ -700,7 +808,8 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
                 imported_at = excluded.imported_at,
                 ended_by = excluded.ended_by,
                 interrupted = excluded.interrupted,
-                data_quality_json = excluded.data_quality_json
+                data_quality_json = excluded.data_quality_json,
+                computer_id = excluded.computer_id
         """, (
             sess_id,
             data.get("group_id", ""),
@@ -724,6 +833,7 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
             quality["ended_by"],
             None if interrupted is None else int(interrupted),
             json.dumps(quality["data_quality"]) if quality["data_quality"] is not None else None,
+            data.get("computer_id") or None,
         ))
     return "updated" if row is not None else "inserted"
 
@@ -809,7 +919,8 @@ def withdraw_sessions_remote(
                 resp.read()
             sent += len(chunk)
             id_list = ",".join(chunk)
-            for table in ("instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions"):
+            for table in ("instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions",
+                          "research_unauthorized_sessions"):
                 req = urllib.request.Request(
                     f"{base}/{table}?session_id=in.({id_list})",
                     headers={**headers, "Prefer": "return=minimal"},
@@ -1067,6 +1178,7 @@ def main() -> int:
     events_files: list[Path] = []
     raw_sessions_data: list[dict] = []
     withdrawn_from_exports: set[str] = set()
+    unauthorized_marks: dict[str, str | None] = {}
 
     hmac_key = (
         args.manifest_hmac_key
@@ -1096,6 +1208,8 @@ def main() -> int:
                 print(f"[!] Integridade verificada, origem não autenticada em: {tdir.name} ({manifest_msg})")
 
             withdrawn_from_exports |= read_withdrawn_sessions(tdir)
+            for sid, marked_at in read_unauthorized_sessions(tdir).items():
+                unauthorized_marks[sid] = marked_at or unauthorized_marks.get(sid)
 
             s_dir = tdir / "sessoes"
             if s_dir.is_dir():
@@ -1113,7 +1227,7 @@ def main() -> int:
     session_files = list({p.resolve(): p for p in session_files}.values())
     events_files = list({p.resolve(): p for p in events_files}.values())
 
-    if not args.no_cloud and not session_files and not events_files and not withdrawn_from_exports:
+    if not args.no_cloud and not session_files and not events_files and not withdrawn_from_exports and not unauthorized_marks:
         print("[ERRO] Nenhuma pasta de coleta atendeu aos requisitos de integridade e autenticidade institucional para envio à nuvem.")
         return 1
 
@@ -1147,6 +1261,10 @@ def main() -> int:
                 withdrawn_snapshots_skipped += 1
                 continue
 
+            mark = snapshot_mark(data)
+            if mark:
+                unauthorized_marks[mark[0]] = mark[1] or unauthorized_marks.get(mark[0])
+            data = apply_mark_to_snapshot(data, unauthorized_marks)
             raw_sessions_data.append(data)
             events_list = data.get("events") or []
             if isinstance(events_list, list):
@@ -1163,6 +1281,15 @@ def main() -> int:
             print(f"[!] Erro ao processar sessão {sf.name}: {exc}")
 
     print(f"[✓] Sessões SQLite: {sessions_inserted} inseridas, {sessions_updated} atualizadas.")
+
+    # Marcas de aula não autorizada: guardadas (nunca apagadas aqui), fora das views de análise.
+    unauthorized_marks = {sid: m for sid, m in unauthorized_marks.items() if sid not in withdrawn}
+    record_unauthorized_sqlite(conn, unauthorized_marks, now_iso)
+    if unauthorized_marks:
+        print(
+            f"[✓] Aulas não autorizadas: {len(unauthorized_marks)} marca(s) preservada(s); "
+            "revise com tooling/data/revisar-nao-autorizadas.py."
+        )
     if sessions_kept_completed:
         print(f"[✓] Sessões já encerradas mantidas (snapshot em andamento ignorado): {sessions_kept_completed}.")
 
@@ -1335,6 +1462,13 @@ def main() -> int:
             if withdraw_err:
                 print(f"    [!] Retirada remota pendente: {withdraw_err}")
 
+        # 3.0.1 Marcas de aula não autorizada antes dos dados da aula.
+        if unauthorized_marks:
+            sent_marks, marks_err = send_unauthorized_marks_remote(unauthorized_marks, sb_url, sb_key, now_iso)
+            print(f"  - Aulas não autorizadas: {sent_marks}/{len(unauthorized_marks)} marcas gravadas na nuvem")
+            if marks_err:
+                print(f"    [!] {marks_err}")
+
         # 3.1 research_events
         res_dict = {e["event_id"]: e for e in events_to_upload_research}
         res_unique = list(res_dict.values())
@@ -1430,6 +1564,7 @@ Data/Hora da Execução : {now_iso}
 Base SQLite Local     : {sqlite_file}
 Sessões Inseridas     : {sessions_inserted}
 Sessões Atualizadas   : {sessions_updated}
+Aulas Não Autorizadas : {len(unauthorized_marks)} (guardadas, fora das análises até a revisão)
 Sessões Retiradas     : {len(withdrawn)} (snapshots descartados: {withdrawn_snapshots_skipped}, eventos descartados: {withdrawn_events_skipped}, apagados do SQLite: {withdrawn_purged_sqlite})
 Eventos Inseridos     : {events_inserted_sqlite}
 Eventos Duplicados    : {events_duplicate_sqlite}
