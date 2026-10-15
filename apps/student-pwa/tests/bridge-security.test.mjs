@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../../..");
-const bridgePath = path.join(repoRoot, "bridge", "pulselab-bridge.ps1");
+const bridgePath = path.join(repoRoot, "runtime", "windows", "bridge", "pulselab-bridge.ps1");
 
 test("Bridge Security: guards de Content-Length e leitura limitada de corpo a 5MB", () => {
   assert.ok(fs.existsSync(bridgePath), "bridge/pulselab-bridge.ps1 deve existir");

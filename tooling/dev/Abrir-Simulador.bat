@@ -8,19 +8,15 @@ echo.
 echo Iniciando servidor local do PulseLab e abrindo simulador...
 echo.
 
-set "BASE_DIR=%~dp0..\..\"
-if not exist "%BASE_DIR%bridge\pulselab-bridge.ps1" (
-    if exist "%LOCALAPPDATA%\PulseLab\bridge\pulselab-bridge.ps1" (
-        set "BASE_DIR=%LOCALAPPDATA%\PulseLab\"
-    )
+cd /d "%~dp0..\.."
+python tooling\release\build-installer.py --stage dist-dev
+if errorlevel 1 (
+    echo [ERRO] Nao foi possivel montar o pacote. Rode "npm run build" em apps\student-pwa antes.
+    pause
+    exit /b 1
 )
-
+set "BASE_DIR=%CD%\dist-dev\"
 set "APP_PATH=%BASE_DIR%app\alunos"
-if not exist "%APP_PATH%" (
-    if exist "%BASE_DIR%alunos" (
-        set "APP_PATH=%BASE_DIR%alunos"
-    )
-)
 
 start "" /B powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%BASE_DIR%bridge\pulselab-bridge.ps1" -Port 43128 -AppRoot "%APP_PATH%" -DataDir "%LOCALAPPDATA%\PulseLab\data"
 

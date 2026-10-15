@@ -16,7 +16,7 @@ from pathlib import Path
 # Caminho publicado -> origem no repositório
 PUBLIC_ENTRIES = {
     "index.html": "apps/site/index.html",
-    "pulselab.ico": "pulselab.ico",
+    "pulselab.ico": "runtime/windows/pulselab.ico",
     "assets": "apps/site/assets",
     "alunos": "alunos",
     "instalador": "apps/site/instalador",

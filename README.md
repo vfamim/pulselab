@@ -118,7 +118,7 @@ completo em [docs/engenharia/release.md](docs/engenharia/release.md).
 | `apps/student-pwa/` | PWA da bancada (React + Vite); o build vai para `alunos/` |
 | `apps/site/` | Site público: início, instalador, tutorial, testes e relatório |
 | `alunos/` | Build da PWA, servido pelo bridge local e pelo site |
-| raiz: `pulselab*.ps1`, `bridge/`, `*.bat`, ícones | Runtime Windows empacotado no ZIP por `tooling/release/build-installer.py` |
+| `runtime/windows/` | Launcher, atualizador, bridge, bandeja e atalhos `.bat`, no mesmo layout da pasta `arquivos/` do ZIP |
 | `config/` | Configuração empacotada (defaults, config, catálogo de missões) |
 | `supabase/` | Migrações, testes SQL, função `enroll-device` e scripts de cadastro |
 | `tooling/release/` | Versão, empacotamento e release assinada |

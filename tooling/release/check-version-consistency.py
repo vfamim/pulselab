@@ -90,23 +90,23 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         if data.get("version") != canonical:
             errors.append(f"config/config.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
 
-    # 6. Bridge PowerShell: bridge/pulselab-bridge.ps1
-    bridge_ps1 = repo_root / "bridge/pulselab-bridge.ps1"
+    # 6. Bridge PowerShell: runtime/windows/bridge/pulselab-bridge.ps1
+    bridge_ps1 = repo_root / "runtime/windows/bridge/pulselab-bridge.ps1"
     if bridge_ps1.is_file():
         content = read_text(bridge_ps1)
         expected_bv = f'$script:BridgeVersion = "{canonical}"'
         if expected_bv not in content:
-            errors.append(f"bridge/pulselab-bridge.ps1: não contém '{expected_bv}'")
+            errors.append(f"runtime/windows/bridge/pulselab-bridge.ps1: não contém '{expected_bv}'")
         if re.search(r'protocol_version = "\d+\.\d+\.\d+"', content):
-            errors.append("bridge/pulselab-bridge.ps1: protocol_version não pode ser a versão do software")
+            errors.append("runtime/windows/bridge/pulselab-bridge.ps1: protocol_version não pode ser a versão do software")
 
-    # 7. Launcher: pulselab.ps1
-    launcher_ps1 = repo_root / "pulselab.ps1"
+    # 7. Launcher: runtime/windows/pulselab.ps1
+    launcher_ps1 = repo_root / "runtime/windows/pulselab.ps1"
     if launcher_ps1.is_file():
         content = read_text(launcher_ps1)
         expected_lv = f'$localVersion = "{canonical}"'
         if expected_lv not in content:
-            errors.append(f"pulselab.ps1: fallback de versão deve ser '{expected_lv}'")
+            errors.append(f"runtime/windows/pulselab.ps1: fallback de versão deve ser '{expected_lv}'")
 
     # 8. PWA UI: apps/student-pwa/app/student-page.jsx
     student_page = repo_root / "apps/student-pwa/app/student-page.jsx"
@@ -146,11 +146,11 @@ def check_version_consistency(repo_root: Path) -> list[str]:
             errors.append("tooling/release/build-offline-package.sh: não gerar mais a cópia PulseLab-Alunos-Offline (duplicata do ZIP)")
 
     # 12. Scripts Batch de instalação e atualização
-    instalar_bat = repo_root / "Instalar-PulseLab.bat"
+    instalar_bat = repo_root / "runtime/windows/Instalar-PulseLab.bat"
     if instalar_bat.is_file():
         content = read_text(instalar_bat)
         if f"(v{canonical})" not in content:
-            errors.append(f"Instalar-PulseLab.bat: deve exibir título com '(v{canonical})'")
+            errors.append(f"runtime/windows/Instalar-PulseLab.bat: deve exibir título com '(v{canonical})'")
 
     atualizar_bat = repo_root / "tooling/site/Atualizar-Site-Firebase.bat"
     if atualizar_bat.is_file():

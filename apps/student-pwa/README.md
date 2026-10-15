@@ -34,7 +34,7 @@ Na rota padrão (`/alunos/`), a interface é 100% silenciosa e serena:
 
 ### 3. Coleta Passiva de Telemetria SPIKE
 - A cada 10 segundos, a PWA consulta o Bridge local via `GET /v1/spike/metrics`.
-- O parser do Bridge (`bridge/spike-parser.ps1`) analisa projetos salvos do LEGO SPIKE Prime (`.llsp3`, Scratch `.sb3`, Python); a PWA só recebe as métricas agregadas.
+- O parser do Bridge (`runtime/windows/bridge/spike-parser.ps1`) analisa projetos salvos do LEGO SPIKE Prime (`.llsp3`, Scratch `.sb3`, Python); a PWA só recebe as métricas agregadas.
 - Extrai estritamente métricas estruturais agregadas: contagem de blocos executáveis, pilhas de blocos, uso de motores, sensores, laços de repetição (`loops`) e condicionais (`conditions`).
 - **Privacidade total do código**: variáveis de usuário, strings livres, dados de áudio e identificadores Bluetooth do Hub nunca são extraídos ou persistidos.
 

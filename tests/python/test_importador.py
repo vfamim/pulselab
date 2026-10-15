@@ -407,11 +407,11 @@ class TestImportadorIntegridade(unittest.TestCase):
 
 
 class TestBridgeSecurityStatic(unittest.TestCase):
-    """Testes estáticos de segurança para bridge/pulselab-bridge.ps1 sem necessidade de Windows."""
+    """Testes estáticos de segurança para runtime/windows/bridge/pulselab-bridge.ps1 sem necessidade de Windows."""
 
     @classmethod
     def setUpClass(cls):
-        bridge_path = Path(__file__).resolve().parents[2] / "bridge" / "pulselab-bridge.ps1"
+        bridge_path = Path(__file__).resolve().parents[2] / "runtime" / "windows" / "bridge" / "pulselab-bridge.ps1"
         cls.bridge_code = bridge_path.read_text(encoding="utf-8", errors="replace")
 
     def test_auto_update_completely_disabled(self):

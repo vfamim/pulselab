@@ -13,7 +13,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pageCode = fs.readFileSync(path.join(__dirname, "../app/student-page.jsx"), "utf-8");
-const bridgeCode = fs.readFileSync(path.join(__dirname, "../../../bridge/pulselab-bridge.ps1"), "utf-8");
+const bridgeCode = fs.readFileSync(path.join(__dirname, "../../../runtime/windows/bridge/pulselab-bridge.ps1"), "utf-8");
 
 test("Contexto: marcadores CONFIGURE_* e campos ausentes viram nao_informado, sem valores genéricos", () => {
   const ctx = resolveSessionContext({
@@ -98,7 +98,7 @@ test("Sessão do Bridge: fecha por tempo (3 h) e por computador desligado/suspen
 });
 
 test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegador", () => {
-  const trayPath = path.join(__dirname, "../../../bridge/pulselab-tray.ps1");
+  const trayPath = path.join(__dirname, "../../../runtime/windows/bridge/pulselab-tray.ps1");
   const tray = fs.readFileSync(trayPath, "utf-8");
   assert.match(tray, /function Close-CurrentTurma/);
   assert.match(tray, /\$itemClose\.add_Click\(\{\s*Close-CurrentTurma\s*\}\)/);
@@ -107,7 +107,7 @@ test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegado
 });
 
 test("Encerrar turma mantém o PulseLab ligado; desligar só por \"Fechar PulseLab\"", () => {
-  const trayPath = path.join(__dirname, "../../../bridge/pulselab-tray.ps1");
+  const trayPath = path.join(__dirname, "../../../runtime/windows/bridge/pulselab-tray.ps1");
   const tray = fs.readFileSync(trayPath, "utf-8");
   assert.match(bridgeCode, /\$path -eq "\/v1\/shutdown" -and \$request\.HttpMethod -eq "POST"/);
   assert.match(bridgeCode, /\$script:ShutdownRequested = \$true/);

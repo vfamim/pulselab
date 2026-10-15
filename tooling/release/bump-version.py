@@ -76,16 +76,16 @@ def bump(old_v: str, new_v: str):
     content = re.sub(r'oficina de robótica · v[0-9\.]+', f'oficina de robótica · v{new_v}', content)
     write_text(stu_page, content)
 
-    # 8. bridge/pulselab-bridge.ps1
-    br_ps1 = repo_root / "bridge/pulselab-bridge.ps1"
+    # 8. runtime/windows/bridge/pulselab-bridge.ps1
+    br_ps1 = repo_root / "runtime/windows/bridge/pulselab-bridge.ps1"
     content = read_text(br_ps1)
     content = re.sub(r"\$script:BridgeVersion = (['\"])[^'\"]+\1", rf"$script:BridgeVersion = \g<1>{new_v}\g<1>", content)
     content = re.sub(r"\$script:PulseLabVersion = '[^']+'", f"$script:PulseLabVersion = '{new_v}'", content)
     content = re.sub(r"version = '[0-9\.]+'", f"version = '{new_v}'", content)
     write_text(br_ps1, content)
 
-    # 9. pulselab.ps1
-    pl_ps1 = repo_root / "pulselab.ps1"
+    # 9. runtime/windows/pulselab.ps1
+    pl_ps1 = repo_root / "runtime/windows/pulselab.ps1"
     content = read_text(pl_ps1)
     content = re.sub(r"\$localVersion = (['\"])[^'\"]+\1", rf"$localVersion = \g<1>{new_v}\g<1>", content)
     write_text(pl_ps1, content)
@@ -115,8 +115,8 @@ def bump(old_v: str, new_v: str):
     content = re.sub(r'default="[0-9\.]+"', f'default="{new_v}"', content)
     write_text(imp_py, content)
 
-    # 14. Instalar-PulseLab.bat
-    inst_bat = repo_root / "Instalar-PulseLab.bat"
+    # 14. runtime/windows/Instalar-PulseLab.bat
+    inst_bat = repo_root / "runtime/windows/Instalar-PulseLab.bat"
     content = read_text(inst_bat)
     content = re.sub(r'\(v[0-9\.]+\)', f'(v{new_v})', content)
     write_text(inst_bat, content)

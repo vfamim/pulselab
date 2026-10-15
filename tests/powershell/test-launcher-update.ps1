@@ -1,8 +1,9 @@
 # Testes do atualizador assinado (pulselab-update.ps1). Roda em pwsh (CI) e Windows PowerShell 5.1.
 $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
-. (Join-Path $repoRoot "pulselab-update.ps1")
-. (Join-Path $repoRoot "pulselab-installation.ps1")
+$runtimeRoot = Join-Path $repoRoot "runtime\windows"
+. (Join-Path $runtimeRoot "pulselab-update.ps1")
+. (Join-Path $runtimeRoot "pulselab-installation.ps1")
 
 $python = if (Get-Command python3 -ErrorAction SilentlyContinue) { "python3" } else { "python" }
 $releaseTool = Join-Path $repoRoot "tooling\release\publicar-release.py"
@@ -28,7 +29,7 @@ function New-TextFile {
 function New-FakeTree {
     param([string]$Root, [string]$Version, [string]$Marker)
     New-TextFile (Join-Path $Root "pulselab.ps1") "# launcher $Marker"
-    Copy-Item -LiteralPath (Join-Path $repoRoot "pulselab-update.ps1") -Destination (Join-Path $Root "pulselab-update.ps1")
+    Copy-Item -LiteralPath (Join-Path $runtimeRoot "pulselab-update.ps1") -Destination (Join-Path $Root "pulselab-update.ps1")
     New-TextFile (Join-Path $Root "VERSION") $Version
     New-TextFile (Join-Path $Root "bridge\pulselab-bridge.ps1") "# bridge $Marker"
     New-TextFile (Join-Path $Root "app\alunos\index.html") "<p>$Marker</p>"

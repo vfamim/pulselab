@@ -17,7 +17,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "3.0.7"
+VERSION = "3.0.8"
 
 
 def sha256(path: Path) -> str:
@@ -63,12 +63,14 @@ def scan_sensitive_configs(data: object, path: str = "") -> list[str]:
 
 PAYLOAD_DIR = "arquivos"
 
-# Arquivos da raiz do repositório que vão para o computador da oficina.
+# runtime/windows/ espelha arquivos/: launcher, atualizador, bridge e atalhos.
+RUNTIME_DIR = Path("runtime") / "windows"
+
+# Arquivos de runtime/windows/ que vão para o computador da oficina.
 PAYLOAD_FILES = (
     "pulselab.ps1",
     "pulselab-update.ps1",
     "pulselab-installation.ps1",
-    "release-public-key.json",
     "iniciar-silencioso.vbs",
     "Iniciar-PulseLab.bat",
     "Exportar-Dados-Pendrive.bat",
@@ -77,52 +79,61 @@ PAYLOAD_FILES = (
     "pulselab-yellow.ico",
     "pulselab-red.ico",
 )
+# Arquivos da raiz do repositório que também vão no pacote.
+ROOT_PAYLOAD_FILES = ("release-public-key.json",)
 BRIDGE_FILES = ("pulselab-bridge.ps1", "spike-parser.ps1", "pulselab-tray.ps1")
 CONFIG_FILES = ("defaults.json", "config.json", "missoes.json")
 
 
-def build_package(repo_root: Path, output: Path, provisioning: Path | None = None) -> Path:
+def assemble(repo_root: Path, root: Path, provisioning: Path | None = None) -> None:
+    """Monta em root/ o conteúdo do ZIP: Instalar-PulseLab.bat e arquivos/."""
+    runtime = repo_root / RUNTIME_DIR
     alunos_dir = repo_root / "alunos"
     if not alunos_dir.is_dir() or not (alunos_dir / "index.html").is_file():
         raise FileNotFoundError("PWA build missing in alunos/. Run 'npm run build' in apps/student-pwa first.")
+    payload = root / PAYLOAD_DIR
 
+    # 1. Aplicação dos alunos (servida de app/alunos pelo pulselab.ps1)
+    shutil.copytree(alunos_dir, payload / "app" / "alunos")
+
+    # 2. Bridge, launcher, atualizador e atalhos
+    (payload / "bridge").mkdir(parents=True)
+    for name in BRIDGE_FILES:
+        shutil.copy2(runtime / "bridge" / name, payload / "bridge" / name)
+    for name in PAYLOAD_FILES:
+        shutil.copy2(runtime / name, payload / name)
+    for name in ROOT_PAYLOAD_FILES:
+        shutil.copy2(repo_root / name, payload / name)
+    (payload / "scripts").mkdir()
+    shutil.copy2(runtime / "scripts" / "exportar-pendrive.ps1", payload / "scripts" / "exportar-pendrive.ps1")
+
+    # 3. Config (assegurando que nenhum segredo operacional seja distribuído)
+    (payload / "config").mkdir()
+    for cfg_name in CONFIG_FILES:
+        cfg_file = repo_root / "config" / cfg_name
+        cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+        violations = scan_sensitive_configs(cfg_data)
+        if violations:
+            raise ValueError(
+                f"Chave sensível com valor não vazio encontrada em {cfg_name}: {', '.join(violations)}"
+            )
+        shutil.copy2(cfg_file, payload / "config" / cfg_name)
+
+    # 4. Provisionamento do polo (ativa a coleta) e versão
+    if provisioning is not None:
+        shutil.copy2(provisioning, payload / "provisionamento.json")
+    (payload / "VERSION").write_text(VERSION + "\n", encoding="ascii")
+
+    # 5. Único arquivo visível para o instrutor
+    shutil.copy2(runtime / "Instalar-PulseLab.bat", root / "Instalar-PulseLab.bat")
+
+
+def build_package(repo_root: Path, output: Path, provisioning: Path | None = None) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="pulselab-package-") as temp_name:
         root = Path(temp_name)
-        payload = root / PAYLOAD_DIR
-
-        # 1. Aplicação dos alunos (servida de app/alunos pelo pulselab.ps1)
-        shutil.copytree(alunos_dir, payload / "app" / "alunos")
-
-        # 2. Bridge, launcher, atualizador e atalhos
-        (payload / "bridge").mkdir(parents=True)
-        for name in BRIDGE_FILES:
-            shutil.copy2(repo_root / "bridge" / name, payload / "bridge" / name)
-        for name in PAYLOAD_FILES:
-            shutil.copy2(repo_root / name, payload / name)
-        (payload / "scripts").mkdir()
-        shutil.copy2(repo_root / "scripts" / "exportar-pendrive.ps1", payload / "scripts" / "exportar-pendrive.ps1")
-
-        # 3. Config (assegurando que nenhum segredo operacional seja distribuído)
-        (payload / "config").mkdir()
-        for cfg_name in CONFIG_FILES:
-            cfg_file = repo_root / "config" / cfg_name
-            cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
-            violations = scan_sensitive_configs(cfg_data)
-            if violations:
-                raise ValueError(
-                    f"Chave sensível com valor não vazio encontrada em {cfg_name}: {', '.join(violations)}"
-                )
-            shutil.copy2(cfg_file, payload / "config" / cfg_name)
-
-        # 4. Provisionamento do polo (ativa a coleta) e versão
-        if provisioning is not None:
-            shutil.copy2(provisioning, payload / "provisionamento.json")
-        (payload / "VERSION").write_text(VERSION + "\n", encoding="ascii")
-
-        # 5. Único arquivo visível para o instrutor
-        shutil.copy2(repo_root / "Instalar-PulseLab.bat", root / "Instalar-PulseLab.bat")
+        assemble(repo_root, root, provisioning)
 
         # 6. Compactar ZIP (reprodutível / determinístico)
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
@@ -140,6 +151,15 @@ def build_package(repo_root: Path, output: Path, provisioning: Path | None = Non
     return output
 
 
+def stage(repo_root: Path, dest: Path) -> Path:
+    """Desenvolvimento: copia arquivos/ para dest/ sem compactar, preservando dest/dados_locais."""
+    with tempfile.TemporaryDirectory(prefix="pulselab-stage-") as temp_name:
+        root = Path(temp_name)
+        assemble(repo_root, root)
+        shutil.copytree(root / PAYLOAD_DIR, dest, dirs_exist_ok=True)
+    return dest
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -148,12 +168,20 @@ def main() -> int:
         help="Output ZIP path",
     )
     parser.add_argument(
+        "--stage",
+        default=None,
+        help="Monta a pasta arquivos/ neste diretório, sem ZIP (para rodar localmente)",
+    )
+    parser.add_argument(
         "--provisionamento",
         default=None,
         help="provisionamento.json do polo (gera o pacote que ativa a coleta)",
     )
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[2]
+    if args.stage:
+        print(f"Pacote montado em: {stage(repo_root, Path(args.stage).resolve())}")
+        return 0
     provisioning = Path(args.provisionamento).resolve() if args.provisionamento else None
     package = build_package(repo_root, Path(args.output).resolve(), provisioning=provisioning)
     print(f"Package: {package}")

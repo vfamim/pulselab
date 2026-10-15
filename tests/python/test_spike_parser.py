@@ -22,7 +22,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-PARSER = ROOT / "bridge" / "spike-parser.ps1"
+PARSER = ROOT / "runtime" / "windows" / "bridge" / "spike-parser.ps1"
 PWSH = shutil.which("pwsh")
 SECRET = "JOAO DA SILVA"
 

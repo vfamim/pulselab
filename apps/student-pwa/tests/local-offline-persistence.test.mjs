@@ -12,7 +12,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../../..");
-const bridgePath = path.join(repoRoot, "bridge", "pulselab-bridge.ps1");
+const bridgePath = path.join(repoRoot, "runtime", "windows", "bridge", "pulselab-bridge.ps1");
 const studentPagePath = path.join(repoRoot, "apps/student-pwa/app/student-page.jsx");
 
 test("Persistência local: student-store exporta funções de contagem e resumo", () => {

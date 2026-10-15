@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.0.7"
+$script:BridgeVersion = "3.0.8"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1056,7 +1056,7 @@ function Get-MimeType([string]$ext) {
 # 3 horas, ou quando o computador ficou desligado/suspenso por mais de 20 minutos.
 # ------------------------------------------------------------------------------
 
-# Proveniencia do instrumento: mesmos valores de web/agent-simulator/lib/contracts.js (teste garante).
+# Proveniencia do instrumento: mesmos valores de apps/student-pwa/lib/contracts.js (teste garante).
 $script:ProtocolVersion = "protocolo-oficinas-rotativas-v2"
 $script:InstrumentVersion = "bancada-2.4.0-rascunho"
 $script:InstrumentConfigHash = "40fa7892e0cb738230e30d19e3a1ea0144712192bc251391ad9d9ec8996425a1"

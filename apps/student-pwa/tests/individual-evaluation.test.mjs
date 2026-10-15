@@ -134,7 +134,7 @@ test("Página do PWA: só o formulário final, sem telas individuais nem questio
 });
 
 test("Modelo coletivo de bancada: eventos do Bridge registram a bancada e o tamanho do grupo", () => {
-  const bridge = fs.readFileSync(path.join(repoRoot, "bridge/pulselab-bridge.ps1"), "utf-8");
+  const bridge = fs.readFileSync(path.join(repoRoot, "runtime/windows/bridge/pulselab-bridge.ps1"), "utf-8");
   assert.match(bridge, /collective_unit = "bancada"/);
   assert.match(bridge, /group_size = \$s\.context\.group_size/);
   assert.match(bridge, /-ParticipantId "BANCADA" -ParticipantRole "group"/);

@@ -95,7 +95,7 @@ class PowerShellInterpolationTest(unittest.TestCase):
         import re
 
         offenders = []
-        for path in list(ROOT.glob("*.ps1")) + list((ROOT / "bridge").glob("*.ps1")) + list((ROOT / "scripts").glob("*.ps1")):
+        for path in list((ROOT / "runtime" / "windows").rglob("*.ps1")) + list((ROOT / "tooling").rglob("*.ps1")):
             for number, line in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
                 if line.lstrip().startswith("#"):
                     continue
@@ -126,7 +126,7 @@ class BridgeProcess:
         self.root = root
         (root / "bridge").mkdir(parents=True, exist_ok=True)
         for name in ("pulselab-bridge.ps1", "spike-parser.ps1"):
-            shutil.copy2(ROOT / "bridge" / name, root / "bridge" / name)
+            shutil.copy2(ROOT / "runtime" / "windows" / "bridge" / name, root / "bridge" / name)
         (root / "config").mkdir(exist_ok=True)
         write_json(root / "config" / "config.json", {
             "version": "test", "group_size": 2, "supabase_url": supabase_url, "sync_interval_seconds": 1,

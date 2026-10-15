@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "../../..");
 const storePath = path.join(repoRoot, "apps/student-pwa/lib/student-store.js");
 const studentPagePath = path.join(repoRoot, "apps/student-pwa/app/student-page.jsx");
-const bridgeScriptPath = path.join(repoRoot, "bridge/pulselab-bridge.ps1");
+const bridgeScriptPath = path.join(repoRoot, "runtime/windows/bridge/pulselab-bridge.ps1");
 
 test("Retenção absoluta 7 dias: student-store.js implementa enforceAbsoluteRetention", () => {
   assert.ok(fs.existsSync(storePath), "student-store.js deve existir");

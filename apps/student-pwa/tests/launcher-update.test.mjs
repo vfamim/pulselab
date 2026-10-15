@@ -13,8 +13,8 @@ const read = (rel) => fs.readFileSync(path.join(repoRoot, rel), "utf-8");
 // Aqui ficam as garantias estáticas que não dependem de PowerShell.
 
 test("Launcher: atualização só por manifesto assinado no canal de releases", () => {
-  const launcher = read("pulselab.ps1");
-  const updater = read("pulselab-update.ps1");
+  const launcher = read("runtime/windows/pulselab.ps1");
+  const updater = read("runtime/windows/pulselab-update.ps1");
 
   assert.match(launcher, /pulselab-update\.ps1/, "launcher deve carregar o módulo de atualização");
   assert.match(launcher, /Complete-PulseLabUpdate/, "launcher deve confirmar a atualização após o servidor responder");
@@ -31,7 +31,7 @@ test("Launcher: atualização só por manifesto assinado no canal de releases", 
 });
 
 test("Bridge: não executa atualização própria", () => {
-  const bridge = read("bridge/pulselab-bridge.ps1");
+  const bridge = read("runtime/windows/bridge/pulselab-bridge.ps1");
   assert.match(bridge, /\$script:AutoUpdateEnabled\s*=\s*\$false/);
 });
 

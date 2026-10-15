@@ -62,16 +62,13 @@ supabase/.temp/
 apps/student-pwa/test-results/
 apps/student-pwa/playwright-report/
 
-# Offline research data storage (LGPD compliance)
-dados_locais/*.json
-dados_locais/*.jsonl
-dados_locais/*.sqlite
-dados_locais/*.txt
-dados_locais/sessoes/*.json
-!dados_locais/sessoes/.gitkeep
+# Offline research data storage (LGPD compliance), em qualquer pasta
+dados_locais/
 
 # Pasta montada por tooling/site/build-hosting.py para o Firebase Hosting
 hosting-dist/
+# Pacote montado para rodar localmente (tooling/dev)
+dist-dev/
 dist-polos/
 dist-release/
 *.pem

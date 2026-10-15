@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+RUNTIME = ROOT / "runtime" / "windows"
 
 
 def load(name: str, rel: str):
@@ -88,12 +89,12 @@ class GenericPackageDefaultsTest(unittest.TestCase):
             self.assertEqual(data.get("research_authorized_purposes"), [], name)
 
     def test_bridge_takes_authorization_only_from_provisioning(self):
-        bridge = (ROOT / "bridge" / "pulselab-bridge.ps1").read_text(encoding="utf-8")
+        bridge = (RUNTIME / "bridge" / "pulselab-bridge.ps1").read_text(encoding="utf-8")
         self.assertIn("$publicConfig.research_collection_enabled = $false", bridge)
         self.assertIn('Join-Path $DataDir "installation.json"', bridge)
 
     def test_export_has_no_windows_identifiers(self):
-        exporter = (ROOT / "scripts" / "exportar-pendrive.ps1").read_text(encoding="utf-8")
+        exporter = (RUNTIME / "scripts" / "exportar-pendrive.ps1").read_text(encoding="utf-8")
         self.assertNotIn("$env:COMPUTERNAME", exporter)
         self.assertNotIn("$env:USERNAME", exporter)
         self.assertIn("machine_label", exporter)
@@ -123,7 +124,7 @@ class PoloMissionCalendarTest(unittest.TestCase):
                 polo.read_mission_calendar(cal, cat)
 
     def test_installation_keeps_calendar_from_provisioning(self):
-        script = (ROOT / "pulselab-installation.ps1").read_text(encoding="utf-8")
+        script = (RUNTIME / "pulselab-installation.ps1").read_text(encoding="utf-8")
         self.assertIn('"calendario_missoes"', script)
 
 class PackageLayoutTest(unittest.TestCase):
@@ -176,7 +177,7 @@ class PackageLayoutTest(unittest.TestCase):
         self.assertIn("arquivos/provisionamento.json", self.polo)
 
     def test_installer_reads_payload_folder_and_detects_unextracted_zip(self):
-        bat = (ROOT / "Instalar-PulseLab.bat").read_text(encoding="utf-8")
+        bat = (RUNTIME / "Instalar-PulseLab.bat").read_text(encoding="utf-8")
         self.assertIn('set "SRC_DIR=%~dp0arquivos\\"', bat)
         self.assertIn('if not exist "%SRC_DIR%pulselab.ps1" goto :NAO_EXTRAIDO', bat)
         self.assertIn(":NAO_EXTRAIDO", bat)
@@ -186,21 +187,21 @@ class WindowsScriptsTest(unittest.TestCase):
     """Scripts que vão no ZIP para Windows: íntegros e com CRLF (cmd.exe e PowerShell 5.1)."""
 
     def test_installer_is_complete(self):
-        bat = (ROOT / "Instalar-PulseLab.bat").read_bytes().decode("utf-8")
+        bat = (RUNTIME / "Instalar-PulseLab.bat").read_bytes().decode("utf-8")
         for marker in ("xcopy", "Initialize-PulseLabInstallation", "PulseLab - Iniciar Oficina.lnk", "Startup", "pause"):
             self.assertIn(marker, bat, f"Instalar-PulseLab.bat sem '{marker}' (arquivo truncado?)")
 
     def test_shipped_scripts_use_crlf(self):
         shipped = [
-            "Instalar-PulseLab.bat",
+            "runtime/windows/Instalar-PulseLab.bat",
             "tooling/site/Atualizar-Site-Firebase.bat",
-            "Iniciar-PulseLab.bat",
-            "pulselab.ps1",
-            "pulselab-update.ps1",
-            "pulselab-installation.ps1",
-            "bridge/pulselab-bridge.ps1",
-            "bridge/pulselab-tray.ps1",
-            "bridge/spike-parser.ps1",
+            "runtime/windows/Iniciar-PulseLab.bat",
+            "runtime/windows/pulselab.ps1",
+            "runtime/windows/pulselab-update.ps1",
+            "runtime/windows/pulselab-installation.ps1",
+            "runtime/windows/bridge/pulselab-bridge.ps1",
+            "runtime/windows/bridge/pulselab-tray.ps1",
+            "runtime/windows/bridge/spike-parser.ps1",
         ]
         for rel in shipped:
             data = (ROOT / rel).read_bytes()

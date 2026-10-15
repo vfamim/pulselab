@@ -11,7 +11,7 @@ cd apps\student-pwa
 call npm run build
 cd ..\..
 echo.
-python tooling\release\build-installer.py --output dist\PulseLab-3.0.7-Windows.zip
+python tooling\release\build-installer.py --output dist\PulseLab-3.0.8-Windows.zip
 
 echo [3/3] Montando pasta publica (somente arquivos permitidos)...
 python tooling\site\build-hosting.py

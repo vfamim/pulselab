@@ -20,12 +20,12 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - `version.json` (canal legado com `auto_update_enabled: true`, usado só para máquinas até 2.2.7 migrarem ao atualizador assinado);
    - `config/defaults.json` (`client_version`) e `config/config.json` (`version`);
    - Interface do Usuário PWA (`apps/student-pwa/app/student-page.jsx` no cabeçalho/rodapé e constante `CLIENT_VERSION`);
-   - Bridge Local Windows (`bridge/pulselab-bridge.ps1` na variável `$script:BridgeVersion` e rota `/v1/config`);
-   - Launcher Portátil (`pulselab.ps1` no fallback `$localVersion`);
+   - Bridge Local Windows (`runtime/windows/bridge/pulselab-bridge.ps1` na variável `$script:BridgeVersion` e rota `/v1/config`);
+   - Launcher Portátil (`runtime/windows/pulselab.ps1` no fallback `$localVersion`);
    - Service Worker (`apps/student-pwa/public/sw.js` e `alunos/sw.js` no `CACHE_NAME`);
    - Scripts de empacotamento (`tooling/release/build-installer.py` na constante `VERSION` e `tooling/release/build-offline-package.sh`);
    - Importador e consolidador (`tooling/data/importar-para-supabase.py` nos defaults de versão);
-   - Scripts em lote (`Instalar-PulseLab.bat` e `tooling/site/Atualizar-Site-Firebase.bat`);
+   - Scripts em lote (`runtime/windows/Instalar-PulseLab.bat` e `tooling/site/Atualizar-Site-Firebase.bat`);
    - Nomes dos pacotes binários distribuíveis e checksums (`PulseLab-X.Y.Z-Windows.zip` e `.sha256`, publicados como assets da Release `vX.Y.Z` no GitHub e não versionados no git; não existe mais o ZIP `PulseLab-Alunos-Offline`);
    - Páginas públicas e documentação operacional (`apps/site/`: `index.html`, `instalador/`, `testes/`, `tutorial/` e `relatorio/`; o guia do instrutor tem fonte em `docs/campo/guia-instrutor.md`).
 
