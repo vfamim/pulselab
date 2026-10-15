@@ -1,132 +1,122 @@
 # PulseLab
 
-Camada de observação das oficinas do projeto Robótica Educativa (UNIVASF). O PulseLab
-inicia com o Windows e fica como um ícone na área de notificação (bandeja); nenhuma página
-fica aberta durante a aula. Um servidor local em PowerShell (porta 43128) guarda os
-registros no próprio computador, lê a estrutura dos projetos LEGO SPIKE e exporta para
-pendrive.
+Camada de observação das oficinas do projeto Robótica Educativa (UNIVASF). Nos computadores das
+oficinas, o PulseLab inicia com o Windows e fica só como um ícone na bandeja, perto do relógio.
+Um servidor local em PowerShell (porta 43128) registra a atividade de cada bancada no LEGO SPIKE,
+guarda os dados no próprio computador e envia à nuvem quando há internet.
 
-## Estado
+Nenhuma tela aparece para as crianças durante a aula.
 
-- A coleta de pesquisa vem **desligada** no pacote genérico. Ela só liga com o pacote
-  do polo, que traz `provisionamento.json` com a sede e o CAAE do parecer ético.
-- A unidade de análise é a bancada. Não há nomes, fotos, câmera, captura de tela nem teclado.
-- Assentimento verbal: no início de cada aula o instrutor lê um roteiro padronizado às crianças.
-  Não há caixas de assentimento nem botão de retirada na tela. Se alguém recusar, o instrutor
-  escolhe **Não registrar esta turma** no menu da bandeja daquele computador: os dados da turma
-  atual são apagados (com marca de exclusão) e o registro pausa até a próxima turma. Depende de
-  emenda ao CEP. Veja [assentimento verbal](docs/campo/assentimento-verbal.md).
-- A sessão começa quando o PulseLab inicia (ou, depois de uma turma encerrada, no primeiro programa
-  salvo) e termina por **Encerrar turma…** no menu da bandeja
-  (pergunta coletiva com 4 carinhas ou "Preferimos não responder"; resultado 0 a 3 e apoio
-  nenhum/algum/muito, que o instrutor pode pular). Sem encerramento, fecha sozinha depois de
-  3 horas ou de mais de 20 minutos com o computador desligado. Os itens estão em
-  `apps/student-pwa/lib/contracts.js` como rascunho até validação do pesquisador.
-- Cada sessão registra como terminou (instrutor, tempo, sem encerramento), interrupções e a
-  situação da pasta do SPIKE. Do programa: estrutura de cada versão salva (só tipos de blocos),
-  escore de pensamento computacional adaptado de Dr. Scratch (não validado) e, com calendário de
-  missões, a cobertura da missão.
-- Escola, oficina e turma não informadas ficam como `nao_informado`, nunca com valores genéricos.
-- Os registros ficam no computador por `retention_days` do pacote do polo (padrão 180 dias),
-  mesmo depois de exportados ou enviados. O prazo precisa constar no protocolo e no TCLE.
-- Os itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica.
-  Veja [protocolo v2](docs/pesquisa/protocolo-pesquisa-v2.md),
-  [plano de validação](docs/pesquisa/plano-validacao-v2.md) e [roadmap](docs/pesquisa/roadmap.md).
+## Na aula
 
-## Para os polos
+O instrutor usa o menu do ícone da bandeja (botão direito):
 
-1. Baixe o pacote do seu polo e extraia o ZIP.
-2. Rode `Instalar-PulseLab.bat` e, se quiser, informe o nome da máquina (ex.: `PET-LAB1-PC03`).
-3. O PulseLab abre com o Windows. Use o menu do ícone na bandeja durante a aula e o atalho
-   **PulseLab - Exportar Dados** para copiar os registros para pendrive.
+| Item | O que faz |
+|---|---|
+| **Encerrar turma…** | Fecha a gravação da turma. A próxima começa sozinha no primeiro programa salvo no SPIKE. |
+| **Não registrar esta turma** | Para recusas: apaga os dados da turma atual neste computador e pausa o registro até a próxima aula. |
+| **Ver situação** | Mostra se o registro está ativo, pausado ou desligado. |
+| **Fechar PulseLab** | Desliga tudo até o computador ser ligado de novo ou o atalho ser usado. |
 
-Reinstalar com um pacote de polo mais novo mantém a identificação da máquina e os registros.
+Sem encerramento, a sessão fecha sozinha depois de 3 horas ou quando o computador passa mais de
+20 minutos desligado ou suspenso.
 
-## Envio para a nuvem
+## Pesquisa e privacidade
 
-Cada computador guarda tudo localmente e envia ao Supabase quando tiver internet, a cada
-30 segundos. Máquinas offline (ex.: Senhor do Bonfim) enviam quando o instrutor conectar.
+- **Coleta desligada por padrão.** O pacote genérico não registra dados de pesquisa. A coleta só
+  liga com o pacote do polo, que traz o CAAE do parecer ético em `provisionamento.json`.
+- **A unidade de análise é a bancada**, nunca a criança. Sem nomes, fotos, câmera, áudio, captura
+  de tela ou teclado.
+- **Assentimento verbal.** No início da aula o instrutor lê o
+  [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
+  turma**: os dados da turma são apagados e marcados contra reenvio, no computador e na nuvem.
+- **O que é registrado:** como a sessão terminou, interrupções, situação da pasta do SPIKE e, de
+  cada versão salva do programa, só os tipos de blocos. Daí saem um escore de pensamento
+  computacional adaptado de Dr. Scratch (ainda não validado) e, com calendário de missões, a
+  cobertura da missão do dia.
+- **Retenção local** de `retention_days` do pacote do polo (1 a 365, padrão 180 dias), mesmo depois
+  de exportar ou enviar. O prazo precisa constar no protocolo e no TCLE.
+- A máquina é identificada por um código aleatório e por um rótulo escolhido na instalação, nunca
+  pelo nome do Windows ou do usuário.
 
-1. O coordenador gera um token do polo, válido para várias máquinas:
-   `python3 supabase/scripts/provision_device.py --site-id PET --token-polo --max-usos 40 --validade-dias 60 --output token-PET.json`
-   (precisa da service role; o arquivo de saída fica com permissão 0600 e não vai para o repositório).
-2. O token entra no pacote do polo:
-   `python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae <CAAE> --token-cadastro token-PET.json`
-3. No primeiro contato com a internet, cada máquina se cadastra sozinha, apaga o token do disco
-   e passa a renovar o acesso (validade de 1 hora) por conta própria.
+Itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica: veja
+[`docs/pesquisa/`](docs/pesquisa/).
 
-O token vai dentro do ZIP do polo. Se o pacote circular fora do polo, revogue o token
-(`revoked_at` em `device_enrollment_tokens`) e gere outro pacote. O snapshot da sessão sobe uma
-vez, quando a sessão é encerrada (pelo instrutor ou automaticamente); os eventos sobem um a um.
-O painel mostra as máquinas que estão sem enviar dados há alguns dias.
+## Instalação nos polos
 
-Antes do primeiro uso, aplique no Supabase a migração `20261011150000_site_enrollment_tokens.sql`
-e publique a função `enroll-device`.
+O ZIP da release tem só duas coisas: `Instalar-PulseLab.bat` e a pasta `arquivos/`.
 
-## Identificação da máquina
+1. Extraia o ZIP (botão direito > **Extrair tudo…**).
+2. Dê dois cliques em `Instalar-PulseLab.bat` e, se quiser, informe o rótulo da máquina
+   (ex.: `PET-LAB1-PC03`).
+3. Pronto: o PulseLab abre com o Windows. O atalho **PulseLab - Exportar Dados** copia os
+   registros para um pendrive.
 
-`dados_locais/installation.json` guarda um `installation_id` aleatório, o rótulo escolhido
-na instalação e os dados do polo. A pasta `dados_locais` nunca é sobrescrita por
-atualização ou reinstalação. Exportações usam o rótulo, nunca o nome do Windows ou do usuário.
+Para ligar a coleta, use o pacote do polo em vez do genérico. Reinstalar por cima mantém a
+identificação da máquina e os registros. Guia para instrutores:
+[`docs/campo/guia-instrutor.md`](docs/campo/guia-instrutor.md).
+
+## Dados e nuvem
+
+Tudo fica em `dados_locais/` no computador, pasta que nenhuma atualização ou reinstalação apaga.
+Com internet, o bridge envia ao Supabase a cada 30 segundos: os eventos um a um e o resumo da
+sessão quando ela fecha. Polos sem internet enviam quando o instrutor conecta ou exportam por
+pendrive, e o pesquisador importa com `tooling/data/Importar-Para-Supabase.bat`.
+
+O cadastro das máquinas na nuvem é automático, com um token por polo:
+
+```sh
+# 1. Token do polo (precisa da service role; o arquivo sai com permissão 0600, fora do git)
+python3 supabase/scripts/provision_device.py --site-id PET --token-polo --max-usos 40 --validade-dias 60 --output token-PET.json
+# 2. Pacote do polo com o token
+python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae <CAAE> --token-cadastro token-PET.json
+```
+
+No primeiro contato com a internet, cada máquina se cadastra pela função `enroll-device`, apaga o
+token do disco e passa a renovar o acesso sozinha. O token vai dentro do ZIP do polo: se o pacote
+circular fora do polo, revogue-o (`revoked_at` em `device_enrollment_tokens`) e gere outro.
 
 ## Atualização automática
 
-Ao abrir, o launcher consulta a última release publicada no GitHub (até 2 s sem internet).
+Ao abrir, o launcher consulta a última release do GitHub (no máximo 2 s sem internet) e só
+instala pacotes com manifesto assinado pela chave do projeto e SHA-256 conferido. A troca de
+pastas guarda a versão anterior em `_update_backup` e volta para ela se o servidor local não
+subir. Pré-releases não chegam às máquinas.
 
-- O manifesto `pulselab-update.json` precisa estar assinado pela chave do projeto.
-  A chave pública vai no pacote (`release-public-key.json`). Sem ela, não há atualização.
-- O ZIP é conferido pelo SHA-256 do manifesto assinado e instalado com troca de pastas.
-  A versão anterior fica em `_update_backup`.
-- Se o servidor local não subir depois da troca, a versão anterior volta e a nova fica bloqueada
-  naquela máquina.
-- Com o servidor já em execução, a atualização fica para a próxima abertura.
+## Estrutura do repositório
 
-## Publicar uma versão
-
-```sh
-python3 tooling/release/publicar-release.py gerar-chave       # uma vez; chave privada em ~/.pulselab
-./tooling/release/build-offline-package.sh                    # gera dist/PulseLab-X.Y.Z-Windows.zip
-python3 tooling/release/publicar-release.py publicar --pre    # pré-release: não chega às máquinas
-gh release edit vX.Y.Z --prerelease=false --latest           # promove: máquinas atualizam
-```
-
-Pacote de polo:
-
-```sh
-python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234 --retencao-dias 180
-python3 tooling/polo/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
-```
+| Pasta | Conteúdo |
+|---|---|
+| `runtime/windows/` | O que roda nas máquinas: launcher, atualizador, bridge, bandeja e instalador (mesmo layout da pasta `arquivos/` do ZIP) |
+| `apps/student-pwa/` | Página da bancada (React + Vite); o build vai para `alunos/`, fora do git |
+| `apps/site/` | Site público: início, instalador, tutorial, testes e relatório |
+| `config/` | Configuração empacotada e catálogo de missões |
+| `supabase/` | Migrações, testes SQL, função `enroll-device` e scripts de cadastro |
+| `tooling/` | Release e versão (`release/`), site (`site/`), pacote do polo (`polo/`), importação de pendrive (`data/`) e utilitários de desenvolvimento (`dev/`) |
+| `tests/` | Testes Python, PowerShell e do banco |
+| `docs/` | Documentação por público: [índice](docs/README.md) |
 
 ## Desenvolvimento
 
 ```sh
-cd apps/student-pwa && npm ci && npm run test:unit && npm run build && cd ../..
+cd apps/student-pwa && npm ci && npm run build && npm run test:unit && npm run test:e2e && cd ../..
 python3 tooling/release/check-version-consistency.py
 python3 -m unittest discover -s tests/python -p 'test_*.py'
 pwsh -File tests/powershell/test-launcher-update.ps1
 python3 tests/check-database.py   # Docker: migrações e RLS num Postgres descartável
 ```
 
-O site no Firebase publica apenas o que está listado em `tooling/site/build-hosting.py`
-(montado em `hosting-dist/`). Toda mudança passa por PR com o CI verde. Processo de release
-completo em [docs/engenharia/release.md](docs/engenharia/release.md).
+`VERSION` é a fonte única da versão: o build injeta o número na PWA, no service worker e no site.
+Toda mudança entra na `main` por PR com o CI verde. Regras para agentes de IA em
+[AGENTS.md](AGENTS.md).
 
-## Estrutura do repositório
+## Release
 
-| Pasta | Conteúdo |
-|---|---|
-| `apps/student-pwa/` | PWA da bancada (React + Vite); o build vai para `alunos/` |
-| `apps/site/` | Site público: início, instalador, tutorial, testes e relatório |
-| `alunos/` | Build da PWA (não versionado), empacotado no ZIP e publicado no site |
-| `runtime/windows/` | Launcher, atualizador, bridge, bandeja e atalhos `.bat`, no mesmo layout da pasta `arquivos/` do ZIP |
-| `config/` | Configuração empacotada (defaults, config, catálogo de missões) |
-| `supabase/` | Migrações, testes SQL, função `enroll-device` e scripts de cadastro |
-| `tooling/release/` | Versão, empacotamento e release assinada |
-| `tooling/site/` | Montagem do site, guia do instrutor e relatório |
-| `tooling/polo/`, `tooling/data/` | Pacote do polo; importação dos dados de pendrive |
-| `tooling/dev/` | Atalhos e sondas para desenvolvimento local |
-| `tests/` | Testes Python, PowerShell e do banco |
-| `docs/` | Documentação por público ([índice](docs/README.md)) |
+```sh
+python3 tooling/release/bump-version.py <atual> <nova>   # no PR
+./tooling/release/build-offline-package.sh               # depois do merge: dist/PulseLab-<versão>-Windows.zip
+python3 tooling/release/publicar-release.py publicar --notes "PulseLab <versão> - ..."
+```
 
-Documentos v1/v1.4 são referências históricas. O agente WPF (`agent/`), o portal do instrutor
-(`instrutor/`) e o schema avulso (`schema/`) foram removidos e seguem no histórico do git.
+O merge na `main` publica o site; publique a release logo em seguida, porque o link de download
+aponta para ela. Passo a passo em [docs/engenharia/release.md](docs/engenharia/release.md).
