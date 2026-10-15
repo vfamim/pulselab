@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.0.3"
+$script:BridgeVersion = "3.0.5"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -2783,16 +2783,8 @@ try {
         try { $listener.Stop() } catch {}
     }
     if ($script:ShutdownRequested) {
-        Write-BridgeLog "Encerramento completo do PulseLab solicitado. Finalizando bandeja e janelas..." "INFO"
-        try {
-            Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object {
-                try {
-                    $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
-                    $cmd -and ($cmd -match "43128" -or $cmd -match "alunos")
-                } catch { $false }
-            } | Stop-Process -Force -ErrorAction SilentlyContinue
-        } catch {}
-
+        # Só a bandeja: o navegador é do usuário e não é encerrado (a página pode ser fechada à mão).
+        Write-BridgeLog "Encerramento completo do PulseLab solicitado. Finalizando a bandeja..." "INFO"
         try {
             Get-CimInstance Win32_Process -Filter "CommandLine LIKE '%pulselab-tray.ps1%'" -ErrorAction SilentlyContinue | ForEach-Object {
                 Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue

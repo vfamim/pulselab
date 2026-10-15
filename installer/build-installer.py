@@ -1,67 +1,24 @@
 #!/usr/bin/env python3
-"""Build the complete, self-contained PulseLab Windows release package (PWA + Bridge + SPIKE Parser)."""
+"""Gera o pacote do PulseLab para Windows.
+
+Na raiz do ZIP ficam só o Instalar-PulseLab.bat e a pasta arquivos/, que é exatamente o que vai
+para %LOCALAPPDATA%\\PulseLab. O atualizador (pulselab-update.ps1, inclusive o das versões já
+instaladas) reconhece arquivos/ como a única pasta com pulselab.ps1 e instala o conteúdo dela.
+Ferramentas do pesquisador, guias e textos ficam fora: o instrutor só precisa do instalador.
+"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import tempfile
 import zipfile
 
-VERSION = "3.0.3"
+VERSION = "3.0.5"
 
-
-INSTRUCTIONS = """====================================================================
-PULSELAB {version} — PACOTE PARA WINDOWS
-====================================================================
-
-O PulseLab acompanha oficinas de robótica com LEGO SPIKE. A tela das crianças
-roda no Microsoft Edge e um servidor local (porta 43128) guarda os registros
-neste computador.
-
-REQUISITOS
-- Windows 10 ou 11 (o PowerShell 5.1 já vem no Windows).
-- Não precisa de internet durante a oficina nem de privilégio de administrador.
-
-INSTALAR (uma vez por computador)
-1. Extraia todo o ZIP.
-2. Dê dois cliques em "Instalar-PulseLab.bat".
-3. Se quiser, digite um nome para esta máquina (ex.: PET-LAB1-PC03) e tecle Enter.
-   Anote o mesmo nome numa etiqueta no gabinete.
-4. Use o atalho "PulseLab - Iniciar Oficina" na Área de Trabalho.
-
-PACOTE DO POLO
-- A coleta de pesquisa só é ativada pelo pacote do seu polo, que traz o arquivo
-  provisionamento.json com a sede e o número do parecer ético (CAAE).
-- O pacote genérico abre a oficina normalmente, mas não registra dados de pesquisa.
-- Para ativar num computador já instalado, rode o "Instalar-PulseLab.bat" do pacote
-  do polo. A identificação da máquina e os registros já feitos são mantidos.
-
-ATUALIZAÇÕES
-- Ao abrir, o PulseLab procura uma versão nova (no máximo 2 segundos sem internet).
-- Só instala pacotes assinados pela equipe do projeto. Se a versão nova não abrir,
-  volta sozinho para a anterior.
-- Os registros em "dados_locais" nunca são apagados pela atualização.
-
-EXPORTAR OS DADOS PARA PENDRIVE
-1. Conecte o pendrive.
-2. Use o atalho "PulseLab - Exportar Dados" na Área de Trabalho
-   (ou dê dois cliques em "Exportar-Dados-Pendrive.bat").
-3. A pasta criada no pendrive leva o nome da máquina e a data, com manifesto SHA-256.
-
-DESINSTALAR
-- Dê dois cliques em "Desinstalar-PulseLab.bat".
-
-PRIVACIDADE
-- Sem câmera, captura de tela, teclado ou nomes de crianças.
-- Do SPIKE são lidas apenas contagens de blocos dos projetos salvos.
-- O computador é identificado por um código aleatório e pelo nome que você escolher,
-  nunca pelo nome do Windows ou do usuário.
-"""
 
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -104,15 +61,27 @@ def scan_sensitive_configs(data: object, path: str = "") -> list[str]:
     return violations
 
 
-def build_package(
-    repo_root: Path,
-    output: Path,
-    folder_name: str | None = None,
-    provisioning: Path | None = None,
-) -> Path:
-    if folder_name is None:
-        folder_name = f"PulseLab-{VERSION}-Windows"
+PAYLOAD_DIR = "arquivos"
 
+# Arquivos da raiz do repositório que vão para o computador da oficina.
+PAYLOAD_FILES = (
+    "pulselab.ps1",
+    "pulselab-update.ps1",
+    "pulselab-installation.ps1",
+    "release-public-key.json",
+    "iniciar-silencioso.vbs",
+    "Iniciar-PulseLab.bat",
+    "Exportar-Dados-Pendrive.bat",
+    "pulselab.ico",
+    "pulselab-green.ico",
+    "pulselab-yellow.ico",
+    "pulselab-red.ico",
+)
+BRIDGE_FILES = ("pulselab-bridge.ps1", "spike-parser.ps1", "pulselab-tray.ps1")
+CONFIG_FILES = ("defaults.json", "config.json", "missoes.json")
+
+
+def build_package(repo_root: Path, output: Path, provisioning: Path | None = None) -> Path:
     alunos_dir = repo_root / "alunos"
     if not alunos_dir.is_dir() or not (alunos_dir / "index.html").is_file():
         raise FileNotFoundError("PWA build missing in alunos/. Run 'npm run build' in web/agent-simulator first.")
@@ -120,99 +89,52 @@ def build_package(
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="pulselab-package-") as temp_name:
-        stage = Path(temp_name) / folder_name
+        root = Path(temp_name)
+        payload = root / PAYLOAD_DIR
 
-        # 1. Estrutura de pastas
-        (stage / "app" / "alunos").mkdir(parents=True, exist_ok=True)
-        (stage / "bridge").mkdir(parents=True, exist_ok=True)
-        (stage / "config").mkdir(parents=True, exist_ok=True)
-        (stage / "tools").mkdir(parents=True, exist_ok=True)
-        (stage / "scripts").mkdir(parents=True, exist_ok=True)
-        (stage / "dados_locais" / "sessoes").mkdir(parents=True, exist_ok=True)
+        # 1. Aplicação dos alunos (servida de app/alunos pelo pulselab.ps1)
+        shutil.copytree(alunos_dir, payload / "app" / "alunos")
 
-        # 2. Copiar PWA
-        shutil.copytree(alunos_dir, stage / "alunos", dirs_exist_ok=True)
-        shutil.copytree(alunos_dir, stage / "app" / "alunos", dirs_exist_ok=True)
+        # 2. Bridge, launcher, atualizador e atalhos
+        (payload / "bridge").mkdir(parents=True)
+        for name in BRIDGE_FILES:
+            shutil.copy2(repo_root / "bridge" / name, payload / "bridge" / name)
+        for name in PAYLOAD_FILES:
+            shutil.copy2(repo_root / name, payload / name)
+        (payload / "scripts").mkdir()
+        shutil.copy2(repo_root / "scripts" / "exportar-pendrive.ps1", payload / "scripts" / "exportar-pendrive.ps1")
 
-        # 3. Copiar Bridge
-        shutil.copy2(repo_root / "bridge" / "pulselab-bridge.ps1", stage / "bridge" / "pulselab-bridge.ps1")
-        shutil.copy2(repo_root / "bridge" / "spike-parser.ps1", stage / "bridge" / "spike-parser.ps1")
-        shutil.copy2(repo_root / "bridge" / "pulselab-tray.ps1", stage / "bridge" / "pulselab-tray.ps1")
-
-        # 4. Copiar Scripts de Exportação e Importação Offline
-        if (repo_root / "scripts" / "exportar-pendrive.ps1").is_file():
-            shutil.copy2(repo_root / "scripts" / "exportar-pendrive.ps1", stage / "scripts" / "exportar-pendrive.ps1")
-        if (repo_root / "scripts" / "importar-para-supabase.py").is_file():
-            shutil.copy2(repo_root / "scripts" / "importar-para-supabase.py", stage / "scripts" / "importar-para-supabase.py")
-        if (repo_root / "scripts" / "importar-para-supabase.ps1").is_file():
-            shutil.copy2(repo_root / "scripts" / "importar-para-supabase.ps1", stage / "scripts" / "importar-para-supabase.ps1")
-
-        # 5. Copiar Tools
-        if (repo_root / "tools" / "spike-probe.ps1").is_file():
-            shutil.copy2(repo_root / "tools" / "spike-probe.ps1", stage / "tools" / "spike-probe.ps1")
-
-        # 6. Copiar Config (assegurando que nenhum segredo operacional seja distribuído)
-        for cfg_name in ("defaults.json", "config.json", "missoes.json"):
+        # 3. Config (assegurando que nenhum segredo operacional seja distribuído)
+        (payload / "config").mkdir()
+        for cfg_name in CONFIG_FILES:
             cfg_file = repo_root / "config" / cfg_name
-            if cfg_file.is_file():
-                cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
-                violations = scan_sensitive_configs(cfg_data)
-                if violations:
-                    raise ValueError(
-                        f"Chave sensível com valor não vazio encontrada em {cfg_name}: {', '.join(violations)}"
-                    )
-                shutil.copy2(cfg_file, stage / "config" / cfg_name)
+            cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+            violations = scan_sensitive_configs(cfg_data)
+            if violations:
+                raise ValueError(
+                    f"Chave sensível com valor não vazio encontrada em {cfg_name}: {', '.join(violations)}"
+                )
+            shutil.copy2(cfg_file, payload / "config" / cfg_name)
 
-        # 7. Copiar Batch files e Launchers
-        shutil.copy2(repo_root / "Instalar-PulseLab.bat", stage / "Instalar-PulseLab.bat")
-        shutil.copy2(repo_root / "Iniciar-PulseLab.bat", stage / "Iniciar-PulseLab.bat")
-        if (repo_root / "iniciar-silencioso.vbs").is_file():
-            shutil.copy2(repo_root / "iniciar-silencioso.vbs", stage / "iniciar-silencioso.vbs")
-        shutil.copy2(repo_root / "Desinstalar-PulseLab.bat", stage / "Desinstalar-PulseLab.bat")
-        if (repo_root / "Exportar-Dados-Pendrive.bat").is_file():
-            shutil.copy2(repo_root / "Exportar-Dados-Pendrive.bat", stage / "Exportar-Dados-Pendrive.bat")
-        if (repo_root / "Importar-Para-Supabase.bat").is_file():
-            shutil.copy2(repo_root / "Importar-Para-Supabase.bat", stage / "Importar-Para-Supabase.bat")
-        shutil.copy2(repo_root / "pulselab.ps1", stage / "pulselab.ps1")
-        shutil.copy2(repo_root / "pulselab-update.ps1", stage / "pulselab-update.ps1")
-        shutil.copy2(repo_root / "pulselab-installation.ps1", stage / "pulselab-installation.ps1")
-        if (repo_root / "release-public-key.json").is_file():
-            shutil.copy2(repo_root / "release-public-key.json", stage / "release-public-key.json")
+        # 4. Provisionamento do polo (ativa a coleta) e versão
         if provisioning is not None:
-            shutil.copy2(provisioning, stage / "provisionamento.json")
-        shutil.copy2(repo_root / "installer" / "install.ps1", stage / "Install-PulseLab.ps1")
-        for icon_name in ("pulselab.ico", "pulselab-green.ico", "pulselab-yellow.ico", "pulselab-red.ico"):
-            icon_file = repo_root / icon_name
-            if icon_file.is_file():
-                shutil.copy2(icon_file, stage / icon_name)
-        if (repo_root / "tutorial" / "PulseLab-Guia-Ilustrado.pdf").is_file():
-            shutil.copy2(repo_root / "tutorial" / "PulseLab-Guia-Ilustrado.pdf", stage / "PulseLab-Guia-Ilustrado.pdf")
+            shutil.copy2(provisioning, payload / "provisionamento.json")
+        (payload / "VERSION").write_text(VERSION + "\n", encoding="ascii")
 
-        # 7. Instruções e Versão
-        (stage / "INSTRUCOES.txt").write_text(
-            INSTRUCTIONS.format(version=VERSION), encoding="utf-8", newline="\r\n"
-        )
-        (stage / "VERSION").write_text(VERSION + "\n", encoding="ascii")
-        (stage / "VERSION.txt").write_text(VERSION + "\n", encoding="ascii")
+        # 5. Único arquivo visível para o instrutor
+        shutil.copy2(repo_root / "Instalar-PulseLab.bat", root / "Instalar-PulseLab.bat")
 
-        # 8. Manifesto SHA256SUMS.txt
-        manifest_lines = []
-        for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
-            relative = file_path.relative_to(stage).as_posix()
-            manifest_lines.append(f"{sha256(file_path)}  {relative}")
-        (stage / "SHA256SUMS.txt").write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
-
-        # 9. Compactar ZIP (reprodutível / determinístico)
+        # 6. Compactar ZIP (reprodutível / determinístico)
         with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-            for file_path in sorted(path for path in stage.rglob("*") if path.is_file()):
-                arcname = file_path.relative_to(stage.parent).as_posix()
+            for file_path in sorted(path for path in root.rglob("*") if path.is_file()):
+                arcname = file_path.relative_to(root).as_posix()
                 zinfo = zipfile.ZipInfo(arcname, date_time=(2026, 10, 2, 0, 0, 0))
                 zinfo.compress_type = zipfile.ZIP_DEFLATED
                 zinfo.external_attr = 0o644 << 16
                 with file_path.open("rb") as f:
                     archive.writestr(zinfo, f.read(), compresslevel=9)
 
-    # 10. Checksum do arquivo ZIP
+    # 7. Checksum do arquivo ZIP
     checksum_path = output.with_suffix(output.suffix + ".sha256")
     checksum_path.write_text(f"{sha256(output)}  {output.name}\n", encoding="ascii")
     return output
