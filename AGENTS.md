@@ -14,20 +14,22 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
    - Incrementos de **MINOR** ou **MAJOR** devem ocorrer quando houver acréscimo de novas capacidades metodológicas, alterações de quebra de compatibilidade ou quando solicitado explicitamente pelo pesquisador responsável.
 
 2. **Sincronização Canônica Obrigatória em Todas as Superfícies**:
-   A versão corrente deve estar rigorosamente idêntica em todas as superfícies operacionais do ecossistema PulseLab:
-   - `VERSION` (arquivo canônico de referência na raiz do repositório);
+   A versão corrente deve estar rigorosamente idêntica em todas as superfícies operacionais do ecossistema PulseLab. `VERSION` (raiz) é a fonte única.
+
+   Superfícies com o número escrito, atualizadas por `tooling/release/bump-version.py`:
    - `package.json` e `package-lock.json` pertinentes (raiz e `apps/student-pwa/`);
    - `version.json` (canal legado com `auto_update_enabled: true`, usado só para máquinas até 2.2.7 migrarem ao atualizador assinado);
    - `config/defaults.json` (`client_version`) e `config/config.json` (`version`);
-   - Interface do Usuário PWA (`apps/student-pwa/app/student-page.jsx` no cabeçalho/rodapé e constante `CLIENT_VERSION`);
    - Bridge Local Windows (`runtime/windows/bridge/pulselab-bridge.ps1` na variável `$script:BridgeVersion` e rota `/v1/config`);
    - Launcher Portátil (`runtime/windows/pulselab.ps1` no fallback `$localVersion`);
-   - Service Worker (`apps/student-pwa/public/sw.js` e `alunos/sw.js` no `CACHE_NAME`);
-   - Scripts de empacotamento (`tooling/release/build-installer.py` na constante `VERSION` e `tooling/release/build-offline-package.sh`);
-   - Importador e consolidador (`tooling/data/importar-para-supabase.py` nos defaults de versão);
-   - Scripts em lote (`runtime/windows/Instalar-PulseLab.bat` e `tooling/site/Atualizar-Site-Firebase.bat`);
-   - Nomes dos pacotes binários distribuíveis e checksums (`PulseLab-X.Y.Z-Windows.zip` e `.sha256`, publicados como assets da Release `vX.Y.Z` no GitHub e não versionados no git; não existe mais o ZIP `PulseLab-Alunos-Offline`);
-   - Páginas públicas e documentação operacional (`apps/site/`: `index.html`, `instalador/`, `testes/`, `tutorial/` e `relatorio/`; o guia do instrutor tem fonte em `docs/campo/guia-instrutor.md`).
+   - Instalador (`runtime/windows/Instalar-PulseLab.bat` no título).
+
+   Superfícies que recebem a versão no build pelo marcador `__PULSELAB_VERSION__` e nunca devem ter o número escrito à mão:
+   - Interface do Usuário PWA (`apps/student-pwa/app/student-page.jsx`, `CLIENT_VERSION` e rodapé) e Service Worker (`apps/student-pwa/public/sw.js`, `CACHE_NAME`), via `apps/student-pwa/vite.config.js`. O build vai para `alunos/`, que não é versionado;
+   - Páginas públicas (`apps/site/`: `index.html`, `instalador/`, `testes/` e `relatorio/`), via `tooling/site/build-hosting.py`;
+   - Empacotamento (`tooling/release/build-installer.py`, `tooling/release/build-offline-package.sh` e `tooling/site/Atualizar-Site-Firebase.bat`), que leem `VERSION`.
+
+   Os pacotes binários (`PulseLab-X.Y.Z-Windows.zip` e `.sha256`) são publicados como assets da Release `vX.Y.Z` no GitHub e não são versionados no git; não existe mais o ZIP `PulseLab-Alunos-Offline`. O guia do instrutor (`docs/campo/guia-instrutor.md`, gerado em `apps/site/tutorial/`) não cita a versão exata.
 
 3. **Bloqueio Fail-Closed contra Versões Divergentes**:
    - Nenhum deploy pode prosseguir se houver discrepância entre as superfícies operacionais.

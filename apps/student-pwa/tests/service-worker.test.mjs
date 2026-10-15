@@ -10,24 +10,12 @@ const repoRoot = path.resolve(__dirname, "../../..");
 const publicSwPath = path.join(repoRoot, "apps/student-pwa/public/sw.js");
 const distSwPath = path.join(repoRoot, "alunos/sw.js");
 
-test("Service Worker: CACHE_NAME incrementado e não permanece em 2.0.0-test.1", () => {
+test("Service Worker: CACHE_NAME vem da versão canônica no build", () => {
   assert.ok(fs.existsSync(publicSwPath), "public/sw.js deve existir");
   const swContent = fs.readFileSync(publicSwPath, "utf-8");
-
-  // Versão não pode permanecer 2.0.0-test.1
-  assert.doesNotMatch(
-    swContent,
-    /2\.0\.0-test\.1/,
-    "A versão do cache no Service Worker não deve permanecer como 2.0.0-test.1"
-  );
-
-  // Versão deve estar incrementada para a versão canônica atual
-  const canonical = fs.readFileSync(path.join(repoRoot, "VERSION"), "utf-8").trim();
-  assert.match(
-    swContent,
-    new RegExp(`CACHE_NAME\\s*=\\s*CACHE_PREFIX\\s*\\+\\s*["']${canonical.replace(".", "\\.")}["']`),
-    `CACHE_NAME deve ser incrementado para ${canonical}`
-  );
+  // A fonte usa o marcador; vite.config.js troca pelo conteúdo de VERSION ao gerar alunos/sw.js.
+  assert.match(swContent, /CACHE_NAME\s*=\s*CACHE_PREFIX\s*\+\s*"__PULSELAB_VERSION__"/);
+  assert.doesNotMatch(swContent, /CACHE_PREFIX\s*\+\s*"\d+\.\d+\.\d+"/, "sem versão escrita à mão");
 });
 
 test("Service Worker: instalação e ativação removem caches anteriores e precacheiam bundle atual", () => {
@@ -60,9 +48,10 @@ test("Service Worker: instalação e ativação removem caches anteriores e prec
   );
 });
 
-test("Service Worker: artefato alunos/sw.js atualizado pelo build contém versão incrementada", () => {
-  if (fs.existsSync(distSwPath)) {
-    const distContent = fs.readFileSync(distSwPath, "utf-8");
-    assert.doesNotMatch(distContent, /2\.0\.0-test\.1/);
-  }
+test("Service Worker: alunos/sw.js gerado pelo build traz a versão canônica", () => {
+  if (!fs.existsSync(distSwPath)) return;
+  const canonical = fs.readFileSync(path.join(repoRoot, "VERSION"), "utf-8").trim();
+  const distContent = fs.readFileSync(distSwPath, "utf-8");
+  assert.ok(distContent.includes(`CACHE_PREFIX + "${canonical}"`), `alunos/sw.js deve usar ${canonical}; rode npm run build`);
+  assert.ok(!distContent.includes("__PULSELAB_VERSION__"), "marcador não substituído no build");
 });

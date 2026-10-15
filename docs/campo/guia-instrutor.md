@@ -1,7 +1,7 @@
 ---
 marp: true
 lang: pt-BR
-title: PulseLab 3.0.8 — Guia do instrutor
+title: PulseLab — Guia do instrutor
 description: Como instalar e usar o PulseLab nas oficinas de robótica.
 paginate: true
 size: 16:9
@@ -31,13 +31,13 @@ style: |
   table { font-size: 0.85em; border-collapse: collapse; }
   th, td { padding: 6px 12px; border-bottom: 1px solid #cbd5e1; text-align: left; vertical-align: top; }
   footer { color: #64748b; font-size: 0.6em; }
-footer: PulseLab 3.0.8 · Guia do instrutor
+footer: PulseLab 3 · Guia do instrutor
 ---
 
 <!-- _class: capa -->
 <!-- _paginate: false -->
 
-<span class="tag">PulseLab 3.0.8</span>
+<span class="tag">PulseLab 3</span>
 
 # Guia do instrutor
 
@@ -64,7 +64,7 @@ Na instalação aparece:
 
 ## Pacote genérico do site
 
-`PulseLab-3.0.8-Windows.zip`. Funciona, mas **não registra nada** (Modo Livre).
+`PulseLab-<versão>-Windows.zip`. Funciona, mas **não registra nada** (Modo Livre).
 
 Na instalação aparece:
 `Coleta de pesquisa DESLIGADA neste computador`

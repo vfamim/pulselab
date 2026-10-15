@@ -1496,9 +1496,9 @@ onde:
 
 def main():
     repo_root = Path(__file__).resolve().parents[2]
-    version_file = repo_root / "VERSION"
-    version = version_file.read_text(encoding="utf-8").strip() if version_file.is_file() else "2.3.2"
-    
+    # A página leva o marcador; tooling/site/build-hosting.py troca pela versão de VERSION ao publicar.
+    version = "__PULSELAB_VERSION__"
+
     html = generate_html(version)
     target = repo_root / "apps" / "site" / "relatorio" / "index.html"
     target.write_text(html, encoding="utf-8")

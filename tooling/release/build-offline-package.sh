@@ -5,4 +5,5 @@ ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${ROOT_DIR}/apps/student-pwa"
 npm run build
 cd "${ROOT_DIR}"
-python3 tooling/release/build-installer.py --output dist/PulseLab-3.0.8-Windows.zip
+VERSION="$(tr -d '[:space:]' < VERSION)"
+python3 tooling/release/build-installer.py --output "dist/PulseLab-${VERSION}-Windows.zip"

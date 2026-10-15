@@ -1,6 +1,7 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0..\.."
+set /p VERSION=<VERSION
 title PulseLab - Atualizar Página no Firebase Hosting
 echo ====================================================================
 echo             PULSELAB - DEPLOY NO FIREBASE HOSTING
@@ -11,7 +12,7 @@ cd apps\student-pwa
 call npm run build
 cd ..\..
 echo.
-python tooling\release\build-installer.py --output dist\PulseLab-3.0.8-Windows.zip
+python tooling\release\build-installer.py --output dist\PulseLab-%VERSION%-Windows.zip
 
 echo [3/3] Montando pasta publica (somente arquivos permitidos)...
 python tooling\site\build-hosting.py

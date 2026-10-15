@@ -14,8 +14,8 @@ npm run check
 npm run build
 ```
 
-- O build de produção estático é gerado diretamente na pasta raiz `../../alunos/`.
-- Testes E2E utilizam Playwright com Google Chrome (`npx playwright install chrome`).
+- O build de produção estático é gerado em `../../alunos/` (não versionado). A versão vem de `VERSION`: o código usa `__PULSELAB_VERSION__` e o `vite.config.js` substitui no build, inclusive no `sw.js`.
+- Testes E2E utilizam Playwright com Chromium (`npx playwright install chromium`) e rodam no CI.
 - A suíte de testes unitários (`npm run test:unit`) valida os contratos, parser de telemetria, persistência e governança fail-closed.
 
 ## Princípios de Arquitetura e Experiência (v2.3.1)

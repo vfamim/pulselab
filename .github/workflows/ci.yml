@@ -26,6 +26,14 @@ jobs:
         with:
           python-version: '3.11'
 
+      # alunos/ não é versionado: o build vem antes das checagens que empacotam a PWA
+      - name: PWA unit tests and build
+        run: |
+          cd apps/student-pwa
+          npm ci
+          npm run build
+          npm run test:unit
+
       - name: Version consistency
         run: python3 tooling/release/check-version-consistency.py
 
@@ -50,12 +58,26 @@ jobs:
         shell: pwsh
         run: ./tests/powershell/test-launcher-update.ps1
 
-      - name: PWA unit tests and build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: apps/student-pwa/package-lock.json
+
+      - name: Playwright (Chromium)
         run: |
           cd apps/student-pwa
           npm ci
-          npm run test:unit
-          npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
 
   database:
     runs-on: ubuntu-latest

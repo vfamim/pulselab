@@ -20,6 +20,7 @@ class BuildHostingTest(unittest.TestCase):
             else:
                 target.mkdir()
                 (target / "index.html").write_text("ok", encoding="utf-8")
+        (root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
         (root / "pulselab-robotica-edu-firebase-adminsdk-x.json").write_text("{}", encoding="utf-8")
         (root / "dados_locais").mkdir()
         (root / "dados_locais" / "pulselab_consolidado.sqlite").write_text("x", encoding="utf-8")
@@ -54,6 +55,25 @@ class BuildHostingTest(unittest.TestCase):
             self.assertFalse(any(p.startswith("instrutor/") for p in published))
             self.assertFalse(any(p.endswith((".zip", ".sha256")) for p in published))
             self.assertIn("instalador/index.html", published)
+
+    def test_version_token_replaced_in_pages(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.make_repo(root)
+            page = root / build_hosting.PUBLIC_ENTRIES["instalador"] / "index.html"
+            page.write_text(f"PulseLab v{build_hosting.VERSION_TOKEN}", encoding="utf-8")
+            out = root / "hosting-dist"
+            build_hosting.build(root, out)
+            self.assertEqual((out / "instalador" / "index.html").read_text(encoding="utf-8"), "PulseLab v9.9.9")
+
+    def test_repo_pages_have_no_leftover_token_after_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "hosting-dist"
+            if not (ROOT / "alunos" / "index.html").is_file():
+                self.skipTest("alunos/ não compilado (npm run build)")
+            build_hosting.build(ROOT, out)
+            leftovers = [p for p in out.rglob("*.html") if build_hosting.VERSION_TOKEN in p.read_text(encoding="utf-8")]
+            self.assertEqual(leftovers, [])
 
     def test_firebase_points_to_dedicated_folder(self):
         config = json.loads((ROOT / "firebase.json").read_text(encoding="utf-8"))

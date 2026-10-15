@@ -108,103 +108,52 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         if expected_lv not in content:
             errors.append(f"runtime/windows/pulselab.ps1: fallback de versão deve ser '{expected_lv}'")
 
-    # 8. PWA UI: apps/student-pwa/app/student-page.jsx
-    student_page = repo_root / "apps/student-pwa/app/student-page.jsx"
-    if student_page.is_file():
-        content = read_text(student_page)
-        expected_cv = f'const CLIENT_VERSION = "student-pwa/{canonical}";'
-        if expected_cv not in content:
-            errors.append(f"student-page.jsx: não contém '{expected_cv}'")
-        expected_ui_tag = f"oficina de robótica · v{canonical}"
-        if expected_ui_tag not in content:
-            errors.append(f"student-page.jsx: rodapé da UI deve conter '{expected_ui_tag}'")
-
-    # 9. Service Worker: apps/student-pwa/public/sw.js
-    sw_file = repo_root / "apps/student-pwa/public/sw.js"
-    if sw_file.is_file():
-        content = read_text(sw_file)
-        expected_cache = f'const CACHE_NAME = CACHE_PREFIX + "{canonical}";'
-        if expected_cache not in content:
-            errors.append(f"apps/student-pwa/public/sw.js: CACHE_NAME deve ser '{expected_cache}'")
-
-    # 10. Empacotador: tooling/release/build-installer.py
-    builder_py = repo_root / "tooling/release/build-installer.py"
-    if builder_py.is_file():
-        content = read_text(builder_py)
-        expected_v = f'VERSION = "{canonical}"'
-        if expected_v not in content:
-            errors.append(f"tooling/release/build-installer.py: esperado '{expected_v}'")
-
-    # 11. Script de build offline: tooling/release/build-offline-package.sh
+    # 8-13. Superfícies que recebem a versão no build pelo marcador (sem número fixo no código)
+    token = "__PULSELAB_VERSION__"
+    hardcoded = re.compile(r"PulseLab-\d+\.\d+\.\d+-Windows|releases/download/v\d")
+    release_link = f"https://github.com/vfamim/pulselab/releases/download/v{token}/PulseLab-{token}-Windows.zip"
+    templated = {
+        "apps/student-pwa/app/student-page.jsx": [
+            "const CLIENT_VERSION = `student-pwa/${__PULSELAB_VERSION__}`;",
+            "oficina de robótica · v{__PULSELAB_VERSION__}",
+        ],
+        "apps/student-pwa/public/sw.js": ['const CACHE_NAME = CACHE_PREFIX + "__PULSELAB_VERSION__";'],
+        "apps/student-pwa/vite.config.js": ['"../../VERSION"', "[VERSION_TOKEN]: JSON.stringify(version)"],
+        "tooling/release/build-installer.py": ['/ "VERSION").read_text('],
+        "tooling/release/build-offline-package.sh": ["< VERSION", "PulseLab-${VERSION}-Windows.zip"],
+        "tooling/site/Atualizar-Site-Firebase.bat": ["set /p VERSION=<VERSION", "PulseLab-%VERSION%-Windows.zip"],
+        "tooling/site/build-hosting.py": ['VERSION_TOKEN = "__PULSELAB_VERSION__"'],
+        "apps/site/index.html": [f"PulseLab v{token}", f"v{token} Oficinas Rotativas"],
+        "apps/site/instalador/index.html": [release_link, f"{release_link}.sha256", f"PulseLab v{token}"],
+        "apps/site/testes/index.html": [release_link, f"{release_link}.sha256", f"PulseLab Offline v{token}"],
+        "apps/site/relatorio/index.html": [f"PulseLab v{token}"],
+    }
+    for rel, required in templated.items():
+        path = repo_root / rel
+        if not path.is_file():
+            errors.append(f"{rel}: arquivo ausente")
+            continue
+        content = read_text(path)
+        for snippet in required:
+            if snippet not in content:
+                errors.append(f"{rel}: deve conter '{snippet}'")
+        if hardcoded.search(content) or f"v{canonical}" in content:
+            errors.append(f"{rel}: versão escrita à mão; use {token} (preenchido no build)")
     build_sh = repo_root / "tooling/release/build-offline-package.sh"
-    if build_sh.is_file():
-        content = read_text(build_sh)
-        zip_name = f"PulseLab-{canonical}-Windows.zip"
-        if zip_name not in content:
-            errors.append(f"tooling/release/build-offline-package.sh: deve referenciar '{zip_name}'")
-        if "Alunos-Offline" in content:
-            errors.append("tooling/release/build-offline-package.sh: não gerar mais a cópia PulseLab-Alunos-Offline (duplicata do ZIP)")
+    if build_sh.is_file() and "Alunos-Offline" in read_text(build_sh):
+        errors.append("tooling/release/build-offline-package.sh: não gerar mais a cópia PulseLab-Alunos-Offline (duplicata do ZIP)")
 
-    # 12. Scripts Batch de instalação e atualização
+    # Build da PWA (não versionado): quando existe, precisa ser da versão atual
+    built_sw = repo_root / "alunos/sw.js"
+    if built_sw.is_file() and f'CACHE_PREFIX + "{canonical}"' not in read_text(built_sw):
+        errors.append(f"alunos/sw.js: build desatualizado; rode npm run build (esperado {canonical})")
+
+    # 12. Instalador (vai pronto no ZIP)
     instalar_bat = repo_root / "runtime/windows/Instalar-PulseLab.bat"
     if instalar_bat.is_file():
         content = read_text(instalar_bat)
         if f"(v{canonical})" not in content:
             errors.append(f"runtime/windows/Instalar-PulseLab.bat: deve exibir título com '(v{canonical})'")
-
-    atualizar_bat = repo_root / "tooling/site/Atualizar-Site-Firebase.bat"
-    if atualizar_bat.is_file():
-        content = read_text(atualizar_bat)
-        zip_name = f"PulseLab-{canonical}-Windows.zip"
-        if zip_name not in content:
-            errors.append(f"Atualizar-Site-Firebase.bat: deve referenciar '{zip_name}'")
-
-    # 13. Páginas públicas operacionais
-    index_html = repo_root / "apps/site/index.html"
-    if index_html.is_file():
-        content = read_text(index_html)
-        if f"PulseLab v{canonical}" not in content:
-            errors.append(f"index.html: deve conter 'PulseLab v{canonical}'")
-        if f"v{canonical} Oficinas Rotativas" not in content:
-            errors.append(f"index.html: tag da hero deve conter 'v{canonical} Oficinas Rotativas'")
-
-    instalador_html = repo_root / "apps/site/instalador/index.html"
-    if instalador_html.is_file():
-        content = read_text(instalador_html)
-        zip_name = f"PulseLab-{canonical}-Windows.zip"
-        if zip_name not in content:
-            errors.append(f"instalador/index.html: link de download deve referenciar '{zip_name}'")
-        release_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{zip_name}"
-        if release_link not in content:
-            errors.append(f"instalador/index.html: download deve apontar para a Release do GitHub ({release_link})")
-        if f"PulseLab Protocol v{canonical}" not in content and f"PulseLab v{canonical}" not in content:
-            errors.append(f"instalador/index.html: cabeçalho deve referenciar v{canonical}")
-
-    testes_html = repo_root / "apps/site/testes/index.html"
-    if testes_html.is_file():
-        content = read_text(testes_html)
-        zip_name = f"PulseLab-{canonical}-Windows.zip"
-        if zip_name not in content:
-            errors.append(f"testes/index.html: link de download deve referenciar '{zip_name}'")
-        release_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{zip_name}"
-        if release_link not in content:
-            errors.append(f"testes/index.html: download deve apontar para a Release do GitHub ({release_link})")
-        if f"PulseLab Offline v{canonical}" not in content:
-            errors.append(f"testes/index.html: título deve conter 'PulseLab Offline v{canonical}'")
-
-    tutorial_html = repo_root / "apps/site/tutorial/index.html"
-    if tutorial_html.is_file():
-        content = read_text(tutorial_html)
-        if f"PulseLab {canonical}" not in content:
-            errors.append(f"tutorial/index.html: deve conter 'PulseLab {canonical}'")
-        if f"PulseLab-{canonical}-Windows.zip" not in content:
-            errors.append(f"tutorial/index.html: deve referenciar 'PulseLab-{canonical}-Windows.zip'")
-
-    relatorio_html = repo_root / "apps/site/relatorio/index.html"
-    if relatorio_html.is_file():
-        content = read_text(relatorio_html)
-        if f"PulseLab v{canonical}" not in content and f"PulseLab {canonical}" not in content:
-            errors.append(f"relatorio/index.html: deve conter 'PulseLab v{canonical}'")
 
     # 14. Verificação de Checksums de Pacotes quando presentes
     pkg_dist = repo_root / f"dist/PulseLab-{canonical}-Windows.zip"
@@ -214,11 +163,6 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         sha_text = pkg_dist_sha.read_text(encoding="ascii").strip()
         if not sha_text.startswith(real_hash):
             errors.append(f"Checksum mismatch em {pkg_dist_sha}: hash real é {real_hash}")
-        # As páginas não repetem o hash (ficava desatualizado): apontam para o .sha256 publicado na Release.
-        sha_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{pkg_dist_sha.name}"
-        for page in (instalador_html, testes_html):
-            if page.is_file() and sha_link not in read_text(page):
-                errors.append(f"{page.relative_to(repo_root)}: deve apontar para o checksum publicado ({sha_link})")
 
     # 15. Um único identificador de protocolo: o do manifesto do instrumento (contracts.js)
     contracts_js = repo_root / "apps/student-pwa/lib/contracts.js"

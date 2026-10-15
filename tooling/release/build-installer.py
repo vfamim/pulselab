@@ -17,7 +17,8 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "3.0.8"
+# Versão canônica do projeto (arquivo VERSION na raiz).
+VERSION = (Path(__file__).resolve().parents[2] / "VERSION").read_text(encoding="utf-8").strip()
 
 
 def sha256(path: Path) -> str:

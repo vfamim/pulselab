@@ -49,6 +49,9 @@ desktop.ini
 __pycache__/
 *.py[cod]
 
+# Build da PWA (npm run build em apps/student-pwa); vai no ZIP e no site, não no git
+/alunos/
+
 # Web simulator build artifacts
 node_modules/
 # Pacotes gerados (ZIP e .sha256); vão para as Releases do GitHub, não para o git
