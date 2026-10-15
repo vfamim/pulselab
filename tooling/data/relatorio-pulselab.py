@@ -396,6 +396,11 @@ def filtrar(aulas: list[dict], de: str | None, ate: str | None, polo: str | None
     return out
 
 
+def sessao_vazia(aula: dict) -> bool:
+    """PC ligado sem aula: fechou por inatividade sem nenhum programa salvo. Não conta como aula."""
+    return aula.get("encerrada_por") == "inatividade" and not aula.get("versoes_programa")
+
+
 def chave_maquina(aula: dict) -> str | None:
     return aula.get("installation_id") or aula.get("maquina")
 
@@ -725,7 +730,12 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     todas = juntar_aulas(aulas_nuvem, aulas_pendrive, retiradas=retiradas)
-    aulas = filtrar(todas, args.de, args.ate, args.polo)
+    filtradas = filtrar(todas, args.de, args.ate, args.polo)
+    aulas = [a for a in filtradas if not sessao_vazia(a)]
+    vazias = len(filtradas) - len(aulas)
+    if vazias:
+        avisos.append(f"{vazias} sessão(ões) sem nenhum programa salvo, fechadas por inatividade "
+                      "(computador ligado sem aula), ficaram fora das contagens.")
     resumo = resumo_polos(aulas)
     maquinas = maquinas_sem_envio(maquinas_nuvem, todas, hoje, args.polo)
 

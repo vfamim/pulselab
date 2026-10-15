@@ -1859,9 +1859,13 @@ function Update-BridgeSpikeTelemetry {
 }
 
 # Fim por inatividade: limite contado da ultima versao salva no SPIKE ou, sem nenhuma, do inicio da turma.
+# Ultimo sinal de atividade da turma: ultima versao salva no SPIKE ou, sem nenhuma, o inicio.
+function Get-BridgeLastActivityMs($Session) {
+    return [Math]::Max([int64]$Session.started_at_ms, [int64]$Session.last_program_ms)
+}
+
 function Get-BridgeIdleDeadlineMs($Session) {
-    $sinceMs = [Math]::Max([int64]$Session.started_at_ms, [int64]$Session.last_program_ms)
-    return $sinceMs + [int64]$script:SessionIdleMinutes * 60000
+    return (Get-BridgeLastActivityMs $Session) + [int64]$script:SessionIdleMinutes * 60000
 }
 
 function Initialize-BridgeSession {
@@ -1886,7 +1890,7 @@ function Initialize-BridgeSession {
             [void](Close-BridgeSession -EndedBy "sem_encerramento" -EndedAtMs ([int64]$s.last_alive_ms))
         } elseif ($nowMs -ge $idleEndMs -and $idleEndMs -lt ([int64]$s.started_at_ms + [int64]$script:SessionMaxMinutes * 60000)) {
             # Sem programa salvo pelo limite: a turma acabou e a proxima abre no primeiro programa salvo.
-            [void](Close-BridgeSession -EndedBy "inatividade" -EndedAtMs $idleEndMs)
+            [void](Close-BridgeSession -EndedBy "inatividade" -EndedAtMs (Get-BridgeLastActivityMs $s))
             return
         } elseif ($ageMin -ge $script:SessionMaxMinutes) {
             [void](Close-BridgeSession -EndedBy "tempo" -EndedAtMs ([int64]$s.started_at_ms + [int64]$script:SessionMaxMinutes * 60000))
@@ -1929,7 +1933,7 @@ function Invoke-BridgeSessionTick {
         # Turma esquecida aberta: sem nova versao salva no SPIKE pelo limite, encerra e espera o proximo programa.
         $idleEndMs = Get-BridgeIdleDeadlineMs $script:ActiveSession
         if ($nowMs -ge $idleEndMs) {
-            [void](Close-BridgeSession -EndedBy "inatividade" -EndedAtMs $idleEndMs)
+            [void](Close-BridgeSession -EndedBy "inatividade" -EndedAtMs (Get-BridgeLastActivityMs $script:ActiveSession))
             return
         }
         if ($script:ActiveSession -and ($now - $script:LastHeartbeat).TotalSeconds -ge $script:HeartbeatSeconds) {

@@ -101,7 +101,7 @@ test("Sessão do Bridge: fecha por inatividade (40 min sem programa salvo no SPI
   assert.match(bridgeCode, /PULSELAB_SESSION_IDLE_MINUTES" 40/);
   assert.match(bridgeCode, /Add-Member -NotePropertyName last_program_ms/, "Nova versão salva zera o relógio");
   assert.match(bridgeCode, /\[Math\]::Max\(\[int64\]\$Session\.started_at_ms, \[int64\]\$Session\.last_program_ms\)/, "Sem versão salva, conta do início");
-  assert.match(bridgeCode, /Close-BridgeSession -EndedBy "inatividade" -EndedAtMs \$idleEndMs/);
+  assert.match(bridgeCode, /Close-BridgeSession -EndedBy "inatividade" -EndedAtMs \(Get-BridgeLastActivityMs /);
 });
 
 test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegador", () => {

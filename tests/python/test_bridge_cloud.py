@@ -457,7 +457,7 @@ class BridgeRestartTest(unittest.TestCase):
     def test_idle_class_closes_on_restart_and_can_be_marked(self):
         first = self.start_and_get_session()
         self.bridge.stop()
-        # Nenhum programa salvo em 50 min: fechou aos 40 min do início, sem abrir outra turma.
+        # Nenhum programa salvo em 50 min: fecha por inatividade; o fim é o último sinal de atividade (o início).
         self.shift_state(started_min_ago=50, alive_min_ago=1)
         self.bridge.start()
         status = self.bridge.get("/v1/status")
@@ -465,13 +465,13 @@ class BridgeRestartTest(unittest.TestCase):
         self.assertTrue(status["awaiting_activity"], "a próxima turma abre no primeiro programa salvo")
         snap = self.snapshot(first)
         self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "inatividade"))
-        self.assertEqual(snap["duration_seconds"], 40 * 60)
+        self.assertEqual(snap["duration_seconds"], 0)
         self.assertEqual(snap["data_quality"]["telemetry_events"], 0)
         completed = [e for e in read_events(self.bridge.data) if e["session_id"] == first and e["event_type"] == "session_completed"]
         self.assertEqual(completed[-1]["details"]["ended_by"], "inatividade")
         # "Não registrar esta turma" depois disso marca a aula encerrada por inatividade
         target = status["mark_target"]
-        self.assertEqual((target["session_id"], target["active"], target["duration_min"]), (first, False, 40))
+        self.assertEqual((target["session_id"], target["active"], target["duration_min"]), (first, False, 0))
         status_code, body = self.bridge.post("/v1/session/pause", {"session_id": first})
         self.assertEqual((status_code, body["marked"], body["target"]["session_id"]), (200, True, first))
         snap = self.snapshot(first)
@@ -517,7 +517,7 @@ class BridgeIdleTest(unittest.TestCase):
         self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "inatividade"))
         self.assertEqual(snap["data_quality"]["telemetry_events"], 1)
         to_dt = lambda iso: datetime.fromisoformat(iso.replace("Z", "+00:00"))
-        self.assertAlmostEqual((to_dt(snap["completed_at"]) - to_dt(saved_at)).total_seconds(), 60, delta=1)
+        self.assertAlmostEqual((to_dt(snap["completed_at"]) - to_dt(saved_at)).total_seconds(), 0, delta=1)
         status = self.bridge.get("/v1/status")
         self.assertTrue(status["awaiting_activity"])
         self.assertFalse(status["paused"])

@@ -250,6 +250,8 @@ class TestRelatorio(unittest.TestCase):
         ind = rel.indicadores(aulas)
         self.assertEqual((ind["pct_sem_spike"], ind["pct_encerradas_instrutor"], ind["pct_interrompidas"]), (50.0, 0.0, 0.0))
         self.assertEqual(rel.ENCERRAMENTO_LEIGO["inatividade"], "sem uso do SPIKE por 40 min")
+        # Sessão sem programa fechada por inatividade é PC ligado sem aula: fica fora das contagens no main.
+        self.assertEqual((rel.sessao_vazia(sem_programa), rel.sessao_vazia(com_programa)), (True, False))
         md = rel.gerar_markdown(aulas, rel.resumo_polos(aulas), [], rel.dt.date(2026, 10, 15), None, None, None, ["nuvem"], [])
         self.assertIn("| sem uso do SPIKE por 40 min |", md)
 
