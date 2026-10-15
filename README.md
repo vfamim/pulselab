@@ -102,7 +102,7 @@ python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --
 ```sh
 cd web/agent-simulator && npm ci && npm run test:unit && npm run build
 python3 scripts/check-version-consistency.py
-python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud
+python3 -m unittest scripts.test_importador scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud scripts.test_spike_parser
 pwsh -File scripts/test-launcher-update.ps1
 python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres descartável
 ```
@@ -110,4 +110,5 @@ python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres des
 O site no Firebase publica apenas a lista de pastas de `scripts/build-hosting.py`
 (montada em `hosting-dist/`). Toda mudança passa por PR com o CI verde.
 
-Documentos v1/v1.4, o agente WPF (`agent/`) e o portal antigo são referências históricas.
+Documentos v1/v1.4 são referências históricas. O agente WPF (`agent/`), o portal do instrutor
+(`instrutor/`) e o schema avulso (`schema/`) foram removidos na 3.0.4 e seguem no histórico do git.
