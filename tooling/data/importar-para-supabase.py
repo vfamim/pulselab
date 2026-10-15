@@ -303,7 +303,12 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
                 imported_at TEXT,
                 ended_by TEXT,
                 interrupted INTEGER,
-                data_quality_json TEXT
+                data_quality_json TEXT,
+                installation_id TEXT,
+                machine_label TEXT,
+                start_mode TEXT,
+                client_version TEXT,
+                instrument_version TEXT
             )
         """)
 
@@ -370,7 +375,10 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
     for tbl, cols in [
         ("events", ["occurred_at", "response_status", "knowledge_answers_json", "prior_robotics", "mission_performance", "primary_issue"]),
         ("session_events", ["occurred_at"]),
-        ("sessions", ["ended_by", "interrupted INTEGER", "data_quality_json"]),
+        ("sessions", [
+            "ended_by", "interrupted INTEGER", "data_quality_json",
+            "installation_id", "machine_label", "start_mode", "client_version", "instrument_version",
+        ]),
     ]:
         existing = {row[1] for row in cur.execute(f"PRAGMA table_info({tbl})").fetchall()}
         for col_def in cols:
@@ -656,6 +664,14 @@ def bancada_quality_fields(data: dict) -> dict:
     }
 
 
+def text_or_none(val) -> str | None:
+    """Identificador curto do snapshot como texto; vazio ou estruturado vira None."""
+    if val is None or isinstance(val, (dict, list)):
+        return None
+    text = str(val).strip()
+    return text or None
+
+
 def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str, now_iso: str) -> str:
     """
     Grava o snapshot no SQLite. Retorna 'inserted', 'updated' ou 'kept_completed'
@@ -677,8 +693,9 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
                 workshop_code, class_code, activity_id, started_at, completed_at,
                 duration_seconds, team_role, status, pre_answers_json,
                 post_answers_json, spike_telemetry_json, events_count,
-                source_file, imported_at, ended_by, interrupted, data_quality_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_file, imported_at, ended_by, interrupted, data_quality_json,
+                installation_id, machine_label, start_mode, client_version, instrument_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
                 group_id = excluded.group_id,
                 site_id = excluded.site_id,
@@ -700,7 +717,12 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
                 imported_at = excluded.imported_at,
                 ended_by = excluded.ended_by,
                 interrupted = excluded.interrupted,
-                data_quality_json = excluded.data_quality_json
+                data_quality_json = excluded.data_quality_json,
+                installation_id = excluded.installation_id,
+                machine_label = excluded.machine_label,
+                start_mode = excluded.start_mode,
+                client_version = excluded.client_version,
+                instrument_version = excluded.instrument_version
         """, (
             sess_id,
             data.get("group_id", ""),
@@ -724,6 +746,11 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
             quality["ended_by"],
             None if interrupted is None else int(interrupted),
             json.dumps(quality["data_quality"]) if quality["data_quality"] is not None else None,
+            text_or_none(data.get("installation_id")),
+            text_or_none(data.get("computer_id")),
+            text_or_none(data.get("start_mode")),
+            text_or_none(data.get("client_version")),
+            text_or_none(data.get("instrument_version")),
         ))
     return "updated" if row is not None else "inserted"
 
