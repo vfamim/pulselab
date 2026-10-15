@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteLocalStore } from "../lib/student-store.js";
 
-// Página da bancada / encerramento silencioso (v3.0.4).
+// Página da bancada / encerramento silencioso (v3.0.5).
 // Durante a aula nenhuma página precisa ficar aberta. O encerramento no PC é direto e silencioso:
 // zero formulários para os alunos ou instrutor no computador da bancada.
 // Encerrar a turma só fecha a sessão: o PulseLab continua ligado para a próxima turma.
 
-const CLIENT_VERSION = "student-pwa/3.0.4";
+const CLIENT_VERSION = "student-pwa/3.0.5";
 const BRIDGE_URL = "http://127.0.0.1:43128";
 
 // Chaves das versões até 2.3.x, quando a página ficava aberta e guardava a sessão no navegador.
@@ -94,7 +94,7 @@ function LabPanel() {
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v3.0.4 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.5 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>

@@ -1,7 +1,7 @@
 {
-  "version": "3.0.4",
+  "version": "3.0.5",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.0.4/PulseLab-3.0.4-Windows.zip",
-  "notes": "PulseLab v3.0.4 - instalador restaurado; encerrar turma mant\u00e9m o PulseLab ligado para a pr\u00f3xima turma."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.0.5/PulseLab-3.0.5-Windows.zip",
+  "notes": "PulseLab v3.0.5 - pacote enxuto: na raiz do ZIP s\u00f3 o instalador e a pasta arquivos; o instalador avisa quando \u00e9 aberto sem extrair."
 }
