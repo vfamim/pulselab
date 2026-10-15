@@ -245,7 +245,7 @@ export async function markSessionEvents(sessionId, deliveryState) {
 }
 
 /**
- * Retenção absoluta de 7 dias definida em docs/inventario-dados-v2.md:
+ * Retenção absoluta de 7 dias definida em docs/pesquisa/inventario-dados-v2.md:
  * "Prazo absoluto: sete dias desde a criação, sem extensão por retomada.
  * Apagar/retirar elimina esse registro com todos os eventos juntos."
  *
