@@ -125,6 +125,31 @@ class PoloMissionCalendarTest(unittest.TestCase):
         script = (ROOT / "pulselab-installation.ps1").read_text(encoding="utf-8")
         self.assertIn('"calendario_missoes"', script)
 
+class WindowsScriptsTest(unittest.TestCase):
+    """Scripts que vão no ZIP para Windows: íntegros e com CRLF (cmd.exe e PowerShell 5.1)."""
+
+    def test_installer_is_complete(self):
+        bat = (ROOT / "Instalar-PulseLab.bat").read_bytes().decode("utf-8")
+        for marker in ("xcopy", "Initialize-PulseLabInstallation", "PulseLab - Iniciar Oficina.lnk", "Startup", "pause"):
+            self.assertIn(marker, bat, f"Instalar-PulseLab.bat sem '{marker}' (arquivo truncado?)")
+
+    def test_shipped_scripts_use_crlf(self):
+        shipped = [
+            "Instalar-PulseLab.bat",
+            "Atualizar-Site-Firebase.bat",
+            "Iniciar-PulseLab.bat",
+            "pulselab.ps1",
+            "pulselab-update.ps1",
+            "pulselab-installation.ps1",
+            "bridge/pulselab-bridge.ps1",
+            "bridge/pulselab-tray.ps1",
+            "bridge/spike-parser.ps1",
+        ]
+        for rel in shipped:
+            data = (ROOT / rel).read_bytes()
+            self.assertEqual(data.count(b"\n"), data.count(b"\r\n"), f"{rel} tem quebra de linha só com LF")
+
+
 if __name__ == "__main__":
     unittest.main()
 
