@@ -7,7 +7,7 @@
         "spike_parser_enabled": true,
         "ui_automation_enabled": true
     },
-    "client_version": "3.0.5",
+    "client_version": "3.0.6",
     "research_collection_enabled": false,
     "research_authorization_version": null,
     "research_authorized_purposes": []

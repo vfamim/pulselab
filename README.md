@@ -110,5 +110,4 @@ python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres des
 O site no Firebase publica apenas a lista de pastas de `scripts/build-hosting.py`
 (montada em `hosting-dist/`). Toda mudança passa por PR com o CI verde.
 
-Documentos v1/v1.4 são referências históricas. O agente WPF (`agent/`), o portal do instrutor
-(`instrutor/`) e o schema avulso (`schema/`) foram removidos na 3.0.4 e seguem no histórico do git.
+Documentos v1/v1.4, o agente WPF (`agent/`) e o portal antigo são referências históricas.
