@@ -2,8 +2,8 @@
 > reescrito. As hipóteses H1–H4, os itens individuais (pré/pós, check-ins e
 > autorrelatos por participante), as capturas de tela e as contagens de teclas
 > descritas aqui não fazem parte da versão atual. Protocolo vigente:
-> [protocolo v2](https://github.com/vfamim/pulselab/blob/main/docs/protocolo-pesquisa-v2-teste.md). Assentimento:
-> [assentimento verbal](https://github.com/vfamim/pulselab/blob/main/docs/assentimento-verbal.md).
+> [protocolo v2](https://github.com/vfamim/pulselab/blob/main/docs/pesquisa/protocolo-pesquisa-v2.md). Assentimento:
+> [assentimento verbal](https://github.com/vfamim/pulselab/blob/main/docs/campo/assentimento-verbal.md).
 
 # PulseLab como infraestrutura de mensuração em oficinas de robótica educacional
 
@@ -350,12 +350,12 @@ Esta seção impede que a apresentação confunda intenção, protótipo e dado 
 
 Evidências técnicas internas:
 
-- [Protocolo de pesquisa v1](https://github.com/vfamim/pulselab/blob/main/docs/protocolo-pesquisa-v1.md)
-- [Arquitetura de evidências 1.4](https://github.com/vfamim/pulselab/blob/main/docs/arquitetura-evidencias-v1.4.md)
-- [Schema Supabase](https://github.com/vfamim/pulselab/blob/main/schema/supabase-schema.sql)
+- [Protocolo de pesquisa v1](https://github.com/vfamim/pulselab/blob/main/docs/arquivo/v1/protocolo-pesquisa-v1.md)
+- [Arquitetura de evidências 1.4](https://github.com/vfamim/pulselab/blob/main/docs/arquivo/v1/arquitetura-evidencias-v1.4.md)
+- [Schema Supabase](https://github.com/vfamim/pulselab/blob/2e9f709b22fd330e3f89bbd14064b4e02e57f4cd/schema/supabase-schema.sql)
 - [Configuração do instrumento](https://github.com/vfamim/pulselab/blob/main/config/config.json)
-- [Agente Windows](https://github.com/vfamim/pulselab/blob/main/agent/pulselab-agent.ps1)
-- [Simulador web](https://github.com/vfamim/pulselab/blob/main/web/agent-simulator/app/page.jsx)
+- [Agente Windows](https://github.com/vfamim/pulselab/blob/2e9f709b22fd330e3f89bbd14064b4e02e57f4cd/agent/pulselab-agent.ps1)
+- [Simulador web](https://github.com/vfamim/pulselab/blob/2e9f709b22fd330e3f89bbd14064b4e02e57f4cd/web/agent-simulator/app/page.jsx)
 - [Dashboard demonstrativo](https://github.com/vfamim/pulselab/blob/main/dashboard/index.html)
 
 ---
