@@ -60,7 +60,10 @@ function Initialize-PulseLabInstallation {
     param(
         [Parameter(Mandatory = $true)][string]$InstallRoot,
         [string]$MachineLabel = "",
-        [string]$ProvisioningFile = ""
+        [string]$ProvisioningFile = "",
+        [string]$Polo = "",
+        [string]$Caae = "",
+        [string]$Regional = ""
     )
     $dataDir = Join-Path $InstallRoot "dados_locais"
     if (-not (Test-Path -LiteralPath $dataDir)) { New-Item -ItemType Directory -Path $dataDir -Force | Out-Null }
@@ -97,6 +100,29 @@ function Initialize-PulseLabInstallation {
             if ($null -ne $value) { $data[$field] = $value }
         }
         $data["provisioned_at"] = [DateTime]::UtcNow.ToString("o")
+        $changed = $true
+    }
+
+    $cleanPolo = if ($Polo) { ([string]$Polo).Trim().ToUpperInvariant() } else { "" }
+    $cleanCaae = if ($Caae) { ([string]$Caae).Trim() } else { "" }
+    $cleanRegional = if ($Regional) { ([string]$Regional).Trim() } else { "" }
+
+    if ($cleanPolo) {
+        $data["site_id"] = $cleanPolo
+        $changed = $true
+    }
+    if ($cleanRegional) {
+        $data["regional_hub"] = $cleanRegional
+        $changed = $true
+    }
+    if ($cleanCaae) {
+        $data["research_authorization_version"] = $cleanCaae
+        $data["research_collection_enabled"] = $true
+        $data["research_authorized_purposes"] = @("academic_research")
+        if (-not $data["site_id"]) { $data["site_id"] = "POLO-PADRAO" }
+        if (-not $data["regional_hub"]) { $data["regional_hub"] = "Regional" }
+        if (-not $data["retention_days"]) { $data["retention_days"] = 180 }
+        $data["provisioning_id"] = "$($data['site_id'])-installer-" + (Get-Date -Format "yyyyMMdd-HHmmss")
         $changed = $true
     }
 

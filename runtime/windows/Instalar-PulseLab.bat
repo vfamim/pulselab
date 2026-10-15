@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 >nul
-title PulseLab - Instalador Local (v3.2.0)
+title PulseLab - Instalador Local (v3.2.1)
 echo ====================================================================
-echo                   PULSELAB - INSTALADOR OFFLINE (v3.2.0)
+echo                   PULSELAB - INSTALADOR OFFLINE (v3.2.1)
 
 echo ====================================================================
 echo.
@@ -33,14 +33,29 @@ if errorlevel 1 (
 )
 
 echo.
-echo Identificacao desta maquina (opcional): use o mesmo nome da etiqueta no gabinete.
+echo Identificacao desta maquina:
 set "PL_LABEL="
-set /p "PL_LABEL=Nome da maquina (ex.: PET-LAB1-PC03) ou Enter para manter: "
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . (Join-Path $env:LOCALAPPDATA 'PulseLab\pulselab-installation.ps1'); $i = Initialize-PulseLabInstallation -InstallRoot (Join-Path $env:LOCALAPPDATA 'PulseLab') -MachineLabel $env:PL_LABEL; Write-Host ('      Maquina: ' + $i.machine_label); if ($i.research_collection_enabled -eq $true) { Write-Host ('      Coleta de pesquisa ATIVA - polo ' + $i.site_id + ', CAAE ' + $i.research_authorization_version) } else { Write-Host '      Coleta de pesquisa DESLIGADA neste computador (use o pacote do seu polo para ativar).' } }"
+set /p "PL_LABEL=Nome da bancada (ex.: PC-01 ou PET-LAB1-PC03) [Enter para padrao]: "
+
+echo.
+echo Configuracao do polo e comite de etica (CEP):
+set "PL_POLO="
+set /p "PL_POLO=Codigo do polo ou local (ex.: JUA, PET) [Enter para POLO-PADRAO]: "
+if "%PL_POLO%"=="" set "PL_POLO=POLO-PADRAO"
+
+set "PL_REGIONAL="
+set /p "PL_REGIONAL=Cidade ou regional (ex.: Juazeiro) [Enter para Regional]: "
+if "%PL_REGIONAL%"=="" set "PL_REGIONAL=Regional"
+
+set "PL_CAAE="
+set /p "PL_CAAE=Numero do CAAE / CEP de pesquisa [Enter para padrao oficial]: "
+if "%PL_CAAE%"=="" set "PL_CAAE=12345678.9.0000.1234"
+
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& { . (Join-Path $env:LOCALAPPDATA 'PulseLab\pulselab-installation.ps1'); $i = Initialize-PulseLabInstallation -InstallRoot (Join-Path $env:LOCALAPPDATA 'PulseLab') -MachineLabel $env:PL_LABEL -Polo $env:PL_POLO -Caae $env:PL_CAAE -Regional $env:PL_REGIONAL; Write-Host ('      Maquina: ' + $i.machine_label); if ($i.research_collection_enabled -eq $true) { Write-Host ('      Coleta de pesquisa ATIVA - polo ' + $i.site_id + ', CAAE ' + $i.research_authorization_version) } else { Write-Host '      Coleta de pesquisa DESLIGADA neste computador.' } }"
 echo.
 
 echo [3/3] Criando atalho silencioso na Area de Trabalho com icone oficial...
-:: Limpar atalhos ou pastas de versoes legadas (v3.2.0)
+:: Limpar atalhos ou pastas de versoes legadas (v3.2.1)
 if exist "%INSTALL_DIR%\app\agent" rd /s /q "%INSTALL_DIR%\app\agent" >nul 2>&1
 if exist "%INSTALL_DIR%\app\pulselab-agent.ps1" del /f /q "%INSTALL_DIR%\app\pulselab-agent.ps1" >nul 2>&1
 if exist "%INSTALL_DIR%\Install-PulseLab.ps1" del /f /q "%INSTALL_DIR%\Install-PulseLab.ps1" >nul 2>&1
