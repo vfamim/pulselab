@@ -28,6 +28,8 @@ WITH base AS (
              WHEN jsonb_typeof(s.session_payload -> 'data_quality') = 'object' THEN s.session_payload -> 'data_quality'
              ELSE '{}'::jsonb END AS dq
     FROM public.research_bancada_sessions s
+    -- Aulas marcadas como não autorizadas nunca entram em análise (ver 20261015120000).
+    WHERE public.research_session_is_authorized(s.session_id)
 ),
 enriched AS (
     SELECT

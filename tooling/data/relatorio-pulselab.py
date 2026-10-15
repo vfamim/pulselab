@@ -237,6 +237,14 @@ def ler_sqlite(path: Path) -> tuple[list[dict], set[str]]:
             retiradas = {imp.session_key(r[0]) for r in conn.execute("SELECT session_id FROM withdrawn_sessions") if r[0]}
         if "sessions" not in tabelas:
             return [], retiradas
+        # Aulas marcadas como não autorizadas nunca entram no relatório (revisão do pesquisador decide).
+        nao_autorizadas: set[str] = set()
+        if "unauthorized_sessions" in tabelas:
+            nao_autorizadas = {
+                imp.session_key(r[0])
+                for r in conn.execute("SELECT session_id FROM unauthorized_sessions WHERE status = 'nao_autorizada'")
+                if r[0]
+            }
 
         eventos: dict[str, list[tuple[str, dict]]] = {}
         if "session_events" in tabelas:
@@ -254,7 +262,7 @@ def ler_sqlite(path: Path) -> tuple[list[dict], set[str]]:
         for r in conn.execute("SELECT * FROM sessions"):
             row = dict(r)
             sid = imp.session_key(row.get("session_id"))
-            if not sid:
+            if not sid or sid in nao_autorizadas:
                 continue
             aulas.append(aula_do_sqlite(row, sid, eventos.get(sid, []), sid in com_eventos))
         return aulas, retiradas

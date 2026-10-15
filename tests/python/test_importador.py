@@ -898,7 +898,8 @@ class TestRetiradaEQualidadeDaBancada(unittest.TestCase):
         self.assertTrue(all(c.get_method() == "DELETE" for c in calls[1:]))
         self.assertEqual(
             [d.split("?")[0] for d in deleted],
-            ["instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions"],
+            ["instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions",
+             "research_unauthorized_sessions"],
         )
         self.assertTrue(all(d.endswith(f"session_id=in.({self.WITHDRAWN})") for d in deleted))
 

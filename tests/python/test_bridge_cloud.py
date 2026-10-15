@@ -3,7 +3,8 @@
 Cobre o cadastro pelo token do polo, a renovação de token após 401 e a sessão da turma,
 que desde a 2.4.0 é do Bridge: abre sozinha, registra o programa SPIKE e o sinal de vida,
 fecha pelo formulário final, por tempo ou por computador desligado, e "Não registrar esta
-turma" apaga e pausa. Sem pwsh no PATH, os testes de integração são pulados.
+turma" marca a aula como não autorizada (sem apagar), reenvia com a marca e pausa. Sem pwsh no
+PATH, os testes de integração são pulados.
 """
 
 from __future__ import annotations
@@ -332,15 +333,38 @@ class BridgeCloudSyncTest(unittest.TestCase):
         self.assertEqual(second_tel["baseline_executable_blocks"], details["executable_blocks"])
         self.assertEqual(second_tel["blocks_delta_from_baseline"], second_tel["executable_blocks"] - details["executable_blocks"])
 
-        # 9. "Não registrar esta turma": apaga a turma atual, grava tombstone e pausa
-        status, body = self.bridge.post("/v1/session/pause", {})
-        self.assertEqual((status, body["purged_session"]), (200, True))
-        self.assertFalse(any(e["session_id"] == second for e in read_events(data)), "eventos da turma não registrada devem ser apagados")
-        self.assertIn(second, (data / "sessions_withdrawn.txt").read_text(encoding="utf-8-sig"))
-        self.assertTrue(self.bridge.get("/v1/status")["paused"])
+        # 9. Encerrar e depois "Não registrar esta turma": a aula encerrada é marcada, não apagada
+        target = self.bridge.get("/v1/status")["mark_target"]
+        self.assertEqual((target["session_id"], target["active"]), (second, True))
+        status, body = self.bridge.post("/v1/session/close", {})
+        self.assertEqual((status, body["session_id"]), (200, second))
+        bancada = lambda: [c["body"] for c in self.calls_to("/rest/v1/research_bancada_sessions") if c["body"].get("session_id") == second]
+        self.assertTrue(wait_for(lambda: bancada()), "snapshot da segunda turma não subiu: " + self.debug_state())
+        self.assertNotIn("authorization_status", bancada()[0]["session_payload"])
+        target = self.bridge.get("/v1/status")["mark_target"]
+        self.assertEqual((target["session_id"], target["active"]), (second, False), "sem turma nova, o alvo é a última encerrada")
+        self.assertRegex(target["started_local"], r"^\d\d:\d\d$")
+        self.assertGreaterEqual(target["duration_min"], 0)
+        status, _ = self.bridge.post("/v1/session/pause", {"session_id": session_id})
+        self.assertEqual(status, 409, "aula diferente da mostrada ao instrutor")
+        status, body = self.bridge.post("/v1/session/pause", {"session_id": second})
+        self.assertEqual((status, body["marked"], body["target"]["session_id"]), (200, True, second))
+        self.assertTrue(any(e["session_id"] == second for e in read_events(data)), "eventos da aula marcada ficam no computador")
+        snap = read_json(data / "sessoes" / f"sessao_{second}.json")
+        self.assertEqual(snap["authorization_status"], "nao_autorizada")
+        self.assertTrue(snap["marked_at"])
+        self.assertIn(second, (data / "sessions_unauthorized.txt").read_text(encoding="utf-8-sig"))
+        self.assertFalse((data / "sessions_withdrawn.txt").exists(), "marcar não grava tombstone de exclusão")
+        marked = lambda: [b for b in bancada() if b["session_payload"].get("authorization_status") == "nao_autorizada"]
+        self.assertTrue(wait_for(lambda: marked()), "aula marcada não foi reenviada com a marca: " + self.debug_state())
+        self.assertTrue(marked()[0]["session_payload"]["marked_at"])
+        current = self.bridge.get("/v1/status")
+        self.assertTrue(current["paused"])
+        self.assertIsNone(current["mark_target"], "aula já marcada não é alvo de novo")
         status, _ = self.bridge.post("/v1/session/close", {"session_id": None})
         self.assertEqual(status, 409, "turma pausada não tem o que encerrar")
-
+        status, body = self.bridge.post("/v1/session/pause", {"session_id": ""})
+        self.assertEqual((status, body["marked"]), (200, False), "sem aula, só pausa")
 
 @unittest.skipUnless(PWSH, "pwsh não encontrado")
 class BridgeRestartTest(unittest.TestCase):
@@ -379,6 +403,24 @@ class BridgeRestartTest(unittest.TestCase):
         issues = [e for e in read_events(self.bridge.data) if e["event_type"] == "quality_issue"]
         self.assertEqual(issues[-1]["details"]["issue"], "pulselab_reiniciado")
         self.assertEqual(read_json(self.bridge.data / "active_session.json")["bridge_restarts"], 1)
+
+    def test_mark_active_class_closes_it_and_keeps_data(self):
+        first = self.start_and_get_session()
+        target = self.bridge.get("/v1/status")["mark_target"]
+        self.assertEqual((target["session_id"], target["active"], target["started_today"]), (first, True, True))
+        status, body = self.bridge.post("/v1/session/pause", {"session_id": first})
+        self.assertEqual((status, body["marked"]), (200, True))
+        snap = self.snapshot(first)
+        self.assertEqual((snap["status"], snap["ended_by"], snap["authorization_status"]), ("completed", "instrutor", "nao_autorizada"))
+        self.assertTrue(any(e["session_id"] == first for e in read_events(self.bridge.data)))
+        current = self.bridge.get("/v1/session/current")
+        self.assertEqual((current["active"], current["paused"]), (False, True))
+        # Reinício com o PC ligado mantém a pausa e não volta a oferecer a aula marcada
+        self.bridge.stop()
+        self.bridge.start()
+        status = self.bridge.get("/v1/status")
+        self.assertTrue(status["paused"])
+        self.assertIsNone(status["mark_target"])
 
     def test_computer_off_closes_previous_class_without_closing_form(self):
         first = self.start_and_get_session()

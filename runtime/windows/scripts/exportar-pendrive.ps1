@@ -70,11 +70,20 @@ if (Test-Path -LiteralPath $withdrawnFile) {
     $totalWithdrawn = @(Get-Content -LiteralPath $withdrawnFile -ErrorAction SilentlyContinue | Where-Object { $_.Trim() }).Count
 }
 
+# Aulas marcadas como nao autorizadas ("Nao registrar esta turma"): session_id<TAB>marked_at por linha.
+# O importador guarda a marca; essas aulas nunca entram em analise e sao apagadas na revisao do pesquisador.
+$unauthorizedFile = Join-Path $dataDir "sessions_unauthorized.txt"
+$totalUnauthorized = 0
+if (Test-Path -LiteralPath $unauthorizedFile) {
+    $totalUnauthorized = @(Get-Content -LiteralPath $unauthorizedFile -ErrorAction SilentlyContinue | Where-Object { $_.Trim() }).Count
+}
+
 Write-Host "      - Sessoes completas: $($sessaoFiles.Count)" -ForegroundColor White
 Write-Host "      - Eventos de processo: $totalEvents" -ForegroundColor White
 Write-Host "      - Sessoes retiradas: $totalWithdrawn" -ForegroundColor White
+Write-Host "      - Aulas nao autorizadas: $totalUnauthorized" -ForegroundColor White
 
-if ($sessaoFiles.Count -eq 0 -and $totalEvents -eq 0 -and $totalWithdrawn -eq 0) {
+if ($sessaoFiles.Count -eq 0 -and $totalEvents -eq 0 -and $totalWithdrawn -eq 0 -and $totalUnauthorized -eq 0) {
     Write-Host ""
     Write-Host "[AVISO] Nao ha dados de oficina gravados nesta maquina ainda." -ForegroundColor Yellow
     if (-not $SaveToDesktop) {
@@ -213,6 +222,14 @@ if (Test-Path -LiteralPath $withdrawnFile) {
     Write-Host "      [OK] sessions_withdrawn.txt ($totalWithdrawn sessoes retiradas)" -ForegroundColor Green
 }
 
+# Aulas nao autorizadas (somente session_id e data da marcacao)
+if (Test-Path -LiteralPath $unauthorizedFile) {
+    $unauthorizedDest = Join-Path $targetExportDir "sessions_unauthorized.txt"
+    Copy-Item -LiteralPath $unauthorizedFile -Destination $unauthorizedDest -Force
+    $copiedFiles.Add($unauthorizedDest)
+    Write-Host "      [OK] sessions_unauthorized.txt ($totalUnauthorized aulas nao autorizadas)" -ForegroundColor Green
+}
+
 # Sessoes individuais
 $sessCount = 0
 foreach ($sFile in $sessaoFiles) {
@@ -236,6 +253,7 @@ $manifestContent = [System.Text.StringBuilder]::new()
 [void]$manifestContent.AppendLine("Total de Sessoes      : $sessCount")
 [void]$manifestContent.AppendLine("Total de Eventos      : $totalEvents")
 [void]$manifestContent.AppendLine("Sessoes Retiradas     : $totalWithdrawn")
+[void]$manifestContent.AppendLine("Aulas Nao Autorizadas : $totalUnauthorized")
 [void]$manifestContent.AppendLine("====================================================================")
 [void]$manifestContent.AppendLine("INTEGRIDADE DOS ARQUIVOS (SHA-256):")
 [void]$manifestContent.AppendLine("")

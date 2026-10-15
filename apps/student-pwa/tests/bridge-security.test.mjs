@@ -61,20 +61,42 @@ test("Bridge Security: /v1/session/close valida JSON, turma e escala antes de gr
   }
 });
 
-test("Bridge Security: Não registrar esta turma apaga com tombstone antes de qualquer arquivo", () => {
+test("Bridge Security: Não registrar esta turma marca a aula como não autorizada sem apagar", () => {
   const code = fs.readFileSync(bridgePath, "utf-8");
-  const idx = code.indexOf("function Remove-BridgeSessionData");
-  assert.ok(idx !== -1, "Remove-BridgeSessionData deve existir");
-  const block = code.slice(idx, code.indexOf("\nfunction ", idx + 10));
-  const tombstone = block.indexOf("Register-SessionWithdrawal");
-  assert.ok(tombstone !== -1 && tombstone < block.indexOf("Remove-Item"), "Tombstone durável antes do expurgo");
-  assert.match(block, /events\.tmp\./, "Reescreve events.jsonl com arquivo temporário");
-  assert.match(block, /catalogo_sessoes\.tmp\./, "Atualiza catálogo com arquivo temporário");
-  assert.match(block, /\$script:SyncedEventIds\.Remove/);
-  assert.match(block, /\$script:QuarantinedEventIds\.Remove/);
-  assert.match(block, /expurgada localmente/);
-  const pause = code.slice(code.indexOf("function Suspend-BridgeCollection"));
-  assert.match(pause, /Remove-BridgeSessionData -SessionId \$sessionId -Reason "nao_registrar_turma"/);
+  assert.ok(!code.includes("function Remove-BridgeSessionData"), "Expurgo imediato não existe mais");
+  const fnBlock = (name) => {
+    const idx = code.indexOf(`function ${name}`);
+    assert.ok(idx !== -1, `${name} deve existir`);
+    return code.slice(idx, code.indexOf("\nfunction ", idx + 10));
+  };
+  const pause = fnBlock("Suspend-BridgeCollection");
+  assert.match(pause, /Get-BridgeMarkTarget/);
+  assert.match(pause, /Close-BridgeSession -EndedBy "instrutor"/, "Turma em andamento é encerrada antes de marcar");
+  assert.match(pause, /Set-BridgeSessionUnauthorized -SessionId \$target\.session_id/);
+  assert.doesNotMatch(pause, /Remove-Item -LiteralPath \$sessFile|events\.tmp\./, "Nada é apagado");
+  const mark = fnBlock("Set-BridgeSessionUnauthorized");
+  const tracker = mark.indexOf("Save-UnauthorizedTracker");
+  assert.ok(tracker !== -1 && tracker < mark.indexOf("Save-BridgeSnapshot"), "Registro local antes do snapshot");
+  assert.match(mark, /authorization_status -NotePropertyValue "nao_autorizada"/);
+  assert.match(mark, /\$script:SyncedSessionIds\.Remove\(\$SessionId\)/, "Aula já enviada sobe de novo com a marca");
+  const target = fnBlock("Get-BridgeMarkTarget");
+  assert.match(target, /LastClosedFile/);
+  assert.match(target, /UnauthorizedSessions\.ContainsKey/, "Aula já marcada não é alvo de novo");
+  const route = code.slice(code.indexOf('$path -eq "/v1/session/pause"'), code.indexOf('$path -eq "/v1/shutdown"'));
+  const guard = route.indexOf("-StatusCode 409 -Payload @{ error = \"Conflict\"; message = \"A aula mudou");
+  assert.ok(guard !== -1 && guard < route.indexOf("Suspend-BridgeCollection"), "Aula mostrada é conferida antes de marcar");
+});
+
+test("Bandeja: Não registrar esta turma mostra a aula alvo e a mensagem reflete o resultado", () => {
+  const tray = fs.readFileSync(path.join(repoRoot, "runtime", "windows", "bridge", "pulselab-tray.ps1"), "utf-8");
+  const click = tray.slice(tray.indexOf("$itemPause.add_Click"), tray.indexOf("$itemStatus.add_Click"));
+  assert.match(click, /\$s\.mark_target/);
+  assert.match(click, /Aula que começou \$\(Format-TrayAula \$target\)\. Marcar esta aula como não autorizada\? Os dados não serão usados na pesquisa\./);
+  assert.match(click, /Não há aula registrada neste computador agora\. O registro fica pausado até a próxima aula\./);
+  assert.match(click, /session_id = \$shownId/, "Envia a aula mostrada para o bridge conferir");
+  assert.match(click, /if \(\$result\.marked -and \$result\.target\)/, "Mensagem de sucesso só com aula marcada");
+  assert.match(click, /Nenhuma aula foi marcada/);
+  assert.doesNotMatch(click, /foram apagados/);
 });
 
 test("Bridge Security: rotas da página aberta durante a aula não existem mais", () => {

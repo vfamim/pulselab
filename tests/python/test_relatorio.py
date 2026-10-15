@@ -220,6 +220,20 @@ class TestRelatorio(unittest.TestCase):
 
     # --- deduplicação -----------------------------------------------------------
 
+    def test_aula_nao_autorizada_fica_fora(self):
+        antes, _ = rel.ler_sqlite(self.sqlite)
+        alvo = antes[0]["session_id"]
+        conn = sqlite3.connect(str(self.sqlite))
+        with conn:
+            conn.execute(
+                "INSERT INTO unauthorized_sessions (session_id, status, marked_at) VALUES (?, 'nao_autorizada', ?)",
+                (alvo, "2026-10-14T12:00:00Z"),
+            )
+        conn.close()
+        depois, _ = rel.ler_sqlite(self.sqlite)
+        self.assertEqual(len(depois), len(antes) - 1)
+        self.assertNotIn(alvo, {a["session_id"] for a in depois})
+
     def test_juntar_nao_duplica_e_prefere_aula_encerrada(self):
         pendrive, _ = rel.ler_sqlite(self.sqlite)
         nuvem_s5 = rel.aula_da_nuvem({

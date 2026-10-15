@@ -81,7 +81,7 @@ function LabPanel() {
     try {
       const res = await bridgePost("/v1/session/pause", {});
       setMessage(res.status === 200
-        ? `Pausado (dados apagados: ${res.body.purged_session ? "sim" : "não havia turma"}).`
+        ? `Pausado (aula marcada como não autorizada: ${res.body.marked ? "sim" : "não havia aula"}).`
         : `Falha ao pausar (HTTP ${res.status}).`);
     } catch (e) {
       setMessage(`Erro ao pausar: ${e.message}`);
