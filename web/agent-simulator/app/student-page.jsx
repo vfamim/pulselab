@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteLocalStore } from "../lib/student-store.js";
 
-// Página da bancada / encerramento silencioso (v3.0.3).
+// Página da bancada / encerramento silencioso (v3.0.4).
 // Durante a aula nenhuma página precisa ficar aberta. O encerramento no PC é direto e silencioso:
 // zero formulários para os alunos ou instrutor no computador da bancada.
-// Ao encerrar a turma, o PulseLab dispara o shutdown para fechar a janela e o processo backend.
+// Encerrar a turma só fecha a sessão: o PulseLab continua ligado para a próxima turma.
 
-const CLIENT_VERSION = "student-pwa/3.0.3";
+const CLIENT_VERSION = "student-pwa/3.0.4";
 const BRIDGE_URL = "http://127.0.0.1:43128";
 
 // Chaves das versões até 2.3.x, quando a página ficava aberta e guardava a sessão no navegador.
@@ -58,15 +58,18 @@ function Card({ title, children, eyebrow, wide = false }) {
 
 function LabPanel() {
   const [status, setStatus] = useState(null);
+  const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState("");
 
   const refresh = useCallback(async () => {
     try {
-      const data = await bridgeGet("/v1/status");
-      setStatus(data);
+      setStatus(await bridgeGet("/v1/status"));
     } catch (e) {
+      // Sem resposta: não mostrar o último status como se fosse o atual.
+      setStatus(null);
       setMessage(`Erro: ${e.message}`);
     }
+    setLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -77,11 +80,13 @@ function LabPanel() {
     setMessage("Pausando registro...");
     try {
       const res = await bridgePost("/v1/session/pause", {});
-      setMessage(`Pausado: ${JSON.stringify(res.body)}`);
-      await refresh();
+      setMessage(res.status === 200
+        ? `Pausado (dados apagados: ${res.body.purged_session ? "sim" : "não havia turma"}).`
+        : `Falha ao pausar (HTTP ${res.status}).`);
     } catch (e) {
       setMessage(`Erro ao pausar: ${e.message}`);
     }
+    await refresh();
   }
 
   return (
@@ -89,7 +94,7 @@ function LabPanel() {
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v3.0.3 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.4 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>
@@ -100,7 +105,7 @@ function LabPanel() {
               <div><strong>Sessão ID:</strong> {status.session?.session_id || "nenhuma"}</div>
             </>
           ) : (
-            <p>Carregando status do Bridge...</p>
+            <p>{loaded ? "Bridge indisponível." : "Carregando status do Bridge..."}</p>
           )}
         </div>
         <div className="turma-actions">
@@ -139,15 +144,6 @@ export default function StudentPage() {
     void loadCurrent();
   }, [loadCurrent]);
 
-  useEffect(() => {
-    if (step === "concluido") {
-      const timer = setTimeout(() => {
-        try { window.close(); } catch {}
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [step]);
-
   async function finish() {
     setStep("enviando");
     const payload = {
@@ -155,7 +151,6 @@ export default function StudentPage() {
     };
     const result = await bridgePost("/v1/session/close", payload).catch(() => ({ status: 0, body: {} }));
     if (result.status === 200) {
-      void bridgePost("/v1/shutdown").catch(() => {});
       setStep("concluido");
       return;
     }
@@ -225,12 +220,7 @@ export default function StudentPage() {
   } else {
     content = (
       <Card title="Turma encerrada">
-        <p>A gravação foi finalizada. O PulseLab está sendo encerrado e esta janela fechará automaticamente...</p>
-        <div className="turma-actions">
-          <button className="button button--primary" type="button" onClick={() => { try { window.close(); } catch {} }}>
-            Fechar agora
-          </button>
-        </div>
+        <p>Pode fechar esta janela. A gravação foi concluída com sucesso. A próxima turma começará automaticamente quando o primeiro programa for salvo no LEGO SPIKE.</p>
       </Card>
     );
   }

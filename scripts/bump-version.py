@@ -5,128 +5,162 @@ import re
 import sys
 from pathlib import Path
 
+
+# newline="" preserva o fim de linha original (CRLF nos .ps1/.bat, exigido pelo Windows).
+def read_text(path: Path) -> str:
+    with open(path, encoding="utf-8", newline="") as f:
+        return f.read()
+
+
+def write_text(path: Path, content: str) -> None:
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write(content)
+
+
+def release_links(content: str, new_v: str) -> str:
+    """Links de download da Release do GitHub: tag e nome do ZIP."""
+    content = re.sub(r'releases/download/v[0-9\.]+/', f'releases/download/v{new_v}/', content)
+    return re.sub(r'PulseLab-[0-9\.]+-Windows\.zip', f'PulseLab-{new_v}-Windows.zip', content)
+
+
 def bump(old_v: str, new_v: str):
     repo_root = Path(__file__).resolve().parent.parent
 
     # 1. VERSION
-    (repo_root / "VERSION").write_text(f"{new_v}\n", encoding="utf-8")
+    write_text(repo_root / "VERSION", f"{new_v}\n")
 
     # 2. package.json
     pkg_json = repo_root / "package.json"
-    content = pkg_json.read_text(encoding="utf-8")
+    content = read_text(pkg_json)
     content = re.sub(r'"version":\s*"[^"]+"', f'"version": "{new_v}"', content)
-    pkg_json.write_text(content, encoding="utf-8")
+    write_text(pkg_json, content)
 
     # 3. web/agent-simulator/package.json
     web_pkg_json = repo_root / "web/agent-simulator/package.json"
-    content = web_pkg_json.read_text(encoding="utf-8")
+    content = read_text(web_pkg_json)
     content = re.sub(r'"version":\s*"[^"]+"', f'"version": "{new_v}"', content)
-    web_pkg_json.write_text(content, encoding="utf-8")
+    write_text(web_pkg_json, content)
+
+    # 3b. web/agent-simulator/package-lock.json (só a versão do próprio pacote, não a das dependências)
+    web_lock = repo_root / "web/agent-simulator/package-lock.json"
+    content = read_text(web_lock)
+    content = re.sub(r'^(  "version":\s*)"[^"]+"', rf'\g<1>"{new_v}"', content, count=1, flags=re.M)
+    content = re.sub(r'(    "": \{\s*"name":\s*"[^"]+",\s*"version":\s*)"[^"]+"', rf'\g<1>"{new_v}"', content, count=1)
+    write_text(web_lock, content)
 
     # 4. version.json
     v_json = repo_root / "version.json"
-    content = v_json.read_text(encoding="utf-8")
+    content = read_text(v_json)
     content = re.sub(r'"current_version":\s*"[^"]+"', f'"current_version": "{new_v}"', content)
     content = re.sub(r'"latest_stable":\s*"[^"]+"', f'"latest_stable": "{new_v}"', content)
-    v_json.write_text(content, encoding="utf-8")
+    content = re.sub(r'"version":\s*"[^"]+"', f'"version": "{new_v}"', content)
+    content = release_links(content, new_v)
+    write_text(v_json, content)
 
     # 5. config/defaults.json
     def_json = repo_root / "config/defaults.json"
-    content = def_json.read_text(encoding="utf-8")
+    content = read_text(def_json)
     content = re.sub(r'"client_version":\s*"[^"]+"', f'"client_version": "{new_v}"', content)
-    def_json.write_text(content, encoding="utf-8")
+    write_text(def_json, content)
 
     # 6. config/config.json
     cfg_json = repo_root / "config/config.json"
-    content = cfg_json.read_text(encoding="utf-8")
+    content = read_text(cfg_json)
     content = re.sub(r'"version":\s*"[^"]+"', f'"version": "{new_v}"', content)
-    cfg_json.write_text(content, encoding="utf-8")
+    write_text(cfg_json, content)
 
     # 7. web/agent-simulator/app/student-page.jsx
     stu_page = repo_root / "web/agent-simulator/app/student-page.jsx"
-    content = stu_page.read_text(encoding="utf-8")
-    content = re.sub(r'const CLIENT_VERSION = "[^"]+";', f'const CLIENT_VERSION = "{new_v}";', content)
+    content = read_text(stu_page)
+    content = re.sub(r'const CLIENT_VERSION = "(student-pwa/)?[^"]+";', rf'const CLIENT_VERSION = "\g<1>{new_v}";', content)
     content = re.sub(r'oficina de robótica · v[0-9\.]+', f'oficina de robótica · v{new_v}', content)
-    stu_page.write_text(content, encoding="utf-8")
+    write_text(stu_page, content)
 
     # 8. bridge/pulselab-bridge.ps1
     br_ps1 = repo_root / "bridge/pulselab-bridge.ps1"
-    content = br_ps1.read_text(encoding="utf-8")
-    content = re.sub(r"\$script:BridgeVersion = '[^']+'", f"$script:BridgeVersion = '{new_v}'", content)
+    content = read_text(br_ps1)
+    content = re.sub(r"\$script:BridgeVersion = (['\"])[^'\"]+\1", rf"$script:BridgeVersion = \g<1>{new_v}\g<1>", content)
     content = re.sub(r"\$script:PulseLabVersion = '[^']+'", f"$script:PulseLabVersion = '{new_v}'", content)
     content = re.sub(r"version = '[0-9\.]+'", f"version = '{new_v}'", content)
-    br_ps1.write_text(content, encoding="utf-8")
+    write_text(br_ps1, content)
 
     # 9. pulselab.ps1
     pl_ps1 = repo_root / "pulselab.ps1"
-    content = pl_ps1.read_text(encoding="utf-8")
-    content = re.sub(r"\$localVersion = '[^']+'", f"$localVersion = '{new_v}'", content)
-    pl_ps1.write_text(content, encoding="utf-8")
+    content = read_text(pl_ps1)
+    content = re.sub(r"\$localVersion = (['\"])[^'\"]+\1", rf"$localVersion = \g<1>{new_v}\g<1>", content)
+    write_text(pl_ps1, content)
 
-    # 10. web/agent-simulator/public/sw.js
-    sw_js = repo_root / "web/agent-simulator/public/sw.js"
-    content = sw_js.read_text(encoding="utf-8")
-    content = re.sub(r'const CACHE_NAME = CACHE_PREFIX \+ "[^"]+";', f'const CACHE_NAME = CACHE_PREFIX + "{new_v}";', content)
-    sw_js.write_text(content, encoding="utf-8")
+    # 10. Service workers (fonte e cópia publicada em alunos/)
+    for sw_js in (repo_root / "web/agent-simulator/public/sw.js", repo_root / "alunos/sw.js"):
+        content = read_text(sw_js)
+        content = re.sub(r'const CACHE_NAME = CACHE_PREFIX \+ "[^"]+";', f'const CACHE_NAME = CACHE_PREFIX + "{new_v}";', content)
+        write_text(sw_js, content)
 
     # 11. installer/build-installer.py
     bi_py = repo_root / "installer/build-installer.py"
-    content = bi_py.read_text(encoding="utf-8")
+    content = read_text(bi_py)
     content = re.sub(r'VERSION = "[^"]+"', f'VERSION = "{new_v}"', content)
-    bi_py.write_text(content, encoding="utf-8")
+    write_text(bi_py, content)
 
     # 12. scripts/build-offline-package.sh
     bsh = repo_root / "scripts/build-offline-package.sh"
-    content = bsh.read_text(encoding="utf-8")
+    content = read_text(bsh)
     content = re.sub(r'PulseLab-[0-9\.]+-Windows\.zip', f'PulseLab-{new_v}-Windows.zip', content)
     content = re.sub(r'PulseLab-Alunos-Offline-v[0-9\.]+\.zip', f'PulseLab-Alunos-Offline-v{new_v}.zip', content)
-    bsh.write_text(content, encoding="utf-8")
+    write_text(bsh, content)
 
     # 13. scripts/importar-para-supabase.py
     imp_py = repo_root / "scripts/importar-para-supabase.py"
-    content = imp_py.read_text(encoding="utf-8")
+    content = read_text(imp_py)
     content = re.sub(r'default="[0-9\.]+"', f'default="{new_v}"', content)
-    imp_py.write_text(content, encoding="utf-8")
+    write_text(imp_py, content)
 
     # 14. Instalar-PulseLab.bat
     inst_bat = repo_root / "Instalar-PulseLab.bat"
-    content = inst_bat.read_text(encoding="utf-8")
+    content = read_text(inst_bat)
     content = re.sub(r'\(v[0-9\.]+\)', f'(v{new_v})', content)
-    inst_bat.write_text(content, encoding="utf-8")
+    write_text(inst_bat, content)
 
     # 15. Atualizar-Site-Firebase.bat
     att_bat = repo_root / "Atualizar-Site-Firebase.bat"
-    content = att_bat.read_text(encoding="utf-8")
+    content = read_text(att_bat)
     content = re.sub(r'PulseLab-[0-9\.]+-Windows\.zip', f'PulseLab-{new_v}-Windows.zip', content)
-    att_bat.write_text(content, encoding="utf-8")
+    write_text(att_bat, content)
 
     # 16. index.html
     idx_html = repo_root / "index.html"
-    content = idx_html.read_text(encoding="utf-8")
+    content = read_text(idx_html)
     content = re.sub(r'PulseLab v[0-9\.]+', f'PulseLab v{new_v}', content)
     content = re.sub(r'v[0-9\.]+ Oficinas Rotativas', f'v{new_v} Oficinas Rotativas', content)
-    idx_html.write_text(content, encoding="utf-8")
+    write_text(idx_html, content)
 
     # 17. instalador/index.html
     inst_html = repo_root / "instalador/index.html"
-    content = inst_html.read_text(encoding="utf-8")
-    content = re.sub(r'PulseLab-[0-9\.]+-Windows\.zip', f'PulseLab-{new_v}-Windows.zip', content)
+    content = read_text(inst_html)
+    content = release_links(content, new_v)
     content = re.sub(r'PulseLab v[0-9\.]+', f'PulseLab v{new_v}', content)
-    inst_html.write_text(content, encoding="utf-8")
+    write_text(inst_html, content)
 
     # 18. testes/index.html
     test_html = repo_root / "testes/index.html"
-    content = test_html.read_text(encoding="utf-8")
-    content = re.sub(r'PulseLab-[0-9\.]+-Windows\.zip', f'PulseLab-{new_v}-Windows.zip', content)
+    content = read_text(test_html)
+    content = release_links(content, new_v)
     content = re.sub(r'PulseLab Offline v[0-9\.]+', f'PulseLab Offline v{new_v}', content)
-    test_html.write_text(content, encoding="utf-8")
+    content = re.sub(r'v[0-9\.]+ Oficinas Rotativas', f'v{new_v} Oficinas Rotativas', content)
+    write_text(test_html, content)
 
     # 19. tutorial/index.html
     tut_html = repo_root / "tutorial/index.html"
-    content = tut_html.read_text(encoding="utf-8")
+    content = read_text(tut_html)
     content = re.sub(r'PulseLab [0-9\.]+', f'PulseLab {new_v}', content)
-    content = re.sub(r'PulseLab-[0-9\.]+-Windows\.zip', f'PulseLab-{new_v}-Windows.zip', content)
-    tut_html.write_text(content, encoding="utf-8")
+    content = release_links(content, new_v)
+    write_text(tut_html, content)
+
+    # 19b. relatorio/index.html (página pública; o relatório v1.4 em si é histórico)
+    rel_html = repo_root / "relatorio/index.html"
+    content = read_text(rel_html)
+    content = re.sub(r'publicado com PulseLab v[0-9\.]+', f'publicado com PulseLab v{new_v}', content)
+    write_text(rel_html, content)
 
     # 20. Operational docs
     for doc in [
@@ -139,9 +173,9 @@ def bump(old_v: str, new_v: str):
         repo_root / "web/agent-simulator/README.md",
     ]:
         if doc.is_file():
-            txt = doc.read_text(encoding="utf-8")
+            txt = read_text(doc)
             txt = txt.replace(f"v{old_v}", f"v{new_v}").replace(f" {old_v}", f" {new_v}")
-            doc.write_text(txt, encoding="utf-8")
+            write_text(doc, txt)
 
     print(f"Versão atualizada de {old_v} para {new_v} em todas as superfícies.")
 

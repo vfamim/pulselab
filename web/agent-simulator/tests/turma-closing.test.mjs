@@ -106,17 +106,20 @@ test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegado
   assert.doesNotMatch(tray, /\$itemClose\.add_Click\(\{\s*Open-ClosingForm\s*\}\)/);
 });
 
-test("Encerramento completo e fechamento do aplicativo (não persistente)", () => {
+test("Encerrar turma mantém o PulseLab ligado; desligar só por \"Fechar PulseLab\"", () => {
   const trayPath = path.join(__dirname, "../../../bridge/pulselab-tray.ps1");
   const tray = fs.readFileSync(trayPath, "utf-8");
   assert.match(bridgeCode, /\$path -eq "\/v1\/shutdown" -and \$request\.HttpMethod -eq "POST"/);
-  assert.match(bridgeCode, /"\/v1\/shutdown"/);
   assert.match(bridgeCode, /\$script:ShutdownRequested = \$true/);
-  assert.match(tray, /function Exit-PulseLabApp/);
-  assert.match(tray, /Fechar PulseLab/);
-  assert.match(tray, /Invoke-TrayApi "\/v1\/shutdown" "POST"/);
-  assert.match(pageCode, /bridgePost\("\/v1\/shutdown"\)/);
-  assert.match(pageCode, /window\.close\(\)/);
+  assert.doesNotMatch(bridgeCode, /msedge/, "O bridge não encerra o navegador do usuário");
+  assert.match(tray, /\$itemExit\.add_Click\(\{[\s\S]*?Exit-PulseLabApp/);
+  const closeTurma = tray.slice(tray.indexOf("function Close-CurrentTurma"), tray.indexOf("function Restart-PulseLab"));
+  assert.doesNotMatch(closeTurma, /Exit-PulseLabApp/, "Encerrar turma não desliga o PulseLab");
+  assert.match(closeTurma, /Não foi possível encerrar a turma agora/, "Falha ao encerrar é mostrada ao instrutor");
+  assert.doesNotMatch(tray, /msedge/);
+  // Sinal que sobrou de um desligamento anterior não pode derrubar a bandeja na partida seguinte.
+  assert.match(tray, /Remove-Item -LiteralPath \$script:SignalFile[^\n]*\r?\n\r?\n\$timer = New-Object/);
+  assert.match(tray, /if \(-not \$script:Exiting\) \{ \[System\.Windows\.Forms\.Application\]::Run\(\) \}/);
+  assert.doesNotMatch(pageCode, /\/v1\/shutdown/, "A página não desliga o PulseLab ao encerrar a turma");
+  assert.match(pageCode, /A próxima turma começará automaticamente/);
 });
-
-
