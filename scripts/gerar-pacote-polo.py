@@ -131,12 +131,7 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="pulselab-polo-") as tmp:
         prov_path = Path(tmp) / "provisionamento.json"
         prov_path.write_text(json.dumps(provisioning, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        builder.build_package(
-            ROOT,
-            output,
-            folder_name=f"PulseLab-{builder.VERSION}-{args.polo}-Windows",
-            provisioning=prov_path,
-        )
+        builder.build_package(ROOT, output, provisioning=prov_path)
 
     state = f"coleta ATIVA (CAAE {args.caae})" if args.caae else "coleta desligada"
     if args.token_cadastro:

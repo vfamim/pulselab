@@ -22,7 +22,7 @@ if (-not (Test-Path -LiteralPath $bridge) -or -not (Test-Path -LiteralPath (Join
 }
 
 # --- VERIFICA VERSAO LOCAL ---
-$localVersion = "3.0.4"
+$localVersion = "3.0.5"
 $verFile = Join-Path $scriptRoot "VERSION"
 if (Test-Path -LiteralPath $verFile) {
     try { $localVersion = (Get-Content $verFile -Raw).Trim() } catch {}

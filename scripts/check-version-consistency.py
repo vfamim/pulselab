@@ -214,15 +214,11 @@ def check_version_consistency(repo_root: Path) -> list[str]:
         sha_text = pkg_dist_sha.read_text(encoding="ascii").strip()
         if not sha_text.startswith(real_hash):
             errors.append(f"Checksum mismatch em {pkg_dist_sha}: hash real é {real_hash}")
-        # Conferir se os sites públicos exibem o mesmo hash
-        if instalador_html.is_file():
-            inst_text = read_text(instalador_html)
-            if real_hash not in inst_text:
-                errors.append(f"instalador/index.html: não contém o checksum SHA-256 real do pacote ({real_hash})")
-        if testes_html.is_file():
-            test_text = read_text(testes_html)
-            if real_hash not in test_text:
-                errors.append(f"testes/index.html: não contém o checksum SHA-256 real do pacote ({real_hash})")
+        # As páginas não repetem o hash (ficava desatualizado): apontam para o .sha256 publicado na Release.
+        sha_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{pkg_dist_sha.name}"
+        for page in (instalador_html, testes_html):
+            if page.is_file() and sha_link not in read_text(page):
+                errors.append(f"{page.relative_to(repo_root)}: deve apontar para o checksum publicado ({sha_link})")
 
     # 15. Um único identificador de protocolo: o do manifesto do instrumento (contracts.js)
     contracts_js = repo_root / "web/agent-simulator/lib/contracts.js"
@@ -246,8 +242,8 @@ def check_version_consistency(repo_root: Path) -> list[str]:
                     errors.append(f"{pkg_dist.name}: pacote sem {required}")
             if "provisionamento.json" in names:
                 errors.append(f"{pkg_dist.name}: pacote genérico não pode conter provisionamento.json")
-            prefix = archive.namelist()[0].split("/", 1)[0]
-            packaged_key = archive.read(f"{prefix}/release-public-key.json") if "release-public-key.json" in names else b""
+            key_entries = [name for name in archive.namelist() if name.endswith("release-public-key.json")]
+            packaged_key = archive.read(key_entries[0]) if key_entries else b""
             if packaged_key and json.loads(packaged_key) != read_json(public_key):
                 errors.append(f"{pkg_dist.name}: chave pública do pacote difere de release-public-key.json")
 
