@@ -47,7 +47,7 @@ test("Retenção: padrão de 180 dias, limitada a 1..365", () => {
 test("Instrumento: itens do encerramento em rascunho, versionados e separados entre resultado e apoio", () => {
   assert.equal(INSTRUMENT_MANIFEST.status, "rascunho_pendente_validacao");
   assert.equal(INSTRUMENT_MANIFEST.unit_of_analysis, "bancada");
-  assert.match(INSTRUMENT_VERSION, /rascunho/);
+  assert.match(INSTRUMENT_VERSION, /^bancada-\d+\.\d+\.\d+/);
   assert.equal(PROTOCOL_VERSION, INSTRUMENT_MANIFEST.protocol_version);
   const { bancada, instrutor } = INSTRUMENT_MANIFEST.items;
   assert.equal(bancada.experiencia.legend, "Como foi a oficina para a sua bancada hoje?");
@@ -59,7 +59,9 @@ test("Instrumento: itens do encerramento em rascunho, versionados e separados en
   assert.doesNotMatch(resultLabels, /ajuda|apoio|autônom/i, "Resultado não pode embutir apoio");
 });
 
-test("Encerramento: página encerra diretamente sem questionários no PC e envia a turma certa", () => {
+test("Encerramento: só em ?encerrar=1, encerra direto sem formulário e envia a turma certa", () => {
+  assert.match(pageCode, /params\.get\("encerrar"\) === "1"/, "Encerramento pela página só com ?encerrar=1");
+  assert.match(pageCode, /return <Questionario \/>;/, "Rota padrão mostra o questionário do fim da aula");
   assert.match(pageCode, /bridgePost\("\/v1\/session\/close"/);
   assert.match(pageCode, /session_id: current\?\.session_id \|\| null/, "Envia o id da turma exibida");
   assert.doesNotMatch(pageCode, /answerBancada|step === "bancada"|step === "instrutor"/, "Zero questionários de alunos ou instrutor no PC");
@@ -104,7 +106,7 @@ test("Sessão do Bridge: fecha por inatividade (40 min sem programa salvo no SPI
   assert.match(bridgeCode, /Close-BridgeSession -EndedBy "inatividade" -EndedAtMs \(Get-BridgeLastActivityMs /);
 });
 
-test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegador", () => {
+test("Bandeja do Windows: encerramento silencioso, sem abrir formulário de encerramento no navegador", () => {
   const trayPath = path.join(__dirname, "../../../runtime/windows/bridge/pulselab-tray.ps1");
   const tray = fs.readFileSync(trayPath, "utf-8");
   assert.match(tray, /function Close-CurrentTurma/);

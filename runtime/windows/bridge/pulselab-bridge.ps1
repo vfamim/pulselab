@@ -1,9 +1,9 @@
 ﻿# ==============================================================================
 # PulseLab — Bridge HTTP Local e Sessão da Turma (Windows Offline)
 # ==============================================================================
-# - Servidor local em http://127.0.0.1:43128 (formulário final em /alunos/)
+# - Servidor local em http://127.0.0.1:43128 (questionário do fim da aula em /alunos/)
 # - Dono da sessão da turma: início, sinal de vida, telemetria do SPIKE e encerramento
-# - Sem páginas, alertas ou janelas durante a aula (a bandeja mostra que está ligado)
+# - Sem alertas ou janelas durante a aula; só a aba opcional do questionário do fim da aula
 # - Extração de métricas de telemetria do SPIKE via spike-parser.ps1
 # ==============================================================================
 
@@ -1070,8 +1070,24 @@ function Get-MimeType([string]$ext) {
 
 # Proveniencia do instrumento: mesmos valores de apps/student-pwa/lib/contracts.js (teste garante).
 $script:ProtocolVersion = "protocolo-oficinas-rotativas-v2"
-$script:InstrumentVersion = "bancada-2.4.0-rascunho"
-$script:InstrumentConfigHash = "40fa7892e0cb738230e30d19e3a1ea0144712192bc251391ad9d9ec8996425a1"
+$script:InstrumentVersion = "bancada-3.2.0"
+$script:InstrumentConfigHash = "3e1e3423a7468044ec6bbcc28db81959f0fa3f1a5ee1c7bff97e7e54ef482ba3"
+
+# Questionario do fim da aula (aba do navegador em /alunos/): item_id e codigos aceitos, os mesmos de
+# questionario_fim_aula em apps/student-pwa/lib/contracts.js (teste garante). Sem nome, idade ou texto livre.
+$script:QuestionarioRecusa = "recusou"
+$script:QuestionarioBancadaItems = [ordered]@{
+    "bancada_linha_v1" = @("sim", "em_parte", "nao")
+    "bancada_corrida_v1" = @("ganhamos", "terminamos_sem_ganhar", "nao_terminamos", "nao_participamos")
+    "bancada_quiz_v1" = @("quase_todas", "metade", "poucas", "sem_quiz")
+}
+$script:QuestionarioCriancaItems = [ordered]@{
+    "crianca_gostou_v1" = @("sim", "mais_ou_menos", "nao")
+    "crianca_outra_aula_v1" = @("sim", "mais_ou_menos", "nao")
+    "crianca_confianca_antes_v1" = @("sim", "mais_ou_menos", "nao")
+    "crianca_confianca_agora_v1" = @("sim", "mais_ou_menos", "nao")
+    "crianca_ajudou_v1" = @("sim", "mais_ou_menos", "nao")
+}
 
 function Get-BridgeIntSetting([string]$EnvName, [int]$Default, [int]$Min, [int]$Max) {
     $raw = [Environment]::GetEnvironmentVariable($EnvName)
@@ -1394,8 +1410,32 @@ function Add-BridgeSessionEvent {
     )
     $s = $script:ActiveSession
     if (-not $s) { return $null }
-    $occurredMs = if ($OccurredAtMs -gt 0) { $OccurredAtMs } else { Get-BridgeNowMs }
     $s.sequence = [int]$s.sequence + 1
+    $event = New-BridgeEventRecord -Session $s -Sequence ([int]$s.sequence) -EventType $EventType -Stage $Stage -Details $Details -Severity $Severity -ParticipantId $ParticipantId -ParticipantRole $ParticipantRole -OccurredAtMs $OccurredAtMs
+    Add-BridgeEventLine -Json ($event | ConvertTo-Json -Depth 10 -Compress)
+    $script:SessionTimeline.Add([pscustomobject]$event)
+    $s.last_alive_ms = [Math]::Max([int64]$s.last_alive_ms, (Get-BridgeNowMs))
+    Save-BridgeSessionState
+    Save-BridgeSnapshot (New-BridgeSnapshot "in_progress")
+    return $event
+}
+
+# Evento no formato de research_session_events. $Session tem session_id, group_id, started_at_ms e
+# context (installation_id, site_id, ..., group_size): a turma ativa ou uma encerrada lida do snapshot.
+function New-BridgeEventRecord {
+    param(
+        [Parameter(Mandatory = $true)]$Session,
+        [int]$Sequence,
+        [Parameter(Mandatory = $true)][string]$EventType,
+        [string]$Stage = "oficina_coletiva",
+        $Details = $null,
+        [string]$Severity = "info",
+        [string]$ParticipantId = $null,
+        [string]$ParticipantRole = $null,
+        [int64]$OccurredAtMs = 0
+    )
+    $s = $Session
+    $occurredMs = if ($OccurredAtMs -gt 0) { $OccurredAtMs } else { Get-BridgeNowMs }
     $mergedDetails = [ordered]@{
         runtime = "bridge"
         group_size = $s.context.group_size
@@ -1430,13 +1470,8 @@ function Add-BridgeSessionEvent {
         scheduled_at = $null
         details = $mergedDetails
         _target_table = "research_session_events"
-        _sequence = [int]$s.sequence
+        _sequence = $Sequence
     }
-    Add-BridgeEventLine -Json ($event | ConvertTo-Json -Depth 10 -Compress)
-    $script:SessionTimeline.Add([pscustomobject]$event)
-    $s.last_alive_ms = [Math]::Max([int64]$s.last_alive_ms, (Get-BridgeNowMs))
-    Save-BridgeSessionState
-    Save-BridgeSnapshot (New-BridgeSnapshot "in_progress")
     return $event
 }
 
@@ -1750,6 +1785,124 @@ function Suspend-BridgeCollection {
     $script:AwaitingActivity = $false
     if (-not $target) { Write-BridgeLog "Nao registrar esta turma: nenhuma aula para marcar; coleta pausada ate a proxima aula." "INFO" }
     return [ordered]@{ marked = [bool]$target; target = $target; marked_at = $markedAt }
+}
+
+# ------------------------------------------------------------------------------
+# Questionario do fim da aula (aba do navegador). As respostas vao para a turma ativa ou, sem ela,
+# para a ultima encerrada (o mesmo alvo de mark_target). Nada e gravado em Modo Livre, com o
+# registro pausado, em aula marcada como nao autorizada ou sem aula: a pagina so agradece.
+# ------------------------------------------------------------------------------
+
+function Get-BridgeQuestionarioTarget {
+    if (-not (Get-BridgeResearchContext)) { return [ordered]@{ motivo = "modo_livre" } }
+    if (Test-BridgeCollectionPaused) { return [ordered]@{ motivo = "pausado" } }
+    $s = $script:ActiveSession
+    if ($s) {
+        $pseudo = [pscustomobject]@{ session_id = [string]$s.session_id; group_id = $s.group_id; started_at_ms = [int64]$s.started_at_ms; context = $s.context }
+        return [ordered]@{ motivo = $null; active = $true; session = $pseudo; timeline = @($script:SessionTimeline); snapshot = $null }
+    }
+    if (-not (Test-Path -LiteralPath $script:LastClosedFile)) { return [ordered]@{ motivo = "sem_aula" } }
+    $last = $null
+    try { $last = Get-Content -LiteralPath $script:LastClosedFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $last = $null }
+    if (-not $last -or -not $last.session_id) { return [ordered]@{ motivo = "sem_aula" } }
+    $sid = [string]$last.session_id
+    if ($script:UnauthorizedSessions.ContainsKey($sid) -or $script:WithdrawnSessionIds.Contains($sid)) { return [ordered]@{ motivo = "nao_autorizada" } }
+    $snap = $null
+    try { $snap = Get-Content -LiteralPath (Get-BridgeSessionFile $sid) -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $snap = $null }
+    if (-not $snap -or -not $snap.installation_id) { return [ordered]@{ motivo = "sem_aula" } }
+    if ($snap.authorization_status -eq "nao_autorizada") { return [ordered]@{ motivo = "nao_autorizada" } }
+    $context = [pscustomobject]@{
+        installation_id = $snap.installation_id
+        computer_id = $snap.computer_id
+        site_id = $snap.site_id
+        regional_hub = $snap.regional_hub
+        school_code = $snap.school_code
+        workshop_code = $snap.workshop_code
+        class_code = $snap.class_code
+        activity_id = $snap.activity_id
+        group_size = $snap.group_size
+    }
+    $pseudo = [pscustomobject]@{ session_id = $sid; group_id = $snap.group_id; started_at_ms = [int64]$last.started_at_ms; context = $context }
+    return [ordered]@{ motivo = $null; active = $false; session = $pseudo; timeline = @($snap.timeline); snapshot = $snap }
+}
+
+function Test-BridgeBancadaRespondida($Target) {
+    if (-not $Target -or $Target.motivo) { return $false }
+    return [bool](@($Target.timeline) | Where-Object { $_ -and $_.event_type -eq "bancada_result_recorded" } | Select-Object -First 1)
+}
+
+# Corpo esperado: { submission_id: <uuid aleatorio do envio>, answers: [{ item_id, value }, ...] }, com
+# todos os itens da tela exatamente uma vez. Devolve as respostas na ordem do instrumento ou $null.
+function ConvertTo-BridgeQuestionarioAnswers($Body, $Items) {
+    if (-not $Body -or -not ($Body -is [System.Management.Automation.PSCustomObject])) { return $null }
+    if ([string]$Body.submission_id -notmatch '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$') { return $null }
+    $answers = @($Body.answers)
+    if ($answers.Count -ne $Items.Count) { return $null }
+    $byItem = @{}
+    foreach ($a in $answers) {
+        if (-not $a -or -not ($a -is [System.Management.Automation.PSCustomObject])) { return $null }
+        $itemId = [string]$a.item_id
+        $value = [string]$a.value
+        if (-not $Items.Contains($itemId) -or $byItem.ContainsKey($itemId)) { return $null }
+        if ($value -cne $script:QuestionarioRecusa -and @($Items[$itemId]) -cnotcontains $value) { return $null }
+        $byItem[$itemId] = $value
+    }
+    $ordered = @()
+    foreach ($itemId in $Items.Keys) { $ordered += [pscustomobject]@{ item_id = $itemId; value = $byItem[$itemId] } }
+    return [ordered]@{ submission_id = ([string]$Body.submission_id).ToLowerInvariant(); answers = $ordered }
+}
+
+# Grava um evento por pergunta na turma alvo. Na turma ativa usa Add-BridgeSessionEvent; na ultima
+# encerrada acrescenta a linha em events.jsonl e o evento na timeline do snapshot.
+function Save-BridgeQuestionario {
+    param(
+        [Parameter(Mandatory = $true)]$Target,
+        [Parameter(Mandatory = $true)][string]$EventType,
+        [Parameter(Mandatory = $true)]$Parsed
+    )
+    $isBancada = $EventType -eq "bancada_result_recorded"
+    $nowMs = Get-BridgeNowMs
+    $minutesSinceStart = [Math]::Round([Math]::Max(0, $nowMs - [int64]$Target.session.started_at_ms) / 60000.0, 1)
+    $snap = $Target.snapshot
+    # Atribuicao direta: uma lista vazia devolvida por "if" seria desenrolada e viraria $null.
+    $timeline = [System.Collections.Generic.List[object]]::new()
+    $sequence = 0
+    if ($snap) {
+        foreach ($ev in @($snap.timeline)) {
+            if (-not $ev) { continue }
+            $timeline.Add($ev)
+            if ($null -ne $ev._sequence -and [int]$ev._sequence -gt $sequence) { $sequence = [int]$ev._sequence }
+        }
+    }
+    $order = 0
+    foreach ($answer in $Parsed.answers) {
+        $order++
+        $details = [ordered]@{
+            item_id = $answer.item_id
+            value = $answer.value
+            refused = ($answer.value -ceq $script:QuestionarioRecusa)
+            instrument_version = $script:InstrumentVersion
+            submission_id = $Parsed.submission_id
+            item_order = $order
+            session_active = [bool]$Target.active
+            minutes_since_session_start = $minutesSinceStart
+        }
+        $participantId = if ($isBancada) { "BANCADA" } else { $null }
+        $participantRole = if ($isBancada) { "group" } else { "individual" }
+        if ($Target.active) {
+            [void](Add-BridgeSessionEvent -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details)
+        } else {
+            $sequence++
+            $event = New-BridgeEventRecord -Session $Target.session -Sequence $sequence -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details
+            Add-BridgeEventLine -Json ($event | ConvertTo-Json -Depth 10 -Compress)
+            $timeline.Add([pscustomobject]$event)
+        }
+    }
+    if ($snap) {
+        $snap | Add-Member -NotePropertyName timeline -NotePropertyValue $timeline.ToArray() -Force
+        try { Save-BridgeSnapshot $snap } catch { Write-BridgeLog "Aviso ao guardar respostas no snapshot da aula $($Target.session.session_id): $($_.Exception.Message)" "WARN" }
+    }
+    return $order
 }
 
 function Add-BridgeHeartbeat {
@@ -2380,7 +2533,7 @@ try {
 
             # --- RESTRICAO DE METODOS E HEADERS POR ROTA ---
             # 1. Rotas estritamente GET
-            if ($path -in @("/health", "/v1/health", "/config", "/v1/config", "/v1/status", "/v1/session/current")) {
+            if ($path -in @("/health", "/v1/health", "/config", "/v1/config", "/v1/status", "/v1/session/current", "/v1/questionario/estado")) {
                 if ($request.HttpMethod -ne "GET") {
                     $response.StatusCode = 405
                     $response.AddHeader("Allow", "GET")
@@ -2393,6 +2546,8 @@ try {
             $postRoutes = @(
                 "/v1/session/close",
                 "/v1/session/pause",
+                "/v1/questionario/bancada",
+                "/v1/questionario/crianca",
                 "/v1/shutdown",
                 "/update",
                 "/v1/update"
@@ -2407,7 +2562,7 @@ try {
             }
 
             # 3. Endpoints que consomem corpo JSON: exigir Content-Type e limitar Content-Length
-            $jsonBodyRoutes = @("/v1/session/close", "/v1/session/pause")
+            $jsonBodyRoutes = @("/v1/session/close", "/v1/session/pause", "/v1/questionario/bancada", "/v1/questionario/crianca")
             if ($path -in $jsonBodyRoutes) {
                 if ($request.ContentLength64 -lt 0) {
                     Write-BridgeLog "Rejeitada requisicao sem Content-Length definido em $path" "WARN"
@@ -2670,6 +2825,54 @@ try {
                 Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "shutting_down"; message = "PulseLab encerrando..." }
                 $script:ShutdownRequested = $true
                 break
+            }
+
+            # Questionario do fim da aula: o que a aba mostra (sem ids de sessao nem dados das criancas).
+            if ($path -eq "/v1/questionario/estado" -and $request.HttpMethod -eq "GET") {
+                $qTarget = Get-BridgeQuestionarioTarget
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload ([ordered]@{
+                    coleta_ativa = -not $qTarget.motivo
+                    motivo = $qTarget.motivo
+                    bancada_respondida = (Test-BridgeBancadaRespondida $qTarget)
+                    instrument_version = $script:InstrumentVersion
+                })
+                continue
+            }
+
+            # Respostas do questionario: validadas antes de qualquer gravacao; fora de uma aula registrada
+            # nada e gravado e a pagina so agradece. O resultado da bancada vale uma vez por aula.
+            if ($path -in @("/v1/questionario/bancada", "/v1/questionario/crianca") -and $request.HttpMethod -eq "POST") {
+                $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 8192
+                if (-not $readRes.Success) {
+                    Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
+                    continue
+                }
+                $qBody = $null
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) { $qBody = $readRes.Body | ConvertFrom-Json }
+                } catch {
+                    $qBody = $null
+                }
+                $qIsBancada = $path -eq "/v1/questionario/bancada"
+                $qItems = if ($qIsBancada) { $script:QuestionarioBancadaItems } else { $script:QuestionarioCriancaItems }
+                $qParsed = ConvertTo-BridgeQuestionarioAnswers $qBody $qItems
+                if (-not $qParsed) {
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "Respostas fora do instrumento" }
+                    continue
+                }
+                $qTarget = Get-BridgeQuestionarioTarget
+                if ($qTarget.motivo) {
+                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload ([ordered]@{ status = "nao_gravado"; motivo = $qTarget.motivo })
+                    continue
+                }
+                if ($qIsBancada -and (Test-BridgeBancadaRespondida $qTarget)) {
+                    Send-BridgeResponse -Response $response -StatusCode 200 -Payload ([ordered]@{ status = "ja_respondido" })
+                    continue
+                }
+                $qEventType = if ($qIsBancada) { "bancada_result_recorded" } else { "student_feedback_recorded" }
+                $qCount = Save-BridgeQuestionario -Target $qTarget -EventType $qEventType -Parsed $qParsed
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload ([ordered]@{ status = "gravado"; respostas = $qCount })
+                continue
             }
 
             if (($path -eq "/v1/database/summary" -or $path -eq "/v1/database/export") -and $request.HttpMethod -eq "GET") {

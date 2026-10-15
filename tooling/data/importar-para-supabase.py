@@ -645,6 +645,8 @@ ALLOWED_SESSION_EVENTS = {
     "heartbeat", "checkpoint_started", "checkpoint_completed", "help_requested",
     "role_swapped", "spike_telemetry", "experience_recorded", "race_recorded",
     "quiz_recorded", "ending_requested", "rubric_completed",
+    # Questionário do fim da aula (bancada-3.2.0): resultado da bancada e respostas anônimas das crianças
+    "bancada_result_recorded", "student_feedback_recorded",
     "session_completed", "session_aborted", "quality_issue"
 }
 

@@ -9,12 +9,17 @@ duplicar a mesma sessão, e gera na pasta de saída:
   aulas.csv               uma linha por aula
   resumo-polos.csv        por polo e por semana
   maquinas-sem-envio.csv  máquinas e há quantos dias não chegam dados delas
+  testes-carrinho.csv     questionário do fim da aula: resultado das bancadas, por polo e mês
+  criancas.csv            questionário do fim da aula: respostas das crianças por pergunta, polo e mês
+  criancas-resumo.csv     crianças que responderam e mudança de autoconfiança (perguntas 6 e 7)
+  questionario-sinalizacoes.csv  aulas com respostas a conferir
   relatorio.md            resumo em português, com a seção "Atenção"
 
 Credenciais da nuvem: as mesmas do importador (PULSELAB_SUPABASE_URL, PULSELAB_SERVICE_ROLE_KEY ou
 PULSELAB_OPERATIONAL_JWT). Sem credencial, ou com --sem-nuvem, usa só o SQLite e não acessa a rede.
 
-Só campos de bancada e de máquina; nenhum dado de criança nem texto livre.
+Só campos de bancada e de máquina e respostas anônimas do questionário (códigos fixos, sem nome,
+idade ou texto livre); aulas não autorizadas ou retiradas ficam fora de tudo.
 Zero dependências externas.
 """
 
@@ -76,6 +81,41 @@ ENCERRAMENTO_LEIGO = {
     # Turma esquecida aberta: não é problema por si só; 0 versões salvas continua sendo "sem SPIKE".
     "inatividade": "sem uso do SPIKE por 40 min",
 }
+
+# Questionário do fim da aula (instrumento bancada-3.2.0, apps/student-pwa/lib/contracts.js).
+TIPOS_QUESTIONARIO = {"bancada_result_recorded": "bancada", "student_feedback_recorded": "crianca"}
+RECUSA = "recusou"
+ITEM_LINHA, ITEM_CORRIDA, ITEM_QUIZ = "bancada_linha_v1", "bancada_corrida_v1", "bancada_quiz_v1"
+ITENS_BANCADA = {
+    ITEM_LINHA: ("sim", "em_parte", "nao"),
+    ITEM_CORRIDA: ("ganhamos", "terminamos_sem_ganhar", "nao_terminamos", "nao_participamos"),
+    ITEM_QUIZ: ("quase_todas", "metade", "poucas", "sem_quiz"),
+}
+ITENS_CRIANCA = {
+    "crianca_gostou_v1": (4, "Eu gostei da aula de robótica."),
+    "crianca_outra_aula_v1": (5, "Eu queria ter outra aula de robótica."),
+    "crianca_confianca_antes_v1": (6, "Antes da aula, eu achava que conseguia programar um robô."),
+    "crianca_confianca_agora_v1": (7, "Agora, eu acho que consigo programar um robô."),
+    "crianca_ajudou_v1": (8, "Na minha bancada, eu consegui ajudar a montar ou programar."),
+}
+ITEM_CONFIANCA_ANTES, ITEM_CONFIANCA_AGORA = "crianca_confianca_antes_v1", "crianca_confianca_agora_v1"
+ESCALA_CRIANCA = {"nao": 0, "mais_ou_menos": 1, "sim": 2}
+LIMITE_RESPOSTAS_CRIANCA = 8      # mais que isso numa aula: bancada com mais respostas que crianças
+LIMITE_MINUTOS_DEPOIS_INICIO = 180  # resposta gravada mais de 3 h depois do início da aula
+
+COLUNAS_CARRINHO = [
+    "polo", "mes", "bancadas_responderam",
+    "linha_respostas", "pct_linha_ate_o_fim", "pct_linha_em_parte", "pct_linha_nao", "linha_recusas",
+    "corrida_participaram", "pct_corrida_ganharam", "pct_corrida_terminaram_sem_ganhar", "pct_corrida_nao_terminaram",
+    "corrida_nao_participaram", "corrida_recusas",
+    "quiz_tiveram", "pct_quiz_quase_todas", "pct_quiz_metade", "pct_quiz_poucas", "quiz_sem_jogo", "quiz_recusas",
+]
+COLUNAS_CRIANCAS = ["polo", "mes", "numero", "item_id", "pergunta", "respostas", "pct_sim", "pct_mais_ou_menos", "pct_nao", "recusas"]
+COLUNAS_CRIANCAS_RESUMO = [
+    "polo", "mes", "criancas_responderam", "pares_autoconfianca",
+    "pct_sim_antes", "pct_sim_agora", "pct_melhorou", "pct_igual", "pct_piorou",
+]
+COLUNAS_SINALIZACOES = ["polo", "maquina", "session_id", "data_local", "motivo"]
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +369,142 @@ def aula_do_sqlite(row: dict, sid: str, eventos: list[tuple[str, dict]], tem_eve
 
 
 # ---------------------------------------------------------------------------
+# Questionário do fim da aula: leitura (nuvem e SQLite)
+# ---------------------------------------------------------------------------
+
+def resposta(event_id, session_id, parte, item_id, valor, envio_id, respondido_em, polo, maquina,
+             installation_id, minutos, origem) -> dict | None:
+    """Uma resposta normalizada; None se não for do instrumento (códigos fora da lista)."""
+    item_id, valor = texto(item_id), texto(valor)
+    validos = ITENS_BANCADA.get(item_id) if parte == "bancada" else (tuple(ESCALA_CRIANCA) if item_id in ITENS_CRIANCA else None)
+    if not validos or (valor not in validos and valor != RECUSA):
+        return None
+    sid = imp.session_key(session_id)
+    quando = respondido_em if isinstance(respondido_em, dt.datetime) else parse_iso(respondido_em)
+    if not sid or not quando:
+        return None
+    data_local = local(quando).date()
+    return {
+        "event_id": (texto(event_id) or "").lower() or None,
+        "session_id": sid,
+        "parte": parte,
+        "item_id": item_id,
+        "valor": valor,
+        "envio_id": (texto(envio_id) or "").lower() or None,
+        "respondido_em": quando,
+        "data_local": data_local.isoformat(),
+        "mes": data_local.strftime("%Y-%m"),
+        "polo": texto(polo),
+        "maquina": texto(maquina),
+        "installation_id": texto(installation_id),
+        "minutos_desde_inicio": numero(minutos),
+        "origem": origem,
+    }
+
+
+def resposta_da_nuvem(row: dict) -> dict | None:
+    parte = texto(row.get("parte"))
+    if parte not in ("bancada", "crianca") or row.get("ambiente") == "test":
+        return None
+    return resposta(row.get("event_id"), row.get("session_id"), parte, row.get("item_id"), row.get("valor"),
+                    row.get("envio_id"), row.get("respondido_em"), row.get("polo"), row.get("maquina"),
+                    row.get("installation_id"), row.get("minutos_desde_inicio"), "nuvem")
+
+
+def sem_envios_invalidos(pares: list[tuple[dict | None, tuple]]) -> list[dict]:
+    """Descarta o envio inteiro quando uma das respostas dele está fora do instrumento.
+
+    pares: (resposta normalizada ou None, (session_id, envio_id) da linha de origem)."""
+    invalidos = {chave for item, chave in pares if item is None and chave[0] and chave[1]}
+    return [item for item, chave in pares if item is not None and chave not in invalidos]
+
+
+def respostas_da_nuvem(rows: list[dict]) -> list[dict]:
+    pares = []
+    for row in rows:
+        if row.get("ambiente") == "test" or texto(row.get("parte")) not in ("bancada", "crianca"):
+            continue
+        chave = (imp.session_key(row.get("session_id")), (texto(row.get("envio_id")) or "").lower())
+        pares.append((resposta_da_nuvem(row), chave))
+    return sem_envios_invalidos(pares)
+
+
+def ler_questionario_sqlite(path: Path) -> list[dict]:
+    """Respostas do questionário no SQLite do importador, sem aulas não autorizadas ou retiradas."""
+    conn = sqlite3.connect(str(path))
+    conn.row_factory = sqlite3.Row
+    try:
+        tabelas = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        if "session_events" not in tabelas:
+            return []
+        fora: set[str] = set()
+        if "withdrawn_sessions" in tabelas:
+            fora |= {imp.session_key(r[0]) for r in conn.execute("SELECT session_id FROM withdrawn_sessions") if r[0]}
+        if "unauthorized_sessions" in tabelas:
+            fora |= {imp.session_key(r[0]) for r in conn.execute(
+                "SELECT session_id FROM unauthorized_sessions WHERE status = 'nao_autorizada'") if r[0]}
+        sessoes: dict[str, dict] = {}
+        if "sessions" in tabelas:
+            colunas = {r[1] for r in conn.execute("PRAGMA table_info(sessions)")}
+            for r in conn.execute("SELECT * FROM sessions"):
+                row = dict(r)
+                sessoes[imp.session_key(row.get("session_id"))] = {
+                    "polo": row.get("site_id"),
+                    "maquina": row.get("machine_label") if "machine_label" in colunas else None,
+                    "installation_id": row.get("installation_id") if "installation_id" in colunas else None,
+                    "inicio": parse_iso(row.get("started_at")),
+                }
+        pares = []
+        marcadores = ",".join("?" for _ in TIPOS_QUESTIONARIO)
+        for r in conn.execute(
+            f"SELECT event_id, session_id, event_type, occurred_at, timestamp, details_json FROM session_events "
+            f"WHERE event_type IN ({marcadores}) ORDER BY coalesce(occurred_at, timestamp), rowid",
+            tuple(TIPOS_QUESTIONARIO),
+        ):
+            sid = imp.session_key(r["session_id"])
+            if not sid or sid in fora:
+                continue
+            det = carregar_json(r["details_json"])
+            sessao = sessoes.get(sid, {})
+            quando = parse_iso(r["occurred_at"] or r["timestamp"])
+            minutos = det.get("minutes_since_session_start")
+            if numero(minutos) is None and quando and sessao.get("inicio"):
+                minutos = round((quando - sessao["inicio"]).total_seconds() / 60, 1)
+            item = resposta(r["event_id"], sid, TIPOS_QUESTIONARIO[r["event_type"]], det.get("item_id"), det.get("value"),
+                            det.get("submission_id"), quando, sessao.get("polo"), sessao.get("maquina"),
+                            sessao.get("installation_id"), minutos, "pendrive")
+            pares.append((item, (sid, (texto(det.get("submission_id")) or "").lower())))
+        return sem_envios_invalidos(pares)
+    finally:
+        conn.close()
+
+
+def juntar_respostas(*fontes: list[dict], retiradas: set[str] = frozenset()) -> list[dict]:
+    """Uma linha por evento (a mesma resposta pode chegar pela nuvem e pelo pendrive)."""
+    vistas: dict[str, dict] = {}
+    for fonte in fontes:
+        for r in fonte:
+            if not r or r["session_id"] in retiradas:
+                continue
+            chave = r.get("event_id") or f"{r['session_id']}|{r.get('envio_id')}|{r['item_id']}"
+            atual = vistas.get(chave)
+            if atual is None:
+                vistas[chave] = dict(r)
+                continue
+            for campo, valor in r.items():
+                if vazio(atual.get(campo)) and not vazio(valor):
+                    atual[campo] = valor
+            atual["origem"] = "+".join(o for o in ("nuvem", "pendrive") if o in f"{atual['origem']}+{r['origem']}")
+    return sorted(vistas.values(), key=lambda r: (r["respondido_em"], r["session_id"], r["item_id"]))
+
+
+def filtrar_respostas(respostas: list[dict], de: str | None, ate: str | None, polo: str | None) -> list[dict]:
+    return [r for r in respostas
+            if (not de or r["data_local"] >= de) and (not ate or r["data_local"] <= ate)
+            and (not polo or (r.get("polo") or "").casefold() == polo.casefold())]
+
+
+# ---------------------------------------------------------------------------
 # Junção, filtros e indicadores
 # ---------------------------------------------------------------------------
 
@@ -501,6 +677,143 @@ def formatar_data_hora(value: dt.datetime | None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Questionário do fim da aula: indicadores
+# ---------------------------------------------------------------------------
+
+def por_polo_mes(itens: list[dict]) -> dict[tuple[str, str], list[dict]]:
+    grupos: dict[tuple[str, str], list[dict]] = {}
+    for item in itens:
+        grupos.setdefault((item.get("polo") or "", item["mes"]), []).append(item)
+    return dict(sorted(grupos.items()))
+
+
+def resultados_bancada(respostas: list[dict]) -> list[dict]:
+    """Uma linha por aula (bancada) com as três respostas; vale o primeiro envio da aula."""
+    por_sessao: dict[str, dict] = {}
+    for r in respostas:
+        if r["parte"] != "bancada":
+            continue
+        aula = por_sessao.setdefault(r["session_id"], {
+            "session_id": r["session_id"], "polo": r.get("polo"), "mes": r["mes"], "envio_id": r.get("envio_id"), "itens": {},
+        })
+        if aula["envio_id"] and r.get("envio_id") and r["envio_id"] != aula["envio_id"]:
+            continue
+        aula["itens"].setdefault(r["item_id"], r["valor"])
+    return list(por_sessao.values())
+
+
+def testes_carrinho(respostas: list[dict]) -> list[dict]:
+    linhas = []
+    for (polo, mes), aulas in por_polo_mes(resultados_bancada(respostas)).items():
+        def contar(item: str) -> dict[str, int]:
+            cont: dict[str, int] = {}
+            for a in aulas:
+                valor = a["itens"].get(item)
+                if valor:
+                    cont[valor] = cont.get(valor, 0) + 1
+            return cont
+
+        linha, corrida, quiz = contar(ITEM_LINHA), contar(ITEM_CORRIDA), contar(ITEM_QUIZ)
+        n_linha = sum(v for k, v in linha.items() if k != RECUSA)
+        n_corrida = sum(corrida.get(k, 0) for k in ("ganhamos", "terminamos_sem_ganhar", "nao_terminamos"))
+        n_quiz = sum(quiz.get(k, 0) for k in ("quase_todas", "metade", "poucas"))
+        linhas.append({
+            "polo": polo, "mes": mes, "bancadas_responderam": len(aulas),
+            "linha_respostas": n_linha,
+            "pct_linha_ate_o_fim": pct(linha.get("sim", 0), n_linha),
+            "pct_linha_em_parte": pct(linha.get("em_parte", 0), n_linha),
+            "pct_linha_nao": pct(linha.get("nao", 0), n_linha),
+            "linha_recusas": linha.get(RECUSA, 0),
+            "corrida_participaram": n_corrida,
+            "pct_corrida_ganharam": pct(corrida.get("ganhamos", 0), n_corrida),
+            "pct_corrida_terminaram_sem_ganhar": pct(corrida.get("terminamos_sem_ganhar", 0), n_corrida),
+            "pct_corrida_nao_terminaram": pct(corrida.get("nao_terminamos", 0), n_corrida),
+            "corrida_nao_participaram": corrida.get("nao_participamos", 0),
+            "corrida_recusas": corrida.get(RECUSA, 0),
+            "quiz_tiveram": n_quiz,
+            "pct_quiz_quase_todas": pct(quiz.get("quase_todas", 0), n_quiz),
+            "pct_quiz_metade": pct(quiz.get("metade", 0), n_quiz),
+            "pct_quiz_poucas": pct(quiz.get("poucas", 0), n_quiz),
+            "quiz_sem_jogo": quiz.get("sem_quiz", 0),
+            "quiz_recusas": quiz.get(RECUSA, 0),
+        })
+    return linhas
+
+
+def envios_criancas(respostas: list[dict]) -> list[dict]:
+    """Uma rodada por criança: as respostas do mesmo envio (submission_id) na mesma aula."""
+    envios: dict[tuple[str, str], dict] = {}
+    for r in respostas:
+        if r["parte"] != "crianca":
+            continue
+        chave = (r["session_id"], r.get("envio_id") or r.get("event_id") or "")
+        envio = envios.setdefault(chave, {"session_id": r["session_id"], "polo": r.get("polo"), "mes": r["mes"], "itens": {}})
+        envio["itens"].setdefault(r["item_id"], r["valor"])
+    return list(envios.values())
+
+
+def criancas_por_pergunta(respostas: list[dict]) -> list[dict]:
+    linhas = []
+    for (polo, mes), envios in por_polo_mes(envios_criancas(respostas)).items():
+        for item_id, (numero_item, pergunta) in ITENS_CRIANCA.items():
+            valores = [e["itens"][item_id] for e in envios if item_id in e["itens"]]
+            validas = [v for v in valores if v != RECUSA]
+            linhas.append({
+                "polo": polo, "mes": mes, "numero": numero_item, "item_id": item_id, "pergunta": pergunta,
+                "respostas": len(validas),
+                "pct_sim": pct(validas.count("sim"), len(validas)),
+                "pct_mais_ou_menos": pct(validas.count("mais_ou_menos"), len(validas)),
+                "pct_nao": pct(validas.count("nao"), len(validas)),
+                "recusas": valores.count(RECUSA),
+            })
+    return linhas
+
+
+def criancas_resumo(respostas: list[dict]) -> list[dict]:
+    """Autoconfiança: pergunta 6 (antes) contra 7 (agora), só com as duas respondidas no mesmo envio."""
+    linhas = []
+    for (polo, mes), envios in por_polo_mes(envios_criancas(respostas)).items():
+        pares = [(ESCALA_CRIANCA[e["itens"][ITEM_CONFIANCA_ANTES]], ESCALA_CRIANCA[e["itens"][ITEM_CONFIANCA_AGORA]])
+                 for e in envios
+                 if e["itens"].get(ITEM_CONFIANCA_ANTES) in ESCALA_CRIANCA and e["itens"].get(ITEM_CONFIANCA_AGORA) in ESCALA_CRIANCA]
+        n = len(pares)
+        linhas.append({
+            "polo": polo, "mes": mes, "criancas_responderam": len(envios), "pares_autoconfianca": n,
+            "pct_sim_antes": pct(sum(1 for a, _ in pares if a == ESCALA_CRIANCA["sim"]), n),
+            "pct_sim_agora": pct(sum(1 for _, b in pares if b == ESCALA_CRIANCA["sim"]), n),
+            "pct_melhorou": pct(sum(1 for a, b in pares if b > a), n),
+            "pct_igual": pct(sum(1 for a, b in pares if b == a), n),
+            "pct_piorou": pct(sum(1 for a, b in pares if b < a), n),
+        })
+    return linhas
+
+
+def sinalizacoes_questionario(respostas: list[dict]) -> list[dict]:
+    """Aulas a conferir: mais de 8 crianças responderam, ou respostas gravadas mais de 3 h depois do início."""
+    por_sessao: dict[str, list[dict]] = {}
+    for r in respostas:
+        por_sessao.setdefault(r["session_id"], []).append(r)
+    linhas = []
+    for sid, itens in por_sessao.items():
+        base = {"polo": itens[0].get("polo"), "maquina": next((r["maquina"] for r in itens if r.get("maquina")), None),
+                "session_id": sid, "data_local": min(r["data_local"] for r in itens)}
+        envios = {r.get("envio_id") or r.get("event_id") for r in itens if r["parte"] == "crianca"}
+        if len(envios) > LIMITE_RESPOSTAS_CRIANCA:
+            linhas.append({**base, "motivo": f"{len(envios)} respostas individuais na aula (mais de {LIMITE_RESPOSTAS_CRIANCA})"})
+        tarde = [r for r in itens if (r.get("minutos_desde_inicio") or 0) > LIMITE_MINUTOS_DEPOIS_INICIO]
+        if tarde:
+            horas = max(r["minutos_desde_inicio"] for r in tarde) / 60
+            linhas.append({**base, "motivo": f"{len(tarde)} resposta(s) gravada(s) mais de 3 h depois do início da aula (até {br_num(round(horas, 1))} h)"})
+    linhas.sort(key=lambda s: (s["data_local"], s["polo"] or "", s["maquina"] or "", s["motivo"]))
+    return linhas
+
+
+def mes_leigo(mes: str) -> str:
+    ano, m = mes.split("-")
+    return f"{m}/{ano}"
+
+
+# ---------------------------------------------------------------------------
 # Saída
 # ---------------------------------------------------------------------------
 
@@ -555,7 +868,9 @@ def md_tabela(cabecalho: list[str], linhas: list[list]) -> str:
 def gerar_markdown(
     aulas: list[dict], resumo: list[dict], maquinas: list[dict], hoje: dt.date,
     de: str | None, ate: str | None, polo: str | None, fontes: list[str], avisos: list[str],
+    questionario: dict | None = None,
 ) -> str:
+    q = questionario or {"carrinho": [], "criancas": [], "resumo": [], "sinalizacoes": []}
     ind = indicadores(aulas)
     if de or ate:
         periodo = f"{br_data(de) if de else 'início'} a {br_data(ate) if ate else 'hoje'}"
@@ -584,6 +899,8 @@ def gerar_markdown(
         f"- Encerradas pelo instrutor no ícone da bandeja: **{br_num(ind['pct_encerradas_instrutor'], '%')}**.",
         f"- Interrompidas (computador desligado ou PulseLab reiniciado no meio): **{br_num(ind['pct_interrompidas'], '%')}**.",
         f"- Sem nenhum programa salvo no SPIKE: **{br_num(ind['pct_sem_spike'], '%')}**.",
+        f"- Questionário do fim da aula: **{sum(r['bancadas_responderam'] for r in q['carrinho'])}** bancada(s) e"
+        f" **{sum(r['criancas_responderam'] for r in q['resumo'])}** criança(s) responderam.",
         "",
         "## Atenção",
         "",
@@ -613,6 +930,16 @@ def gerar_markdown(
     else:
         partes.append("Nenhuma.")
 
+    partes += ["", "### Questionário do fim da aula a conferir", ""]
+    if q["sinalizacoes"]:
+        partes.append(md_tabela(
+            ["Data", "Polo", "Máquina", "Motivo"],
+            [[br_data(s["data_local"]), s["polo"], s["maquina"], s["motivo"]] for s in q["sinalizacoes"]],
+        ))
+        partes += ["", "As respostas sinalizadas continuam nas contagens: confira com o polo antes de usá-las."]
+    else:
+        partes.append("Nenhum.")
+
     partes += ["", "## Resumo semanal por polo", ""]
     if resumo:
         partes.append(md_tabela(
@@ -622,6 +949,50 @@ def gerar_markdown(
         ))
     else:
         partes.append("Nenhuma aula no período.")
+
+    partes += [
+        "", "## Testes com os carrinhos", "",
+        "Perguntas 1 a 3 do questionário do fim da aula, respondidas pela bancada junto (uma vez por aula).",
+        "Corrida e jogo de perguntas contam só as bancadas que participaram ou tiveram o jogo.", "",
+    ]
+    if q["carrinho"]:
+        partes.append(md_tabela(
+            ["Polo", "Mês", "Bancadas que responderam", "Seguiram a linha até o fim", "Corrida: ganharam / terminaram sem ganhar / não terminaram",
+             "Jogo de perguntas: quase todas / metade / poucas"],
+            [[r["polo"], mes_leigo(r["mes"]), r["bancadas_responderam"],
+              f"{br_num(r['pct_linha_ate_o_fim'], '%')} de {r['linha_respostas']}",
+              f"{br_num(r['pct_corrida_ganharam'], '%')} / {br_num(r['pct_corrida_terminaram_sem_ganhar'], '%')} / "
+              f"{br_num(r['pct_corrida_nao_terminaram'], '%')} de {r['corrida_participaram']}",
+              f"{br_num(r['pct_quiz_quase_todas'], '%')} / {br_num(r['pct_quiz_metade'], '%')} / "
+              f"{br_num(r['pct_quiz_poucas'], '%')} de {r['quiz_tiveram']}"] for r in q["carrinho"]],
+        ))
+        partes += ["", "Recusas, bancadas que não correram e turmas sem jogo de perguntas estão em `testes-carrinho.csv`."]
+    else:
+        partes.append("Nenhuma bancada respondeu no período.")
+
+    partes += [
+        "", "## O que as crianças disseram", "",
+        "Perguntas 4 a 8, respondidas por cada criança sozinha, sem nome. As porcentagens não contam quem tocou"
+        " em \"Não quero responder\".", "",
+    ]
+    if q["resumo"]:
+        partes.append(md_tabela(
+            ["Polo", "Mês", "Pergunta", "Respostas", "Sim", "Mais ou menos", "Não", "Não quiseram responder"],
+            [[r["polo"], mes_leigo(r["mes"]), f"{r['numero']}. {r['pergunta']}", r["respostas"], br_num(r["pct_sim"], "%"),
+              br_num(r["pct_mais_ou_menos"], "%"), br_num(r["pct_nao"], "%"), r["recusas"]] for r in q["criancas"]],
+        ))
+        partes += [
+            "", "### Mudança de autoconfiança (pergunta 6 contra pergunta 7)", "",
+            "Só as crianças que responderam as duas perguntas no mesmo envio. \"Melhorou\" é subir de Não para Mais ou"
+            " menos ou Sim, ou de Mais ou menos para Sim.", "",
+            md_tabela(
+                ["Polo", "Mês", "Crianças que responderam", "Com as duas respostas", "\"Sim\" antes", "\"Sim\" agora", "Melhorou"],
+                [[r["polo"], mes_leigo(r["mes"]), r["criancas_responderam"], r["pares_autoconfianca"], br_num(r["pct_sim_antes"], "%"),
+                  br_num(r["pct_sim_agora"], "%"), br_num(r["pct_melhorou"], "%")] for r in q["resumo"]],
+            ),
+        ]
+    else:
+        partes.append("Nenhuma criança respondeu no período.")
 
     partes += ["", "## Aulas", ""]
     if aulas:
@@ -649,6 +1020,8 @@ def gerar_markdown(
         "- **Blocos** e **Escore PC:** do último programa salvo. O escore de pensamento computacional é"
         " adaptado de Dr. Scratch e ainda não foi validado.",
         "- **Origem:** `nuvem` (enviado pela internet), `pendrive` (importado do SQLite) ou os dois.",
+        "- **Questionário do fim da aula:** respostas por mês da resposta; aulas não autorizadas ficam fora."
+        " Uma criança é um envio (as respostas dela na mesma rodada), sem nome nem forma de seguir alguém entre aulas.",
         "- Significado de cada coluna dos arquivos CSV: `docs/pesquisa/relatorio.md`.",
         "",
     ]
@@ -685,6 +1058,8 @@ def main(argv: list[str] | None = None) -> int:
     aulas_nuvem: list[dict] = []
     maquinas_nuvem: list[dict] = []
     aulas_pendrive: list[dict] = []
+    respostas_nuvem: list[dict] = []
+    respostas_pendrive: list[dict] = []
     retiradas: set[str] = set()
 
     sqlite_path = Path(args.sqlite) if args.sqlite else ROOT / "dados_locais" / "pulselab_consolidado.sqlite"
@@ -693,6 +1068,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if sqlite_path.is_file():
         aulas_pendrive, retiradas = ler_sqlite(sqlite_path)
+        respostas_pendrive = ler_questionario_sqlite(sqlite_path)
         fontes.append(f"pendrive (SQLite `{sqlite_path.name}`)")
         print(f"[OK] SQLite: {len(aulas_pendrive)} aulas em {sqlite_path}")
         if aulas_pendrive and not any(a.get("installation_id") for a in aulas_pendrive):
@@ -724,6 +1100,12 @@ def main(argv: list[str] | None = None) -> int:
                     maquinas_nuvem = [maquina_da_nuvem(r) for r in buscar_nuvem(url, key, "research_installation_last_seen", [], "installation_id.asc")]
                 except Exception as exc:
                     avisos.append(f"a lista de máquinas da nuvem não respondeu ({descrever_erro(exc)}).")
+                try:
+                    # A view do questionário tem as mesmas colunas de filtro (data_local e polo).
+                    respostas_nuvem = respostas_da_nuvem(buscar_nuvem(
+                        url, key, "research_questionario_respostas", filtros, "respondido_em.asc"))
+                except Exception as exc:
+                    avisos.append(f"as respostas do questionário na nuvem não responderam ({descrever_erro(exc)}).")
 
     if not fontes:
         print("[ERRO] Nenhuma fonte de dados: informe --sqlite ou configure a credencial da nuvem.")
@@ -738,15 +1120,29 @@ def main(argv: list[str] | None = None) -> int:
                       "(computador ligado sem aula), ficaram fora das contagens.")
     resumo = resumo_polos(aulas)
     maquinas = maquinas_sem_envio(maquinas_nuvem, todas, hoje, args.polo)
+    respostas = filtrar_respostas(juntar_respostas(respostas_nuvem, respostas_pendrive, retiradas=retiradas),
+                                  args.de, args.ate, args.polo)
+    questionario = {
+        "carrinho": testes_carrinho(respostas),
+        "criancas": criancas_por_pergunta(respostas),
+        "resumo": criancas_resumo(respostas),
+        "sinalizacoes": sinalizacoes_questionario(respostas),
+    }
 
     saida.mkdir(parents=True, exist_ok=True)
     escrever_csv(saida / "aulas.csv", COLUNAS_AULAS, aulas)
     escrever_csv(saida / "resumo-polos.csv", COLUNAS_RESUMO, resumo)
     escrever_csv(saida / "maquinas-sem-envio.csv", COLUNAS_MAQUINAS, maquinas)
+    escrever_csv(saida / "testes-carrinho.csv", COLUNAS_CARRINHO, questionario["carrinho"])
+    escrever_csv(saida / "criancas.csv", COLUNAS_CRIANCAS, questionario["criancas"])
+    escrever_csv(saida / "criancas-resumo.csv", COLUNAS_CRIANCAS_RESUMO, questionario["resumo"])
+    escrever_csv(saida / "questionario-sinalizacoes.csv", COLUNAS_SINALIZACOES, questionario["sinalizacoes"])
     (saida / "relatorio.md").write_text(
-        gerar_markdown(aulas, resumo, maquinas, hoje, args.de, args.ate, args.polo, fontes, avisos), encoding="utf-8"
+        gerar_markdown(aulas, resumo, maquinas, hoje, args.de, args.ate, args.polo, fontes, avisos, questionario=questionario),
+        encoding="utf-8",
     )
     print(f"[OK] {len(aulas)} aulas, {len(resumo)} linhas de resumo, {len(maquinas)} máquinas.")
+    print(f"[OK] Questionário: {len(respostas)} respostas, {len(questionario['sinalizacoes'])} sinalização(ões).")
     print(f"[OK] Relatório em: {saida}")
     return 0
 

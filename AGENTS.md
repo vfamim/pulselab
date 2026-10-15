@@ -54,7 +54,7 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
 
 3. **Assentimento Verbal, Livre e Não-Punitivo** (desde a 2.4.0):
    - No início de cada aula o instrutor lê o roteiro padronizado de `docs/campo/assentimento-verbal.md`: o que é registrado, que a participação é voluntária e que qualquer pessoa pode recusar a qualquer momento, sem consequência. As famílias são informadas antes, conforme o TCLE aprovado pelo CEP.
-   - Nenhuma tela de assentimento, questionário, contador ou alerta aparece para as crianças durante a aula; o PulseLab fica só como ícone na bandeja.
+   - O questionário do fim da aula fica disponível numa aba do navegador (`http://127.0.0.1:43128/alunos/`, aberta pela bandeja quando a coleta está ativa): é opcional, anônimo (sem nome, idade ou texto livre, com "Não quero responder" em toda pergunta) e respondido no fim da aula, quando o instrutor avisa. Nenhuma outra tela, contador ou alerta aparece para as crianças; fora isso, o PulseLab fica só como ícone na bandeja.
    - A recusa de qualquer membro da bancada (ou da família) leva o instrutor a usar **"Não registrar esta turma"** no ícone da bandeja: a aula daquela turma é marcada imediatamente como não autorizada (dados nunca usados) e o registro pausa até a próxima aula, com acesso pedagógico integral às ferramentas de robótica. A exclusão definitiva é feita na revisão do pesquisador.
 
 4. **Retenção Local Configurável e Retirada com Revisão**:

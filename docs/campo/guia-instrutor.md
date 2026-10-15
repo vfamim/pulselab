@@ -43,7 +43,7 @@ footer: PulseLab 3 · Guia do instrutor
 
 O PulseLab registra, para cada bancada, como o programa do robô LEGO SPIKE muda durante a aula.
 
-Ele **não** guarda nomes, não tira fotos, não filma, não grava voz e não registra o que se digita ou clica. Durante a aula, aparece só como um ícone perto do relógio do Windows.
+Ele **não** guarda nomes, não tira fotos, não filma, não grava voz e não registra o que se digita ou clica. Durante a aula, fica como um ícone perto do relógio do Windows e uma aba do navegador com o questionário do fim da aula.
 
 ---
 
@@ -84,7 +84,7 @@ Use sempre o pacote do polo nos computadores das oficinas.
 4. Digite o nome da máquina, por exemplo `PET-LAB1-PC03`, e aperte Enter. Esse nome identifica a bancada nos dados.
 5. Espere a mensagem **`Instalacao concluida com sucesso!`**
 
-Ficam dois atalhos na Área de Trabalho, **PulseLab - Iniciar Oficina** e **PulseLab - Exportar Dados**, e o PulseLab passa a abrir sozinho com o Windows.
+Ficam três atalhos na Área de Trabalho, **PulseLab - Iniciar Oficina**, **PulseLab - Exportar Dados** e **Questionário PulseLab**, e o PulseLab passa a abrir sozinho com o Windows.
 
 <div class="alerta">Se aparecer "O instalador foi aberto sem extrair o arquivo ZIP", feche a janela e volte ao passo 2.</div>
 
@@ -92,18 +92,19 @@ Ficam dois atalhos na Área de Trabalho, **PulseLab - Iniciar Oficina** e **Puls
 
 # Um computador, uma bancada
 
-- Cada computador corresponde a **uma bancada** (2 a 8 crianças). O registro é da bancada, nunca de uma criança.
+- Cada computador corresponde a **uma bancada** (2 a 8 crianças). O registro é da bancada, nunca de uma criança identificada.
 - As crianças salvam o projeto no **aplicativo LEGO SPIKE desse mesmo computador**, na pasta padrão `Documentos\LEGO SPIKE`.
 - O PulseLab olha essa pasta a cada 15 segundos e guarda só a estrutura do programa: quantos blocos, motores, sensores, repetições e condições.
-- Nenhuma tela do PulseLab aparece para as crianças.
+- Para as crianças, o PulseLab só mostra a aba do **questionário do fim da aula**, que espera até você avisar a turma.
 
 ---
 
 # Início da aula
 
 1. Ligue os computadores. O PulseLab abre sozinho; confira o ícone perto do relógio.
-2. Leia para a turma o **roteiro de assentimento verbal** entregue pela coordenação e responda às dúvidas.
-3. Comece a oficina normalmente.
+2. Uma aba do navegador abre sozinha com o **Questionário do fim da aula**. **Não feche a aba**: as crianças abrem o LEGO SPIKE por cima dela. Fechou sem querer? Use o atalho **Questionário PulseLab**.
+3. Leia para a turma o **roteiro de assentimento verbal** entregue pela coordenação e responda às dúvidas.
+4. Comece a oficina normalmente.
 
 O registro da primeira aula começa sozinho quando o PulseLab abre, junto com o Windows. Depois de **Encerrar turma...**, a próxima começa no primeiro programa salvo no LEGO SPIKE.
 
@@ -163,12 +164,43 @@ Já encerrou a turma? Use do mesmo jeito: vale para a última aula encerrada, se
 
 ---
 
+# Questionário do fim da aula
+
+<div class="cols">
+<div>
+
+## Quando e o que dizer
+
+Na hora do lanche, depois dos testes com os carrinhos, avise a turma:
+
+<div class="caixa">"Quem quiser pode responder umas perguntas rápidas no computador da bancada. Não precisa dizer o nome e ninguém é obrigado. Quem não quiser responder alguma, toca em <strong>Não quero responder</strong>."</div>
+
+Você **não** passa máquina por máquina e não olha as respostas.
+
+</div>
+<div>
+
+## Como funciona
+
+1. Na aba **Questionário do fim da aula**, a bancada toca em **Começar**.
+2. As perguntas 1 a 3 são da bancada, respondidas juntas, uma vez por aula.
+3. Depois, cada criança responde sozinha as perguntas 4 a 8 e chama o próximo colega.
+
+Turma marcada em **Não registrar esta turma** ou pacote genérico: a aba só agradece e nada é guardado.
+
+</div>
+</div>
+
+---
+
 # Fim da aula
 
 1. Botão direito no ícone, **Encerrar turma...**, **Sim**.
 2. Aparece **Turma encerrada com sucesso. Pronto para a próxima aula.**
 
 O PulseLab **continua ligado**. A próxima turma começa sozinha no primeiro programa salvo no LEGO SPIKE.
+
+Pode encerrar antes ou depois do questionário: as respostas vão para a aula que acabou, até a próxima turma começar.
 
 Esqueceu de encerrar? A turma é encerrada sozinha depois de **40 minutos sem programa salvo no LEGO SPIKE**, depois de **3 horas**, ou quando o computador fica **20 minutos ou mais desligado ou suspenso**.
 
@@ -224,6 +256,7 @@ Persistindo, avise a coordenação com o nome do computador e uma foto da mensag
 |---|---|
 | Início | Confira o ícone e leia o roteiro de assentimento |
 | Durante | Nada. As crianças salvam os projetos no LEGO SPIKE |
+| Lanche | Avise a turma do questionário do fim da aula (opcional) |
 | Recusa | **Não registrar esta turma** no computador da bancada |
 | Fim | **Encerrar turma...** e **Sim** |
 | Sem internet | **PulseLab - Exportar Dados** com pendrive |

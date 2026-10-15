@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteLocalStore } from "../lib/student-store.js";
+import { bridgeGet, bridgePost } from "../lib/bridge-client.js";
+import Questionario from "./questionario.jsx";
 
-// Página da bancada / encerramento silencioso.
-// Durante a aula nenhuma página precisa ficar aberta. O encerramento no PC é direto e silencioso:
-// zero formulários para os alunos ou instrutor no computador da bancada.
-// Encerrar a turma só fecha a sessão: o PulseLab continua ligado para a próxima turma.
+// Página da bancada em http://127.0.0.1:43128/alunos/.
+// Rota padrão: questionário do fim da aula (opcional e anônimo), aberto numa aba pela bandeja.
+// A criança não encerra a aula por aqui: o encerramento fica no menu da bandeja e, para
+// diagnóstico, em ?encerrar=1. Encerrar a turma só fecha a sessão: o PulseLab continua ligado.
+// ?lab=1 mostra o painel de diagnóstico do laboratório.
 
 const CLIENT_VERSION = `student-pwa/${__PULSELAB_VERSION__}`;
-const BRIDGE_URL = "http://127.0.0.1:43128";
 
 // Chaves das versões até 2.3.x, quando a página ficava aberta e guardava a sessão no navegador.
 const LEGACY_STORAGE_KEYS = [
@@ -16,23 +18,6 @@ const LEGACY_STORAGE_KEYS = [
   "pulselab_installation_id_v1",
   "pulselab_student_installation_id_v1"
 ];
-
-async function bridgeGet(path) {
-  const response = await fetch(`${BRIDGE_URL}${path}`, { signal: AbortSignal.timeout(3000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
-}
-
-async function bridgePost(path, payload) {
-  const response = await fetch(`${BRIDGE_URL}${path}`, {
-    signal: AbortSignal.timeout(10000),
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
-  const body = await response.json().catch(() => ({}));
-  return { status: response.status, body };
-}
 
 function clearLegacyBrowserData() {
   try {
@@ -118,12 +103,8 @@ function LabPanel() {
   );
 }
 
-export default function StudentPage() {
-  const labMode = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).get("lab") === "1";
-  }, []);
-
+// Encerramento da turma por esta página: só em ?encerrar=1 (diagnóstico). O instrutor encerra pela bandeja.
+function EncerramentoTurma() {
   const [step, setStep] = useState("carregando");
   const [current, setCurrent] = useState(null);
   const [notice, setNotice] = useState("");
@@ -140,7 +121,6 @@ export default function StudentPage() {
   }, []);
 
   useEffect(() => {
-    clearLegacyBrowserData();
     void loadCurrent();
   }, [loadCurrent]);
 
@@ -225,10 +205,29 @@ export default function StudentPage() {
     );
   }
 
-  return (
-    <main className={`app-shell student-app ${labMode ? "student-app--lab" : "student-app--silent"}`}>
-      {content}
-      {labMode && <LabPanel />}
-    </main>
-  );
+  return <main className="app-shell student-app student-app--silent">{content}</main>;
+}
+
+export default function StudentPage() {
+  const modo = useMemo(() => {
+    if (typeof window === "undefined") return "questionario";
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("lab") === "1") return "lab";
+    if (params.get("encerrar") === "1") return "encerrar";
+    return "questionario";
+  }, []);
+
+  useEffect(() => {
+    clearLegacyBrowserData();
+  }, []);
+
+  if (modo === "lab") {
+    return (
+      <main className="app-shell student-app student-app--lab">
+        <LabPanel />
+      </main>
+    );
+  }
+  if (modo === "encerrar") return <EncerramentoTurma />;
+  return <Questionario />;
 }

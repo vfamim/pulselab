@@ -5,7 +5,8 @@ importador) numa tabela com **uma linha por aula de bancada**, isto é, o que um
 registrou durante uma turma. A mesma aula nunca aparece duas vezes, mesmo que tenha chegado pelos
 dois caminhos. Aulas que a turma pediu para não registrar ficam de fora.
 
-Não há nomes, fotos nem texto livre: só os campos descritos abaixo.
+Não há nomes, fotos nem texto livre: só os campos descritos abaixo e as respostas anônimas do
+questionário do fim da aula, somadas por polo e mês.
 
 ## Como gerar
 
@@ -39,8 +40,10 @@ Horários estão no fuso dos polos (UTC-3). Semanas começam na segunda-feira.
 
 ### `relatorio.md`
 
-Resumo para leitura: totais, a seção **Atenção** (máquinas sem dados há mais de 7 dias e aulas com
-qualidade ruim), o resumo semanal por polo e a lista de aulas.
+Resumo para leitura: totais, a seção **Atenção** (máquinas sem dados há mais de 7 dias, aulas com
+qualidade ruim e respostas do questionário a conferir), o resumo semanal por polo, as seções
+**Testes com os carrinhos** e **O que as crianças disseram** (questionário do fim da aula, por polo e
+mês) e a lista de aulas.
 
 ### `aulas.csv`: uma linha por aula
 
@@ -103,9 +106,71 @@ inclui máquinas cadastradas que nunca enviaram nada.
 | `dias_sem_dados` | Dias desde `ultimo_dado`. |
 | `situacao` | `ok`, `sem dados há mais de 7 dias` ou `nunca enviou dados`. |
 
+### Questionário do fim da aula
+
+Respostas da aba `http://127.0.0.1:43128/alunos/` (instrumento `bancada-3.2.0`). Agrupadas por polo e
+pelo **mês da resposta** (`mes`, `AAAA-MM`). As porcentagens não contam quem tocou em
+**Não quero responder**; as recusas aparecem em colunas próprias. Aulas não autorizadas ou retiradas
+ficam fora. Um envio com resposta fora do instrumento é descartado inteiro. Sem nome, idade ou texto
+livre: uma "criança" é um envio, isto é, as respostas de uma rodada (mesmo `submission_id`), sem
+como saber se a mesma criança respondeu em outra aula.
+
+#### `testes-carrinho.csv`: resultado das bancadas (perguntas 1 a 3), por polo e mês
+
+Vale o primeiro envio da bancada em cada aula (o bridge não aceita um segundo).
+
+| Coluna | Significado |
+|---|---|
+| `polo`, `mes` | Polo e mês. |
+| `bancadas_responderam` | Aulas de bancada com resposta da bancada. |
+| `linha_respostas` | Bancadas que responderam a pergunta 1 (sem recusa). |
+| `pct_linha_ate_o_fim`, `pct_linha_em_parte`, `pct_linha_nao` | % que seguiu a linha preta até o fim, em parte ou não. |
+| `linha_recusas` | Bancadas que não quiseram responder a pergunta 1. |
+| `corrida_participaram` | Bancadas que correram (ganharam, terminaram sem ganhar ou não terminaram). |
+| `pct_corrida_ganharam`, `pct_corrida_terminaram_sem_ganhar`, `pct_corrida_nao_terminaram` | % entre as que correram. |
+| `corrida_nao_participaram`, `corrida_recusas` | Bancadas que não correram; recusas. |
+| `quiz_tiveram` | Bancadas que tiveram jogo de perguntas e responderam. |
+| `pct_quiz_quase_todas`, `pct_quiz_metade`, `pct_quiz_poucas` | % entre as que tiveram o jogo. |
+| `quiz_sem_jogo`, `quiz_recusas` | Bancadas sem jogo de perguntas; recusas. |
+
+#### `criancas.csv`: perguntas 4 a 8, por polo, mês e pergunta
+
+| Coluna | Significado |
+|---|---|
+| `polo`, `mes` | Polo e mês. |
+| `numero`, `item_id`, `pergunta` | Número (4 a 8), código e texto da pergunta. |
+| `respostas` | Respostas Sim, Mais ou menos ou Não. |
+| `pct_sim`, `pct_mais_ou_menos`, `pct_nao` | % de cada resposta. |
+| `recusas` | Quantas vezes tocaram em **Não quero responder**. |
+
+#### `criancas-resumo.csv`: crianças que responderam e mudança de autoconfiança
+
+Compara a pergunta 6 ("Antes da aula, eu achava que conseguia programar um robô.") com a 7
+("Agora, eu acho que consigo programar um robô.") **no mesmo envio**, só quando as duas foram
+respondidas (sem recusa). Escala Não < Mais ou menos < Sim. É autorrelato retrospectivo no fim da
+aula, não um pré-teste.
+
+| Coluna | Significado |
+|---|---|
+| `polo`, `mes` | Polo e mês. |
+| `criancas_responderam` | Envios (rodadas) de crianças. |
+| `pares_autoconfianca` | Envios com as perguntas 6 e 7 respondidas. |
+| `pct_sim_antes`, `pct_sim_agora` | % que respondeu Sim na 6 e na 7. |
+| `pct_melhorou`, `pct_igual`, `pct_piorou` | % que subiu, ficou igual ou desceu da 6 para a 7. |
+
+#### `questionario-sinalizacoes.csv`: aulas a conferir
+
+| Coluna | Significado |
+|---|---|
+| `polo`, `maquina`, `session_id`, `data_local` | A aula. |
+| `motivo` | `N respostas individuais na aula (mais de 8)` (mais envios que o tamanho máximo da bancada: crianças de outras bancadas ou repetição) ou `N resposta(s) gravada(s) mais de 3 h depois do início da aula` (a aula pode ter ficado aberta e as respostas serem de outra turma). |
+
+As respostas sinalizadas continuam nas contagens; decida com o polo se ficam.
+
 ## Origem dos dados
 
 Na nuvem, o relatório lê a view `research_aula_bancada`, que achata o resumo da sessão enviado pelo
-bridge, e a view `research_installation_last_seen`. As duas respeitam o acesso das tabelas
-(`security_invoker`). No pendrive, lê as tabelas `sessions` e `session_events` do SQLite do
+bridge, a view `research_installation_last_seen` e a view `research_questionario_respostas` (uma
+linha por resposta do questionário, sem aulas não autorizadas). As três respeitam o acesso das
+tabelas (`security_invoker`). No pendrive, lê as tabelas `sessions` e `session_events` do SQLite do
 importador.

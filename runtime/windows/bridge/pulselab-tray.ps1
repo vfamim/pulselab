@@ -8,6 +8,8 @@
 #   - Ver situação              resumo do registro neste computador
 #   - Fechar PulseLab           desliga o servidor local e a bandeja até o próximo início
 # Também religa o PulseLab se o servidor local parar de responder.
+# Ao iniciar, com a coleta de pesquisa ativa, abre uma vez a aba do questionário do fim da aula
+# (http://127.0.0.1:43128/alunos/) no navegador padrão.
 # Uma única instância por usuário (mutex).
 # ==============================================================================
 
@@ -138,6 +140,9 @@ $script:BaseUrl = "http://127.0.0.1:$Port"
 $script:Failures = 0
 $script:LastRestart = [DateTime]::MinValue
 $script:LastStatus = $null
+$script:QuestionarioUrl = "$($script:BaseUrl)/alunos/"
+$script:QuestionarioPendente = $true
+$script:TrayStartedAt = [DateTime]::UtcNow
 
 function Invoke-TrayApi {
     param([string]$Path, [string]$Method = "GET", [string]$Body = "{}")
@@ -186,6 +191,26 @@ function Close-CurrentTurma {
         Show-ModernDialog -Message "Não foi possível encerrar a turma agora. Tente de novo em 1 minuto." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
     }
     Update-TrayStatus
+}
+
+# Questionário do fim da aula: abre a aba uma vez, quando a bandeja inicia, depois que o servidor
+# local responde /health e só com a coleta de pesquisa ativa (pacote do polo). Religar o servidor
+# não abre de novo; o atalho "Questionário PulseLab" reabre a aba.
+function Open-QuestionarioOnce {
+    if (-not $script:QuestionarioPendente -or $script:Exiting) { return }
+    if (([DateTime]::UtcNow - $script:TrayStartedAt).TotalMinutes -gt 10) {
+        $script:QuestionarioPendente = $false
+        return
+    }
+    $health = $null
+    try { $health = Invoke-TrayApi "/health" } catch { $health = $null }
+    if (-not $health -or $health.status -ne "ok") { return }
+    $status = $null
+    try { $status = Invoke-TrayApi "/v1/status" } catch { $status = $null }
+    if (-not $status) { return }
+    $script:QuestionarioPendente = $false
+    if (-not $status.research_active) { return }
+    try { Start-Process $script:QuestionarioUrl } catch {}
 }
 
 function Restart-PulseLab {
@@ -377,9 +402,13 @@ Remove-Item -LiteralPath $script:SignalFile -Force -ErrorAction SilentlyContinue
 
 $timer = New-Object System.Windows.Forms.Timer
 $timer.Interval = 15000
-$timer.add_Tick({ Update-TrayStatus })
+$timer.add_Tick({
+    Update-TrayStatus
+    Open-QuestionarioOnce
+})
 $timer.Start()
 Update-TrayStatus
+Open-QuestionarioOnce
 
 try {
     if (-not $script:Exiting) { [System.Windows.Forms.Application]::Run() }

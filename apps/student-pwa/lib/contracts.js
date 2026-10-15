@@ -1,19 +1,81 @@
 // Manifesto formal do instrumento versionado (auditoria e integridade científica)
 // Itens em rascunho: aguardam validação do pesquisador responsável antes de qualquer análise confirmatória.
 export const PROTOCOL_VERSION = "protocolo-oficinas-rotativas-v2";
-export const INSTRUMENT_VERSION = "bancada-2.4.0-rascunho";
+export const INSTRUMENT_VERSION = "bancada-3.2.0";
+
+// Questionário do fim da aula (aba do navegador). Texto aprovado pelo pesquisador responsável:
+// não mude as palavras. Os códigos (item_id e valores) são estáveis e o bridge aceita só estes
+// (mesma lista em pulselab-bridge.ps1; o teste turma-closing garante).
+const SIM_MAIS_OU_MENOS_NAO = [
+  ["sim", "Sim"],
+  ["mais_ou_menos", "Mais ou menos"],
+  ["nao", "Não"]
+];
 
 export const INSTRUMENT_MANIFEST = {
   version: INSTRUMENT_VERSION,
   protocol_version: PROTOCOL_VERSION,
   status: "rascunho_pendente_validacao",
   unit_of_analysis: "bancada",
-  session_boundary: "da abertura do PulseLab (ou do primeiro programa salvo depois da turma anterior) até Encerrar turma na bandeja, 3 horas ou computador desligado por mais de 20 minutos",
+  session_boundary: "da abertura do PulseLab (ou do primeiro programa salvo depois da turma anterior) até Encerrar turma na bandeja, 3 horas, computador desligado por mais de 20 minutos ou 40 minutos sem programa salvo no SPIKE",
   target_constructs: [
     "experiencia_bancada",
     "resultado_pratico_bancada",
-    "apoio_instrutor"
+    "apoio_instrutor",
+    "resultado_testes_carrinho",
+    "percepcao_individual_anonima"
   ],
+  questionario_fim_aula: {
+    stage: "questionario_fim_aula",
+    anonymous: true,
+    optional: true,
+    skip: ["recusou", "Não quero responder"],
+    bancada: {
+      event_type: "bancada_result_recorded",
+      once_per_session: true,
+      items: [
+        {
+          item_id: "bancada_linha_v1",
+          number: 1,
+          text: "O carrinho de vocês seguiu a linha preta até o fim da pista?",
+          options: [["sim", "Sim"], ["em_parte", "Em parte"], ["nao", "Não"]]
+        },
+        {
+          item_id: "bancada_corrida_v1",
+          number: 2,
+          text: "Como foi a corrida?",
+          options: [
+            ["ganhamos", "Ganhamos"],
+            ["terminamos_sem_ganhar", "Terminamos, mas não ganhamos"],
+            ["nao_terminamos", "Não terminamos"],
+            ["nao_participamos", "Não participamos"]
+          ]
+        },
+        {
+          item_id: "bancada_quiz_v1",
+          number: 3,
+          text: "No jogo de perguntas, vocês acertaram...",
+          options: [
+            ["quase_todas", "Quase todas"],
+            ["metade", "Metade"],
+            ["poucas", "Poucas"],
+            ["sem_quiz", "Não teve jogo de perguntas"]
+          ]
+        }
+      ]
+    },
+    crianca: {
+      event_type: "student_feedback_recorded",
+      once_per_session: false,
+      items: [
+        { item_id: "crianca_gostou_v1", number: 4, text: "Eu gostei da aula de robótica.", options: SIM_MAIS_OU_MENOS_NAO },
+        { item_id: "crianca_outra_aula_v1", number: 5, text: "Eu queria ter outra aula de robótica.", options: SIM_MAIS_OU_MENOS_NAO },
+        { item_id: "crianca_confianca_antes_v1", number: 6, text: "Antes da aula, eu achava que conseguia programar um robô.", options: SIM_MAIS_OU_MENOS_NAO },
+        { item_id: "crianca_confianca_agora_v1", number: 7, text: "Agora, eu acho que consigo programar um robô.", options: SIM_MAIS_OU_MENOS_NAO },
+        { item_id: "crianca_ajudou_v1", number: 8, text: "Na minha bancada, eu consegui ajudar a montar ou programar.", options: SIM_MAIS_OU_MENOS_NAO }
+      ]
+    }
+  },
   items: {
     bancada: {
       experiencia: {
@@ -76,7 +138,7 @@ export const INSTRUMENT_MANIFEST = {
 };
 
 // SHA-256 canônico do manifesto do instrumento (auditoria e integridade científica)
-export const CONFIG_HASH = "40fa7892e0cb738230e30d19e3a1ea0144712192bc251391ad9d9ec8996425a1";
+export const CONFIG_HASH = "3e1e3423a7468044ec6bbcc28db81959f0fa3f1a5ee1c7bff97e7e54ef482ba3";
 
 export const TIMELINE_EVENT_TYPES = [
   "session_started",
@@ -93,6 +155,8 @@ export const TIMELINE_EVENT_TYPES = [
   "race_recorded",
   "quiz_recorded",
   "experience_recorded",
+  "bancada_result_recorded",
+  "student_feedback_recorded",
   "role_swapped",
   "ending_requested",
   "rubric_completed",
@@ -187,6 +251,8 @@ export function formatEventName(eventType) {
     race_recorded: "Desafio da pista registrado",
     quiz_recorded: "Quiz lúdico registrado",
     experience_recorded: "Avaliação de experiência registrada",
+    bancada_result_recorded: "Resultado da bancada (questionário do fim da aula)",
+    student_feedback_recorded: "Resposta individual (questionário do fim da aula)",
     role_swapped: "Papéis trocados",
     ending_requested: "Encerramento solicitado",
     rubric_completed: "Rubrica do instrutor concluída",
