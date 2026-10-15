@@ -30,48 +30,23 @@ async function mockBridge(context, { current, closeStatus = 200 } = {}) {
 
 const activeSession = { research_active: true, paused: false, active: true, session_id: SESSION_ID, started_at: "2026-10-14T12:00:00.000Z", elapsed_min: 80 };
 
-test("encerramento: bancada responde, instrutor avalia e o Bridge recebe a turma certa", async ({ context, page }) => {
+test("encerramento: encerra a turma diretamente e o Bridge recebe o id da turma sem formulários", async ({ context, page }) => {
   const posts = await mockBridge(context, { current: activeSession });
   await page.goto("/alunos/");
   await expect(page.getByRole("heading", { name: "Encerrar a turma desta bancada?" })).toBeVisible();
   await expectVisuals(await inspectVisuals(page), "confirmar");
   await page.getByRole("button", { name: "Encerrar turma" }).click();
 
-  await expect(page.getByRole("heading", { name: "Como foi a oficina para a sua bancada hoje?" })).toBeVisible();
-  await expectVisuals(await inspectVisuals(page), "bancada");
-  await page.getByRole("button", { name: /Gostamos/ }).click();
-
-  await expect(page.getByRole("heading", { name: "Como foi esta bancada?" })).toBeVisible();
-  const register = page.getByRole("button", { name: "Registrar" });
-  await expect(register).toBeDisabled();
-  await page.getByRole("button", { name: "Concluiu a missão" }).click();
-  await page.getByRole("button", { name: "Algum" }).click();
-  await register.click();
-
   await expect(page.getByRole("heading", { name: "Turma encerrada" })).toBeVisible();
   expect(posts).toEqual([{
-    session_id: SESSION_ID,
-    experience: { value: 3, label: "Gostamos", refused: false },
-    rubric: { skipped: false, result_level: 2, support_level: "algum" }
+    session_id: SESSION_ID
   }]);
 });
 
-test("encerramento: bancada pode preferir não responder e instrutor pode pular", async ({ context, page }) => {
-  const posts = await mockBridge(context, { current: activeSession });
-  await page.goto("/alunos/");
-  await page.getByRole("button", { name: "Encerrar turma" }).click();
-  await page.getByRole("button", { name: "Preferimos não responder" }).click();
-  await page.getByRole("button", { name: "Pular avaliação" }).click();
-  await expect(page.getByRole("heading", { name: "Turma encerrada" })).toBeVisible();
-  expect(posts[0]).toEqual({ session_id: SESSION_ID, experience: { value: null, label: null, refused: true }, rubric: { skipped: true } });
-});
-
-test("turma mudou enquanto o formulário estava aberto: recomeça em vez de gravar na turma errada", async ({ context, page }) => {
+test("turma mudou enquanto a página estava aberta: recomeça em vez de gravar na turma errada", async ({ context, page }) => {
   const posts = await mockBridge(context, { current: activeSession, closeStatus: 409 });
   await page.goto("/alunos/");
   await page.getByRole("button", { name: "Encerrar turma" }).click();
-  await page.getByRole("button", { name: /Adoramos/ }).click();
-  await page.getByRole("button", { name: "Pular avaliação" }).click();
   await expect(page.getByRole("heading", { name: "Encerrar a turma desta bancada?" })).toBeVisible();
   await expect(page.getByText("A turma deste computador mudou")).toBeVisible();
   expect(posts).toHaveLength(1);

@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.0.2"
+$script:BridgeVersion = "3.0.3"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}

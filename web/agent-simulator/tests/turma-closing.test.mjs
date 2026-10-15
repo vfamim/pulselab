@@ -59,10 +59,10 @@ test("Instrumento: itens do encerramento em rascunho, versionados e separados en
   assert.doesNotMatch(resultLabels, /ajuda|apoio|autônom/i, "Resultado não pode embutir apoio");
 });
 
-test("Encerramento: formulário envia resposta da bancada (ou recusa) e avaliação para a turma que mostrou", () => {
+test("Encerramento: página encerra diretamente sem questionários no PC e envia a turma certa", () => {
   assert.match(pageCode, /bridgePost\("\/v1\/session\/close"/);
   assert.match(pageCode, /session_id: current\?\.session_id \|\| null/, "Envia o id da turma exibida");
-  assert.match(pageCode, /refused: true/, "Bancada pode preferir não responder");
+  assert.doesNotMatch(pageCode, /answerBancada|step === "bancada"|step === "instrutor"/, "Zero questionários de alunos ou instrutor no PC");
   assert.match(pageCode, /result\.status === 409/, "Turma mudou: recomeça em vez de gravar na turma errada");
 });
 
