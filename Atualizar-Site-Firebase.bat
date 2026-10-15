@@ -10,7 +10,7 @@ cd web\agent-simulator
 call npm run build
 cd ..\..
 echo.
-python installer\build-installer.py --output instalador\downloads\PulseLab-3.0.5-Windows.zip
+python installer\build-installer.py --output instalador\downloads\PulseLab-3.0.7-Windows.zip
 
 echo [3/3] Montando pasta publica (somente arquivos permitidos)...
 python scripts\build-hosting.py

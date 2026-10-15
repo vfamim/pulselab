@@ -149,12 +149,12 @@ def bump(old_v: str, new_v: str):
     content = re.sub(r'v[0-9\.]+ Oficinas Rotativas', f'v{new_v} Oficinas Rotativas', content)
     write_text(test_html, content)
 
-    # 19. tutorial/index.html
-    tut_html = repo_root / "tutorial/index.html"
-    content = read_text(tut_html)
-    content = re.sub(r'PulseLab [0-9\.]+', f'PulseLab {new_v}', content)
-    content = release_links(content, new_v)
-    write_text(tut_html, content)
+    # 19. Guia do instrutor: fonte e página gerada (scripts/build-guia.sh refaz HTML e PDF)
+    for guide in (repo_root / "docs/campo/guia-instrutor.md", repo_root / "tutorial/index.html"):
+        content = read_text(guide)
+        content = re.sub(r'PulseLab [0-9\.]+', f'PulseLab {new_v}', content)
+        content = release_links(content, new_v)
+        write_text(guide, content)
 
     # 19b. relatorio/index.html (página pública; o relatório v1.4 em si é histórico)
     rel_html = repo_root / "relatorio/index.html"
@@ -162,14 +162,11 @@ def bump(old_v: str, new_v: str):
     content = re.sub(r'publicado com PulseLab v[0-9\.]+', f'publicado com PulseLab v{new_v}', content)
     write_text(rel_html, content)
 
-    # 20. Operational docs
+    # 20. Operational docs (docs/arquivo/ é histórico e nunca é reescrito)
     for doc in [
         repo_root / "README.md",
-        repo_root / "docs/arquitetura-aplicacao-alunos.md",
-        repo_root / "docs/HANDOFF-pwa-alunos-spike-bridge.md",
-        repo_root / "docs/inventario-dados-v2.md",
-        repo_root / "docs/protocolo-pesquisa-v2-teste.md",
-        repo_root / "docs/roteiro-teste-v2.md",
+        repo_root / "docs/pesquisa/inventario-dados-v2.md",
+        repo_root / "docs/pesquisa/protocolo-pesquisa-v2.md",
         repo_root / "web/agent-simulator/README.md",
     ]:
         if doc.is_file():

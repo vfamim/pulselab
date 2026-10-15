@@ -1,6 +1,6 @@
 {
   "name": "pulselab-student-runner",
-  "version": "3.0.5",
+  "version": "3.0.7",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,6 @@
     "test:unit": "node --test tests/*.test.mjs"
   },
   "dependencies": {
-    "fflate": "0.8.3",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

@@ -15,7 +15,7 @@ pendrive.
   Não há caixas de assentimento nem botão de retirada na tela. Se alguém recusar, o instrutor
   escolhe **Não registrar esta turma** no menu da bandeja daquele computador: os dados da turma
   atual são apagados (com marca de exclusão) e o registro pausa até a próxima turma. Depende de
-  emenda ao CEP. Veja [assentimento verbal](docs/assentimento-verbal.md).
+  emenda ao CEP. Veja [assentimento verbal](docs/campo/assentimento-verbal.md).
 - A sessão começa quando o PulseLab inicia (ou, depois de uma turma encerrada, no primeiro programa
   salvo) e termina por **Encerrar turma…** no menu da bandeja
   (pergunta coletiva com 4 carinhas ou "Preferimos não responder"; resultado 0 a 3 e apoio
@@ -30,8 +30,8 @@ pendrive.
 - Os registros ficam no computador por `retention_days` do pacote do polo (padrão 180 dias),
   mesmo depois de exportados ou enviados. O prazo precisa constar no protocolo e no TCLE.
 - Os itens, rubricas e a pergunta de pesquisa ainda dependem de validação acadêmica.
-  Veja [protocolo v2](docs/protocolo-pesquisa-v2-teste.md),
-  [plano de validação](docs/plano-validacao-v2.md) e [roadmap](docs/roadmap.md).
+  Veja [protocolo v2](docs/pesquisa/protocolo-pesquisa-v2.md),
+  [plano de validação](docs/pesquisa/plano-validacao-v2.md) e [roadmap](docs/pesquisa/roadmap.md).
 
 ## Para os polos
 
@@ -102,7 +102,7 @@ python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --
 ```sh
 cd web/agent-simulator && npm ci && npm run test:unit && npm run build
 python3 scripts/check-version-consistency.py
-python3 -m unittest scripts.test_importador scripts.test_council scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud
+python3 -m unittest scripts.test_importador scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud scripts.test_spike_parser
 pwsh -File scripts/test-launcher-update.ps1
 python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres descartável
 ```
@@ -110,4 +110,5 @@ python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres des
 O site no Firebase publica apenas a lista de pastas de `scripts/build-hosting.py`
 (montada em `hosting-dist/`). Toda mudança passa por PR com o CI verde.
 
-Documentos v1/v1.4, o agente WPF (`agent/`) e o portal antigo são referências históricas.
+Documentos v1/v1.4 são referências históricas. O agente WPF (`agent/`), o portal do instrutor
+(`instrutor/`) e o schema avulso (`schema/`) foram removidos na 3.0.7 e seguem no histórico do git.

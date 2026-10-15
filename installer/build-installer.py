@@ -17,7 +17,7 @@ import shutil
 import tempfile
 import zipfile
 
-VERSION = "3.0.5"
+VERSION = "3.0.7"
 
 
 def sha256(path: Path) -> str:
