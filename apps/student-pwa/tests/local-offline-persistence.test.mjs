@@ -1,0 +1,48 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import {
+  countStoredEvents,
+  countStoredSessions,
+  getLocalStoreSummary
+} from "../lib/student-store.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const repoRoot = path.resolve(__dirname, "../../..");
+const bridgePath = path.join(repoRoot, "bridge", "pulselab-bridge.ps1");
+const studentPagePath = path.join(repoRoot, "apps/student-pwa/app/student-page.jsx");
+
+test("Persistência local: student-store exporta funções de contagem e resumo", () => {
+  assert.equal(typeof countStoredEvents, "function");
+  assert.equal(typeof countStoredSessions, "function");
+  assert.equal(typeof getLocalStoreSummary, "function");
+});
+
+test("Persistência local Bridge: ausência de File::Replace incompatível e variável $pid somente-leitura", () => {
+  assert.ok(fs.existsSync(bridgePath), "pulselab-bridge.ps1 deve existir");
+  const bridgeCode = fs.readFileSync(bridgePath, "utf-8");
+
+  // File::Replace com $null como backup quebra no PowerShell 5.1; só é aceito com arquivo de backup
+  assert.doesNotMatch(
+    bridgeCode,
+    /\[System\.IO\.File\]::Replace\([^)]*\$null/,
+    "Bridge não deve usar [System.IO.File]::Replace sem backup"
+  );
+
+  // Deve implementar função auxiliar segura Move-BridgeAtomicFile
+  assert.match(
+    bridgeCode,
+    /function\s+Move-BridgeAtomicFile/,
+    "Bridge deve implementar Move-BridgeAtomicFile para escrita atômica robusta"
+  );
+
+  // Não deve tentar sobrescrever a variável automática reservada $pid do PowerShell
+  assert.doesNotMatch(
+    bridgeCode,
+    /foreach\s*\(\$pid\s+in/,
+    "Bridge não deve usar $pid como variável de iteração (somente-leitura no PowerShell)"
+  );
+});

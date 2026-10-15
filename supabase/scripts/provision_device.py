@@ -174,7 +174,7 @@ def main():
         "--token-polo",
         action="store_true",
         help="Gera um token do polo (sem installation_id) para cadastrar várias máquinas; "
-        "use o arquivo de saída em scripts/gerar-pacote-polo.py --token-cadastro",
+        "use o arquivo de saída em tooling/polo/gerar-pacote-polo.py --token-cadastro",
     )
     parser.add_argument(
         "--max-usos",

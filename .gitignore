@@ -7,10 +7,7 @@ skills-lock.json
 dist-offline/
 dist-test/
 
-# Test directories and non-runtime test scripts
-/tests/
-!web/agent-simulator/tests/
-!supabase/tests/
+# Local test scripts
 Executar-Testes.bat
 
 # Offline queue and student data (LGPD compliance)
@@ -38,8 +35,6 @@ texto_explicativo_slides_pulselab.md
 # Temporary root archives
 *.zip
 *.zip.sha256
-# Binários de release vão para as Releases do GitHub (scripts/publicar-release.py), não para o git
-instalador/downloads/
 
 # OS artifacts
 Thumbs.db
@@ -56,6 +51,7 @@ __pycache__/
 
 # Web simulator build artifacts
 node_modules/
+# Pacotes gerados (ZIP e .sha256); vão para as Releases do GitHub, não para o git
 dist/
 .next/
 .vinext/
@@ -63,8 +59,8 @@ dist/
 .wrangler/
 .firebase/
 supabase/.temp/
-web/agent-simulator/test-results/
-web/agent-simulator/playwright-report/
+apps/student-pwa/test-results/
+apps/student-pwa/playwright-report/
 
 # Offline research data storage (LGPD compliance)
 dados_locais/*.json
@@ -74,7 +70,7 @@ dados_locais/*.txt
 dados_locais/sessoes/*.json
 !dados_locais/sessoes/.gitkeep
 
-# Pasta montada por scripts/build-hosting.py para o Firebase Hosting
+# Pasta montada por tooling/site/build-hosting.py para o Firebase Hosting
 hosting-dist/
 dist-polos/
 dist-release/

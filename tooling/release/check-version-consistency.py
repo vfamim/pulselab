@@ -1,0 +1,268 @@
+#!/usr/bin/env python3
+"""
+Automated Version Consistency Checker for PulseLab.
+
+Ensures that the canonical version in VERSION is synchronized across all
+code, configs, public pages, launchers, Service Worker, and distribution scripts.
+Fails with a non-zero exit code if any operational surface diverges.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+import re
+import sys
+
+
+def read_text(path: Path) -> str:
+    if not path.is_file():
+        raise FileNotFoundError(f"Arquivo obrigatório não encontrado: {path}")
+    return path.read_text(encoding="utf-8")
+
+
+def read_json(path: Path) -> dict:
+    return json.loads(read_text(path))
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def check_version_consistency(repo_root: Path) -> list[str]:
+    errors: list[str] = []
+
+    # 1. Versão canônica
+    version_file = repo_root / "VERSION"
+    if not version_file.is_file():
+        return ["Arquivo canônico VERSION não encontrado na raiz."]
+    canonical = version_file.read_text(encoding="utf-8").strip()
+    if not re.match(r"^\d+\.\d+\.\d+(-[a-zA-Z0-9.]+)?$", canonical):
+        return [f"Formato inválido de versão em VERSION: '{canonical}'"]
+
+    # 2. package.json raiz
+    pkg_root = repo_root / "package.json"
+    if pkg_root.is_file():
+        pkg_data = read_json(pkg_root)
+        if pkg_data.get("version") != canonical:
+            errors.append(f"package.json (raiz): esperado version='{canonical}', encontrado='{pkg_data.get('version')}'")
+
+    # 3. apps/student-pwa/package.json e package-lock.json
+    web_pkg = repo_root / "apps/student-pwa/package.json"
+    if web_pkg.is_file():
+        data = read_json(web_pkg)
+        if data.get("version") != canonical:
+            errors.append(f"apps/student-pwa/package.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
+
+    web_lock = repo_root / "apps/student-pwa/package-lock.json"
+    if web_lock.is_file():
+        data = read_json(web_lock)
+        if data.get("version") != canonical:
+            errors.append(f"apps/student-pwa/package-lock.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
+
+    # 4. version.json
+    v_json = repo_root / "version.json"
+    if v_json.is_file():
+        data = read_json(v_json)
+        if data.get("version") != canonical:
+            errors.append(f"version.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
+        if data.get("auto_update_enabled") is not True:
+            errors.append("version.json: auto_update_enabled deve ser true para permitir atualizações automáticas verificadas")
+        expected_pkg_url = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/PulseLab-{canonical}-Windows.zip"
+        if data.get("package_url") != expected_pkg_url:
+            errors.append(f"version.json: package_url deve referenciar {expected_pkg_url}")
+
+    # 5. config/defaults.json e config/config.json
+    defaults_json = repo_root / "config/defaults.json"
+    if defaults_json.is_file():
+        data = read_json(defaults_json)
+        if data.get("client_version") != canonical:
+            errors.append(f"config/defaults.json: esperado client_version='{canonical}', encontrado='{data.get('client_version')}'")
+
+    config_json = repo_root / "config/config.json"
+    if config_json.is_file():
+        data = read_json(config_json)
+        if data.get("version") != canonical:
+            errors.append(f"config/config.json: esperado version='{canonical}', encontrado='{data.get('version')}'")
+
+    # 6. Bridge PowerShell: bridge/pulselab-bridge.ps1
+    bridge_ps1 = repo_root / "bridge/pulselab-bridge.ps1"
+    if bridge_ps1.is_file():
+        content = read_text(bridge_ps1)
+        expected_bv = f'$script:BridgeVersion = "{canonical}"'
+        if expected_bv not in content:
+            errors.append(f"bridge/pulselab-bridge.ps1: não contém '{expected_bv}'")
+        if re.search(r'protocol_version = "\d+\.\d+\.\d+"', content):
+            errors.append("bridge/pulselab-bridge.ps1: protocol_version não pode ser a versão do software")
+
+    # 7. Launcher: pulselab.ps1
+    launcher_ps1 = repo_root / "pulselab.ps1"
+    if launcher_ps1.is_file():
+        content = read_text(launcher_ps1)
+        expected_lv = f'$localVersion = "{canonical}"'
+        if expected_lv not in content:
+            errors.append(f"pulselab.ps1: fallback de versão deve ser '{expected_lv}'")
+
+    # 8. PWA UI: apps/student-pwa/app/student-page.jsx
+    student_page = repo_root / "apps/student-pwa/app/student-page.jsx"
+    if student_page.is_file():
+        content = read_text(student_page)
+        expected_cv = f'const CLIENT_VERSION = "student-pwa/{canonical}";'
+        if expected_cv not in content:
+            errors.append(f"student-page.jsx: não contém '{expected_cv}'")
+        expected_ui_tag = f"oficina de robótica · v{canonical}"
+        if expected_ui_tag not in content:
+            errors.append(f"student-page.jsx: rodapé da UI deve conter '{expected_ui_tag}'")
+
+    # 9. Service Worker: apps/student-pwa/public/sw.js
+    sw_file = repo_root / "apps/student-pwa/public/sw.js"
+    if sw_file.is_file():
+        content = read_text(sw_file)
+        expected_cache = f'const CACHE_NAME = CACHE_PREFIX + "{canonical}";'
+        if expected_cache not in content:
+            errors.append(f"apps/student-pwa/public/sw.js: CACHE_NAME deve ser '{expected_cache}'")
+
+    # 10. Empacotador: tooling/release/build-installer.py
+    builder_py = repo_root / "tooling/release/build-installer.py"
+    if builder_py.is_file():
+        content = read_text(builder_py)
+        expected_v = f'VERSION = "{canonical}"'
+        if expected_v not in content:
+            errors.append(f"tooling/release/build-installer.py: esperado '{expected_v}'")
+
+    # 11. Script de build offline: tooling/release/build-offline-package.sh
+    build_sh = repo_root / "tooling/release/build-offline-package.sh"
+    if build_sh.is_file():
+        content = read_text(build_sh)
+        zip_name = f"PulseLab-{canonical}-Windows.zip"
+        if zip_name not in content:
+            errors.append(f"tooling/release/build-offline-package.sh: deve referenciar '{zip_name}'")
+        if "Alunos-Offline" in content:
+            errors.append("tooling/release/build-offline-package.sh: não gerar mais a cópia PulseLab-Alunos-Offline (duplicata do ZIP)")
+
+    # 12. Scripts Batch de instalação e atualização
+    instalar_bat = repo_root / "Instalar-PulseLab.bat"
+    if instalar_bat.is_file():
+        content = read_text(instalar_bat)
+        if f"(v{canonical})" not in content:
+            errors.append(f"Instalar-PulseLab.bat: deve exibir título com '(v{canonical})'")
+
+    atualizar_bat = repo_root / "tooling/site/Atualizar-Site-Firebase.bat"
+    if atualizar_bat.is_file():
+        content = read_text(atualizar_bat)
+        zip_name = f"PulseLab-{canonical}-Windows.zip"
+        if zip_name not in content:
+            errors.append(f"Atualizar-Site-Firebase.bat: deve referenciar '{zip_name}'")
+
+    # 13. Páginas públicas operacionais
+    index_html = repo_root / "apps/site/index.html"
+    if index_html.is_file():
+        content = read_text(index_html)
+        if f"PulseLab v{canonical}" not in content:
+            errors.append(f"index.html: deve conter 'PulseLab v{canonical}'")
+        if f"v{canonical} Oficinas Rotativas" not in content:
+            errors.append(f"index.html: tag da hero deve conter 'v{canonical} Oficinas Rotativas'")
+
+    instalador_html = repo_root / "apps/site/instalador/index.html"
+    if instalador_html.is_file():
+        content = read_text(instalador_html)
+        zip_name = f"PulseLab-{canonical}-Windows.zip"
+        if zip_name not in content:
+            errors.append(f"instalador/index.html: link de download deve referenciar '{zip_name}'")
+        release_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{zip_name}"
+        if release_link not in content:
+            errors.append(f"instalador/index.html: download deve apontar para a Release do GitHub ({release_link})")
+        if f"PulseLab Protocol v{canonical}" not in content and f"PulseLab v{canonical}" not in content:
+            errors.append(f"instalador/index.html: cabeçalho deve referenciar v{canonical}")
+
+    testes_html = repo_root / "apps/site/testes/index.html"
+    if testes_html.is_file():
+        content = read_text(testes_html)
+        zip_name = f"PulseLab-{canonical}-Windows.zip"
+        if zip_name not in content:
+            errors.append(f"testes/index.html: link de download deve referenciar '{zip_name}'")
+        release_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{zip_name}"
+        if release_link not in content:
+            errors.append(f"testes/index.html: download deve apontar para a Release do GitHub ({release_link})")
+        if f"PulseLab Offline v{canonical}" not in content:
+            errors.append(f"testes/index.html: título deve conter 'PulseLab Offline v{canonical}'")
+
+    tutorial_html = repo_root / "apps/site/tutorial/index.html"
+    if tutorial_html.is_file():
+        content = read_text(tutorial_html)
+        if f"PulseLab {canonical}" not in content:
+            errors.append(f"tutorial/index.html: deve conter 'PulseLab {canonical}'")
+        if f"PulseLab-{canonical}-Windows.zip" not in content:
+            errors.append(f"tutorial/index.html: deve referenciar 'PulseLab-{canonical}-Windows.zip'")
+
+    relatorio_html = repo_root / "apps/site/relatorio/index.html"
+    if relatorio_html.is_file():
+        content = read_text(relatorio_html)
+        if f"PulseLab v{canonical}" not in content and f"PulseLab {canonical}" not in content:
+            errors.append(f"relatorio/index.html: deve conter 'PulseLab v{canonical}'")
+
+    # 14. Verificação de Checksums de Pacotes quando presentes
+    pkg_dist = repo_root / f"dist/PulseLab-{canonical}-Windows.zip"
+    pkg_dist_sha = repo_root / f"dist/PulseLab-{canonical}-Windows.zip.sha256"
+    if pkg_dist.is_file() and pkg_dist_sha.is_file():
+        real_hash = sha256_file(pkg_dist)
+        sha_text = pkg_dist_sha.read_text(encoding="ascii").strip()
+        if not sha_text.startswith(real_hash):
+            errors.append(f"Checksum mismatch em {pkg_dist_sha}: hash real é {real_hash}")
+        # As páginas não repetem o hash (ficava desatualizado): apontam para o .sha256 publicado na Release.
+        sha_link = f"https://github.com/vfamim/pulselab/releases/download/v{canonical}/{pkg_dist_sha.name}"
+        for page in (instalador_html, testes_html):
+            if page.is_file() and sha_link not in read_text(page):
+                errors.append(f"{page.relative_to(repo_root)}: deve apontar para o checksum publicado ({sha_link})")
+
+    # 15. Um único identificador de protocolo: o do manifesto do instrumento (contracts.js)
+    contracts_js = repo_root / "apps/student-pwa/lib/contracts.js"
+    if contracts_js.is_file() and config_json.is_file():
+        match = re.search(r'export const PROTOCOL_VERSION = "([^"]+)"', read_text(contracts_js))
+        protocol = match.group(1) if match else None
+        if read_json(config_json).get("protocol_version") != protocol:
+            errors.append(f"config/config.json: protocol_version deve ser '{protocol}' (igual a lib/contracts.js)")
+
+    # 16. Atualizador assinado: sem a chave pública no pacote, as máquinas nunca mais se atualizam.
+    public_key = repo_root / "release-public-key.json"
+    if not public_key.is_file():
+        errors.append("release-public-key.json ausente: gere com tooling/release/publicar-release.py gerar-chave")
+    elif pkg_dist.is_file():  # o ZIP não é versionado; a checagem roda localmente após o build
+        import zipfile
+
+        with zipfile.ZipFile(pkg_dist) as archive:
+            names = {name.split("/", 1)[-1] for name in archive.namelist()}
+            for required in ("release-public-key.json", "pulselab-update.ps1", "pulselab-installation.ps1"):
+                if required not in names:
+                    errors.append(f"{pkg_dist.name}: pacote sem {required}")
+            if "provisionamento.json" in names:
+                errors.append(f"{pkg_dist.name}: pacote genérico não pode conter provisionamento.json")
+            key_entries = [name for name in archive.namelist() if name.endswith("release-public-key.json")]
+            packaged_key = archive.read(key_entries[0]) if key_entries else b""
+            if packaged_key and json.loads(packaged_key) != read_json(public_key):
+                errors.append(f"{pkg_dist.name}: chave pública do pacote difere de release-public-key.json")
+
+    return errors
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parents[2]
+    errors = check_version_consistency(repo_root)
+    if errors:
+        print("❌ FALHA NA CONSISTÊNCIA DE VERSÃO DO PULSELAB:", file=sys.stderr)
+        for err in errors:
+            print(f"  - {err}", file=sys.stderr)
+        return 1
+    version_file = repo_root / "VERSION"
+    canonical = version_file.read_text(encoding="utf-8").strip()
+    print(f"✅ SUCESSO: Todas as superfícies operacionais do PulseLab estão perfeitamente sincronizadas na versão {canonical}.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

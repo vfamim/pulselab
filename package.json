@@ -3,9 +3,9 @@
   "version": "3.0.7",
   "private": true,
   "scripts": {
-    "check:version": "python3 scripts/check-version-consistency.py",
-    "test:unit": "npm --prefix web/agent-simulator run test:unit",
-    "build": "npm --prefix web/agent-simulator run build",
-    "test:e2e": "npm --prefix web/agent-simulator run test:e2e"
+    "check:version": "python3 tooling/release/check-version-consistency.py",
+    "test:unit": "npm --prefix apps/student-pwa run test:unit",
+    "build": "npm --prefix apps/student-pwa run build",
+    "test:e2e": "npm --prefix apps/student-pwa run test:e2e"
   }
 }
