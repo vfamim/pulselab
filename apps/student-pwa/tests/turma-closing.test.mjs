@@ -69,7 +69,7 @@ test("Encerramento: página encerra diretamente sem questionários no PC e envia
 test("Encerramento no Bridge: eventos da bancada, do instrutor e fim da sessão com motivo e qualidade", () => {
   const idx = bridgeCode.indexOf("function Close-BridgeSession");
   const block = bridgeCode.slice(idx, bridgeCode.indexOf("\nfunction ", idx + 10));
-  assert.match(block, /ValidateSet\("instrutor", "tempo", "sem_encerramento"\)/);
+  assert.match(block, /ValidateSet\("instrutor", "tempo", "sem_encerramento", "inatividade"\)/);
   assert.match(block, /"experience_recorded"[\s\S]*?refused = \$refused/);
   assert.match(block, /"rubric_completed"[\s\S]*?-ParticipantRole "instructor"/);
   assert.match(block, /"session_completed"[\s\S]*?ended_by = \$EndedBy/);
@@ -95,6 +95,13 @@ test("Sessão do Bridge: fecha por tempo (3 h) e por computador desligado/suspen
   assert.match(bridgeCode, /Close-BridgeSession -EndedBy "tempo"/);
   assert.match(bridgeCode, /Close-BridgeSession -EndedBy "sem_encerramento" -EndedAtMs \(\[int64\]\$s\.last_alive_ms\)/);
   assert.match(bridgeCode, /Start-BridgeSession -StartMode "atividade_spike"/);
+});
+
+test("Sessão do Bridge: fecha por inatividade (40 min sem programa salvo no SPIKE) e espera o próximo programa", () => {
+  assert.match(bridgeCode, /PULSELAB_SESSION_IDLE_MINUTES" 40/);
+  assert.match(bridgeCode, /Add-Member -NotePropertyName last_program_ms/, "Nova versão salva zera o relógio");
+  assert.match(bridgeCode, /\[Math\]::Max\(\[int64\]\$Session\.started_at_ms, \[int64\]\$Session\.last_program_ms\)/, "Sem versão salva, conta do início");
+  assert.match(bridgeCode, /Close-BridgeSession -EndedBy "inatividade" -EndedAtMs \$idleEndMs/);
 });
 
 test("Bandeja do Windows: encerramento silencioso e passivo sem abrir o navegador", () => {

@@ -73,6 +73,8 @@ ENCERRAMENTO_LEIGO = {
     "instrutor": "instrutor",
     "tempo": "limite de 3 h",
     "sem_encerramento": "computador desligado ou suspenso",
+    # Turma esquecida aberta: não é problema por si só; 0 versões salvas continua sendo "sem SPIKE".
+    "inatividade": "sem uso do SPIKE por 40 min",
 }
 
 
@@ -637,6 +639,8 @@ def gerar_markdown(
         "## Como ler",
         "",
         "- **Versões salvas:** quantas vezes a bancada salvou o programa no SPIKE com mudança.",
+        "- **Encerrada por** `sem uso do SPIKE por 40 min`: o instrutor não encerrou e a aula fechou sozinha;"
+        " o fim é 40 minutos depois do último programa salvo (ou do início, sem nenhum).",
         "- **Blocos** e **Escore PC:** do último programa salvo. O escore de pensamento computacional é"
         " adaptado de Dr. Scratch e ainda não foi validado.",
         "- **Origem:** `nuvem` (enviado pela internet), `pendrive` (importado do SQLite) ou os dois.",

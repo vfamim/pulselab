@@ -41,6 +41,12 @@ INSERT INTO public.research_bancada_sessions(session_id,site_id,installation_id,
 VALUES('a0000000-0000-4000-8000-000000000004','SITE_A','10000000-0000-4000-8000-000000000001','ESC1','completed','tempo',
 '{"timeline":[{"event_type":"session_started","details":{}}]}'::jsonb,'2026-10-09T12:00:00Z','2026-10-09T15:00:00Z');
 
+-- Aula esquecida aberta, fechada pelo bridge sem programa salvo no SPIKE (inatividade)
+INSERT INTO public.research_bancada_sessions(session_id,site_id,installation_id,school_code,phase,ended_by,interrupted,data_quality,session_payload,created_at,updated_at)
+VALUES('a0000000-0000-4000-8000-000000000005','SITE_A','10000000-0000-4000-8000-000000000001','ESC1','completed','inatividade',false,
+'{"heartbeat_count":8,"spike_status":"sem_alteracao","telemetry_events":0}'::jsonb,
+'{"duration_seconds":2400,"start_mode":"abertura_app","timeline":[{"event_type":"session_started","details":{}}]}'::jsonb,'2026-10-10T11:00:00Z','2026-10-10T11:40:00Z');
+
 -- Privilégios e modo da view
 SELECT has_view('public','research_aula_bancada','view research_aula_bancada exists');
 SELECT ok(NOT has_table_privilege('anon','public.research_aula_bancada','SELECT'),'anon cannot read aula view');
@@ -49,7 +55,7 @@ SELECT ok((SELECT 'security_invoker=true' = ANY(c.reloptions) FROM pg_class c WH
 
 -- Valores planos
 SET LOCAL ROLE service_role;
-SELECT is((SELECT count(*) FROM public.research_aula_bancada),4::bigint,'one row per bancada session');
+SELECT is((SELECT count(*) FROM public.research_aula_bancada),5::bigint,'one row per bancada session');
 SELECT is((SELECT concat_ws('|',polo,escola,maquina,installation_id,data_local,hora_inicio,hora_fim,duracao_min,encerrada_por,interrompida,fase,modo_inicio)
              FROM public.research_aula_bancada WHERE session_id='a0000000-0000-4000-8000-000000000001'),
           'SITE_A|ESC1|PET-LAB1-PC03|10000000-0000-4000-8000-000000000001|2026-10-06|08:05|08:55|50.0|instrutor|f|completed|atividade_spike',
@@ -74,6 +80,10 @@ SELECT is((SELECT concat_ws('|',versoes_programa,duracao_min,coalesce(spike_stat
              FROM public.research_aula_bancada WHERE session_id='a0000000-0000-4000-8000-000000000004'),
           '0|180.0|-|-',
           'timeline without spike_telemetry means zero saved versions');
+SELECT is((SELECT concat_ws('|',encerrada_por,interrompida,versoes_programa,duracao_min,modo_inicio)
+             FROM public.research_aula_bancada WHERE session_id='a0000000-0000-4000-8000-000000000005'),
+          'inatividade|f|0|40.0|abertura_app',
+          'lesson closed for inactivity passes through the view');
 RESET ROLE;
 
 -- A view não abre acesso que as tabelas não abrem

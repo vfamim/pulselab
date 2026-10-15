@@ -234,6 +234,25 @@ class TestRelatorio(unittest.TestCase):
         self.assertEqual(len(depois), len(antes) - 1)
         self.assertNotIn(alvo, {a["session_id"] for a in depois})
 
+    def test_encerrada_por_inatividade_nao_e_problema_mas_sem_programa_e(self):
+        base = {"polo": "PET", "installation_id": INST_A, "data_local": "2026-10-09", "hora_inicio": "08:00",
+                "fase": "completed", "interrompida": False, "spike_status": "ok", "origem": "nuvem"}
+        com_programa = rel.aula_da_nuvem(dict(base, session_id="c1000000-0000-4000-8000-000000000001", encerrada_por="inatividade",
+                                              duracao_min=95.0, versoes_programa=4, inicio_em="2026-10-09T11:00:00+00:00"))
+        sem_programa = rel.aula_da_nuvem(dict(base, session_id="c1000000-0000-4000-8000-000000000002", encerrada_por="inatividade",
+                                              duracao_min=40.0, versoes_programa=0, spike_status="sem_alteracao",
+                                              inicio_em="2026-10-09T13:00:00+00:00"))
+        aulas = rel.juntar_aulas([com_programa, sem_programa])
+        por_id = {a["session_id"]: a for a in aulas}
+        self.assertEqual((por_id[com_programa["session_id"]]["qualidade"], por_id[com_programa["session_id"]]["motivo_qualidade"]), ("boa", ""))
+        self.assertEqual((por_id[sem_programa["session_id"]]["qualidade"], por_id[sem_programa["session_id"]]["motivo_qualidade"]),
+                         ("ruim", "nenhum programa salvo"))
+        ind = rel.indicadores(aulas)
+        self.assertEqual((ind["pct_sem_spike"], ind["pct_encerradas_instrutor"], ind["pct_interrompidas"]), (50.0, 0.0, 0.0))
+        self.assertEqual(rel.ENCERRAMENTO_LEIGO["inatividade"], "sem uso do SPIKE por 40 min")
+        md = rel.gerar_markdown(aulas, rel.resumo_polos(aulas), [], rel.dt.date(2026, 10, 15), None, None, None, ["nuvem"], [])
+        self.assertIn("| sem uso do SPIKE por 40 min |", md)
+
     def test_juntar_nao_duplica_e_prefere_aula_encerrada(self):
         pendrive, _ = rel.ler_sqlite(self.sqlite)
         nuvem_s5 = rel.aula_da_nuvem({

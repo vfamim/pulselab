@@ -871,6 +871,15 @@ class TestRetiradaEQualidadeDaBancada(unittest.TestCase):
         # PostgREST exige as mesmas chaves em todos os registros do lote
         self.assertEqual(set(rec), set(legacy))
 
+    def test_encerrada_por_inatividade_e_aceita(self):
+        snap = self.snapshot(self.KEPT, ended_by="inatividade", interrupted=False, data_quality={"telemetry_events": 0})
+        self.assertEqual(imp.build_bancada_record(snap, "agora")["ended_by"], "inatividade")
+        self.assertEqual(imp.upsert_session_sqlite(self.conn, snap, "a.json", "t1"), "inserted")
+        self.assertEqual(
+            self.conn.execute("SELECT ended_by FROM sessions WHERE session_id = ?", (self.KEPT,)).fetchone()[0],
+            "inatividade",
+        )
+
     def test_dedup_mantem_snapshot_encerrado(self):
         done = imp.build_bancada_record(self.snapshot(self.KEPT), "t")
         open_ = imp.build_bancada_record(self.snapshot(self.KEPT, status="in_progress"), "t")

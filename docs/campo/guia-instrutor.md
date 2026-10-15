@@ -170,7 +170,7 @@ Já encerrou a turma? Use do mesmo jeito: vale para a última aula encerrada, se
 
 O PulseLab **continua ligado**. A próxima turma começa sozinha no primeiro programa salvo no LEGO SPIKE.
 
-Esqueceu de encerrar? A turma é encerrada sozinha depois de **3 horas**, ou quando o computador fica **20 minutos ou mais desligado ou suspenso**.
+Esqueceu de encerrar? A turma é encerrada sozinha depois de **40 minutos sem programa salvo no LEGO SPIKE**, depois de **3 horas**, ou quando o computador fica **20 minutos ou mais desligado ou suspenso**.
 
 ---
 
