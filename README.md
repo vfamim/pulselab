@@ -21,7 +21,7 @@ pendrive.
   (pergunta coletiva com 4 carinhas ou "Preferimos não responder"; resultado 0 a 3 e apoio
   nenhum/algum/muito, que o instrutor pode pular). Sem encerramento, fecha sozinha depois de
   3 horas ou de mais de 20 minutos com o computador desligado. Os itens estão em
-  `web/agent-simulator/lib/contracts.js` como rascunho até validação do pesquisador.
+  `apps/student-pwa/lib/contracts.js` como rascunho até validação do pesquisador.
 - Cada sessão registra como terminou (instrutor, tempo, sem encerramento), interrupções e a
   situação da pasta do SPIKE. Do programa: estrutura de cada versão salva (só tipos de blocos),
   escore de pensamento computacional adaptado de Dr. Scratch (não validado) e, com calendário de
@@ -51,7 +51,7 @@ Cada computador guarda tudo localmente e envia ao Supabase quando tiver internet
    `python3 supabase/scripts/provision_device.py --site-id PET --token-polo --max-usos 40 --validade-dias 60 --output token-PET.json`
    (precisa da service role; o arquivo de saída fica com permissão 0600 e não vai para o repositório).
 2. O token entra no pacote do polo:
-   `python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae <CAAE> --token-cadastro token-PET.json`
+   `python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae <CAAE> --token-cadastro token-PET.json`
 3. No primeiro contato com a internet, cada máquina se cadastra sozinha, apaga o token do disco
    e passa a renovar o acesso (validade de 1 hora) por conta própria.
 
@@ -84,31 +84,49 @@ Ao abrir, o launcher consulta a última release publicada no GitHub (até 2 s se
 ## Publicar uma versão
 
 ```sh
-python3 scripts/publicar-release.py gerar-chave       # uma vez; chave privada em ~/.pulselab
-./scripts/build-offline-package.sh                    # gera o ZIP da versão em VERSION
-python3 scripts/publicar-release.py publicar --pre    # pré-release: não chega às máquinas
-gh release edit vX.Y.Z --prerelease=false --latest    # promove: máquinas atualizam
+python3 tooling/release/publicar-release.py gerar-chave       # uma vez; chave privada em ~/.pulselab
+./tooling/release/build-offline-package.sh                    # gera dist/PulseLab-X.Y.Z-Windows.zip
+python3 tooling/release/publicar-release.py publicar --pre    # pré-release: não chega às máquinas
+gh release edit vX.Y.Z --prerelease=false --latest           # promove: máquinas atualizam
 ```
 
 Pacote de polo:
 
 ```sh
-python3 scripts/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234 --retencao-dias 180
-python3 scripts/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
+python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234 --retencao-dias 180
+python3 tooling/polo/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
 ```
 
 ## Desenvolvimento
 
 ```sh
-cd web/agent-simulator && npm ci && npm run test:unit && npm run build
-python3 scripts/check-version-consistency.py
-python3 -m unittest scripts.test_importador scripts.test_release scripts.test_build_hosting scripts.test_bridge_cloud scripts.test_spike_parser
-pwsh -File scripts/test-launcher-update.ps1
-python3 scripts/check-database.py   # Docker: migrações e RLS num Postgres descartável
+cd apps/student-pwa && npm ci && npm run test:unit && npm run build && cd ../..
+python3 tooling/release/check-version-consistency.py
+python3 -m unittest discover -s tests/python -p 'test_*.py'
+pwsh -File tests/powershell/test-launcher-update.ps1
+python3 tests/check-database.py   # Docker: migrações e RLS num Postgres descartável
 ```
 
-O site no Firebase publica apenas a lista de pastas de `scripts/build-hosting.py`
-(montada em `hosting-dist/`). Toda mudança passa por PR com o CI verde.
+O site no Firebase publica apenas o que está listado em `tooling/site/build-hosting.py`
+(montado em `hosting-dist/`). Toda mudança passa por PR com o CI verde. Processo de release
+completo em [docs/engenharia/release.md](docs/engenharia/release.md).
+
+## Estrutura do repositório
+
+| Pasta | Conteúdo |
+|---|---|
+| `apps/student-pwa/` | PWA da bancada (React + Vite); o build vai para `alunos/` |
+| `apps/site/` | Site público: início, instalador, tutorial, testes e relatório |
+| `alunos/` | Build da PWA, servido pelo bridge local e pelo site |
+| `runtime/windows/` | Launcher, atualizador, bridge, bandeja e atalhos `.bat`, no mesmo layout da pasta `arquivos/` do ZIP |
+| `config/` | Configuração empacotada (defaults, config, catálogo de missões) |
+| `supabase/` | Migrações, testes SQL, função `enroll-device` e scripts de cadastro |
+| `tooling/release/` | Versão, empacotamento e release assinada |
+| `tooling/site/` | Montagem do site, guia do instrutor e relatório |
+| `tooling/polo/`, `tooling/data/` | Pacote do polo; importação dos dados de pendrive |
+| `tooling/dev/` | Atalhos e sondas para desenvolvimento local |
+| `tests/` | Testes Python, PowerShell e do banco |
+| `docs/` | Documentação por público ([índice](docs/README.md)) |
 
 Documentos v1/v1.4 são referências históricas. O agente WPF (`agent/`), o portal do instrutor
-(`instrutor/`) e o schema avulso (`schema/`) foram removidos na 3.0.7 e seguem no histórico do git.
+(`instrutor/`) e o schema avulso (`schema/`) foram removidos e seguem no histórico do git.

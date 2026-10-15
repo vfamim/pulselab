@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="PulseLab - Download e Instruções de Execução Simplificada para Windows">
+  <title>PulseLab | Download e Execução Simplificada (v2.4.0)</title>
+
+  <link rel="icon" href="/alunos/icon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b0813;
+      --card-bg: #151024;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --accent-purple: #7c3aed;
+      --accent-pink: #ec4899;
+      --accent-aqua: #00a7a0;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    header {
+      margin-bottom: 32px;
+      text-align: center;
+    }
+
+    .brand-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--accent-aqua);
+      margin-bottom: 12px;
+    }
+
+    .brand-mark .dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-aqua);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent-aqua);
+    }
+
+    h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 2.4rem;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 12px;
+      background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-subtitle {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-bottom: 24px;
+    }
+
+    .code-box {
+      background: #08060f;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.92rem;
+      color: #38bdf8;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      word-break: break-all;
+    }
+
+    .copy-btn {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 8px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .copy-btn:hover {
+      background: var(--accent-purple);
+      border-color: var(--accent-purple);
+    }
+
+    .steps-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .step-card {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 20px;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-purple);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+    }
+
+    .step-title {
+      font-weight: 700;
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .step-text {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .step-text code {
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .footer-links {
+      text-align: center;
+      margin-top: 40px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .footer-links a {
+      color: var(--accent-aqua);
+      text-decoration: none;
+      font-weight: 600;
+      margin: 0 8px;
+    }
+
+    .footer-links a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <div class="brand-mark">
+        <span class="dot"></span> PulseLab Protocol v2.4.0
+      </div>
+      <h1>Download e Instalação Offline</h1>
+      <p class="subtitle">O PulseLab inicia com o Windows e fica como um ícone na área de notificação (bandeja). Um serviço local guarda os registros no próprio computador. Nenhuma página fica aberta durante a aula e a internet não é necessária.</p>
+    </header>
+
+    <!-- CARD: DOWNLOAD PRINCIPAL DO PACOTE WINDOWS -->
+    <div class="card" style="border-color: rgba(0, 167, 160, 0.4); background: rgba(0, 167, 160, 0.06);">
+      <div class="card-title" style="color: #5eead4;">
+        <span>📦</span> Pacote PulseLab v3.0.8 para Windows (Oficinas Rotativas)
+      </div>
+      <div class="card-subtitle">
+        Pacote genérico: o app funciona normalmente, mas a coleta de pesquisa vem desligada. Ela só é ativada pelo pacote do polo, que traz o CAAE do parecer ético. Com a coleta ativa, os registros ficam em <code>dados_locais/</code>, saem por pendrive e vão para a nuvem quando a máquina está cadastrada e conectada.
+      </div>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; margin-bottom: 20px;">
+        <a href="https://github.com/vfamim/pulselab/releases/download/v3.0.8/PulseLab-3.0.8-Windows.zip" download class="copy-btn" style="background: var(--accent-aqua); border: none; font-size: 0.95rem; padding: 12px 24px; border-radius: 10px; font-weight: 800; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>⬇️</span> Baixar PulseLab-3.0.8-Windows.zip
+        </a>
+        <a href="/tutorial/" class="copy-btn" style="background: rgba(124, 58, 237, 0.3); border: 1px solid rgba(124, 58, 237, 0.5); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px;">
+          <span>🎨</span> Ver Guia Ilustrado / Slides
+        </a>
+        <a href="/alunos/?lab=1" target="_blank" class="copy-btn" style="background: rgba(16, 185, 129, 0.2); border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.9rem; padding: 12px 20px; border-radius: 10px; font-weight: 700; text-decoration: none; display: inline-flex; align-items: center; gap: 8px; color: #a7f3d0;">
+          <span>🧪</span> Testar PWA no Navegador
+        </a>
+      </div>
+
+      <div style="margin-bottom: 16px; font-size: 0.82rem; color: var(--text-muted);">
+        Checksum SHA-256 oficial: <a href="https://github.com/vfamim/pulselab/releases/download/v3.0.8/PulseLab-3.0.8-Windows.zip.sha256" style="color: var(--accent-aqua); text-decoration: underline; font-weight: 500; margin-left: 6px;">arquivo .sha256</a>
+      </div>
+
+      <div style="background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #a7f3d0;">
+        <strong>Sobre os dados:</strong> os registros ficam no computador por até 180 dias (prazo pendente de aprovação no protocolo/TCLE). São desidentificados, não anônimos: máquina e sessão recebem códigos aleatórios, mas a escola sabe quem sentou em cada bancada. Atualizações automáticas só instalam pacotes assinados pela equipe e voltam sozinhas à versão anterior se falharem. A pasta <code>dados_locais/</code> é preservada nas atualizações.
+      </div>
+    </div>
+
+    <!-- CARD: INSTRUÇÕES DE EXECUÇÃO EM 3 PASSOS -->
+    <div class="card">
+      <div class="card-title">
+        <span>📋</span> Como Instalar e Iniciar a Oficina (Em 3 Passos)
+      </div>
+      <div class="card-subtitle">
+        Procedimento direto e sem complexidade para instrutores e laboratórios:
+      </div>
+
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <div class="step-title">Baixar e Extrair</div>
+          <div class="step-text">
+            Baixe o arquivo <code>PulseLab-3.0.8-Windows.zip</code> acima e extraia (botão direito no arquivo &gt; "Extrair tudo..."). Na pasta extraída aparecem só o <code>Instalar-PulseLab.bat</code> e a pasta <code>arquivos</code>.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <div class="step-title">Instalar ou Iniciar</div>
+          <div class="step-text">
+            Dê dois cliques em <code>Instalar-PulseLab.bat</code>. Informe um rótulo para o computador (ex.: <code>PET-LAB1-PC03</code>). A instalação cria os atalhos <code>PulseLab - Iniciar Oficina</code> e <code>PulseLab - Exportar Dados</code>.
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <div class="step-title">Ícone na Bandeja</div>
+          <div class="step-text">
+            O PulseLab abre com o Windows e mostra um ícone perto do relógio. A sessão da turma começa sozinha e a oficina segue no LEGO SPIKE. O instrutor lê o <a href="https://github.com/vfamim/pulselab/blob/main/docs/campo/assentimento-verbal.md" style="color: var(--accent-aqua);">roteiro de assentimento verbal</a> no início e, no fim, clica com o botão direito no ícone e escolhe "Encerrar turma…".
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CARD: GUIA DE BOTÕES E CONTROLES DISPONÍVEIS -->
+    <div class="card" style="border-color: rgba(124, 58, 237, 0.4); background: rgba(124, 58, 237, 0.05);">
+      <div class="card-title" style="color: #c4b5fd;">
+        <span>🎮</span> Guia dos Botões e Controles da Aplicação (v2.4.0)
+
+      </div>
+      <div class="card-subtitle">
+        O menu do ícone do PulseLab (botão direito) e o que fica no computador:
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px;">
+        <div style="background: rgba(15, 11, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px;">
+          <strong style="color: #a78bfa; font-family: 'Outfit', sans-serif; font-size: 0.95rem; display: block; margin-bottom: 10px;">
+            ⚙️ No ícone da bandeja:
+          </strong>
+          <ul style="list-style: none; padding: 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
+            <li><strong style="color:#fff;">[Encerrar turma…]</strong>: Usado pelo instrutor no fim da aula. Encerra a gravação da turma sem abrir janelas; a próxima começa sozinha no primeiro programa salvo no LEGO SPIKE.</li>
+            <li><strong style="color:#fff;">[Não registrar esta turma]</strong>: Usado se alguém da bancada, ou a família, não quiser participar. Apaga os dados da turma atual naquele computador e pausa o registro até a próxima turma.</li>
+            <li><strong style="color:#fff;">[Ver situação]</strong>: Mostra se o registro está ativo ou pausado.</li>
+            <li><strong style="color:#fff;">[Fechar PulseLab]</strong>: Desliga o PulseLab até o computador ser ligado de novo (ou até usar o atalho).</li>
+            <li><strong style="color:#fff;">[Fechamento automático]</strong>: Sem encerramento, a sessão fecha sozinha depois de 3 horas ou se o computador ficar desligado por mais de 20 minutos.</li>
+          </ul>
+        </div>
+
+        <div style="background: rgba(15, 11, 30, 0.6); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 14px; padding: 18px;">
+          <strong style="color: #5eead4; font-family: 'Outfit', sans-serif; font-size: 0.95rem; display: block; margin-bottom: 10px;">
+            👥 No computador da escola:
+          </strong>
+          <ul style="list-style: none; padding: 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.6;">
+            <li><strong style="color:#fff;">[dados_locais/]</strong>: Pasta onde ficam os registros, por até 180 dias. Preservada nas atualizações.</li>
+            <li><strong style="color:#fff;">[PulseLab - Exportar Dados]</strong>: Atalho que copia os registros para um pendrive, com hash SHA-256.</li>
+            <li><strong style="color:#fff;">[Envio à nuvem]</strong>: Só quando a máquina está cadastrada e conectada.</li>
+            <li><strong style="color:#fff;">[Importação no computador do pesquisador]</strong>: As exportações de pendrive são consolidadas com <code>Importar-Para-Supabase.bat</code> do repositório; essa ferramenta não vai no pacote da escola.</li>
+            <li><strong style="color:#fff;">[Leitura do SPIKE]</strong>: Guarda a estrutura de cada versão salva do projeto (.llsp3), só tipos de blocos, nunca textos digitados.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <footer class="footer-links">
+      <p>
+        PulseLab Pesquisa Aplicada ·
+        <a href="/tutorial/">Tutorial & Guia Ilustrado</a> ·
+        <a href="/testes/">Ambiente de Testes</a> ·
+        <a href="/alunos/?lab=1">PWA (modo lab)</a> ·
+        <a href="/">Página Principal</a>
+      </p>
+    </footer>
+  </div>
+
+  <script>
+    function copySnippet(btn) {
+      const codeSpan = btn.parentElement.querySelector('span');
+      if (!codeSpan) return;
+      navigator.clipboard.writeText(codeSpan.textContent).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = "Copiado!";
+        setTimeout(() => { btn.textContent = orig; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

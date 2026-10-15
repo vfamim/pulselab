@@ -1,0 +1,95 @@
+#!/usr/bin/env python3
+"""Monta a pasta publicada no Firebase Hosting a partir de uma lista explícita.
+
+O hosting publica somente o que está em PUBLIC_ENTRIES. Arquivos fora da lista
+(credenciais, dados_locais, bases SQLite, scripts) nunca chegam ao site, mesmo
+que existam na raiz do repositório local.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import sys
+from pathlib import Path
+
+# Caminho publicado -> origem no repositório
+PUBLIC_ENTRIES = {
+    "index.html": "apps/site/index.html",
+    "pulselab.ico": "runtime/windows/pulselab.ico",
+    "assets": "apps/site/assets",
+    "alunos": "alunos",
+    "instalador": "apps/site/instalador",
+    "tutorial": "apps/site/tutorial",
+    "testes": "apps/site/testes",
+    "relatorio": "apps/site/relatorio",
+}
+
+# Binários ficam nas Releases do GitHub; o Hosting serve só o site estático.
+EXCLUDED_PREFIXES = ("instalador/downloads/",)
+EXCLUDED_SUFFIXES = (".zip", ".sha256")
+
+# Defesa em profundidade: mesmo dentro das pastas públicas, estes padrões nunca são publicados.
+FORBIDDEN_PATTERNS = (
+    "*adminsdk*",
+    "*.env",
+    ".env*",
+    "*.sqlite",
+    "*.sqlite3",
+    "*.db",
+    "*.pem",
+    "*.key",
+    "device_session.*",
+    "tokens.json",
+)
+
+OUTPUT_DIR_NAME = "hosting-dist"
+
+
+def is_forbidden(path: Path) -> bool:
+    return any(path.match(pattern) for pattern in FORBIDDEN_PATTERNS)
+
+
+def build(repo_root: Path, output: Path) -> list[str]:
+    if output.exists():
+        shutil.rmtree(output)
+    output.mkdir(parents=True)
+
+    published: list[str] = []
+    for entry, source_rel in PUBLIC_ENTRIES.items():
+        source = repo_root / source_rel
+        if not source.exists():
+            raise FileNotFoundError(f"Entrada pública ausente: {source_rel}")
+        files = [source] if source.is_file() else sorted(p for p in source.rglob("*") if p.is_file())
+        for file_path in files:
+            relative = Path(entry) / file_path.relative_to(source) if source.is_dir() else Path(entry)
+            posix = relative.as_posix()
+            if posix.startswith(EXCLUDED_PREFIXES) or posix.endswith(EXCLUDED_SUFFIXES):
+                continue
+            if is_forbidden(relative) or any(part.startswith(".") for part in relative.parts):
+                continue
+            target = output / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(file_path, target)
+            published.append(relative.as_posix())
+    return published
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", default=None, help="Pasta de saída (padrão: hosting-dist/ na raiz)")
+    args = parser.parse_args()
+
+    repo_root = Path(__file__).resolve().parents[2]
+    output = Path(args.output).resolve() if args.output else repo_root / OUTPUT_DIR_NAME
+    if output == repo_root or repo_root.is_relative_to(output):
+        print("Saída não pode ser a raiz do repositório.", file=sys.stderr)
+        return 1
+
+    published = build(repo_root, output)
+    print(f"{len(published)} arquivos em {output}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,9 +1,7 @@
 # Mudanças que alteram o que roda nas máquinas das escolas ou as regras do repositório
 AGENTS.md @vfamim
 release-public-key.json @vfamim
-pulselab.ps1 @vfamim
-pulselab-update.ps1 @vfamim
-pulselab-installation.ps1 @vfamim
+runtime/windows/ @vfamim
 version.json @vfamim
 config/ @vfamim
 .github/ @vfamim

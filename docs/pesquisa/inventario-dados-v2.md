@@ -1,7 +1,7 @@
 # Inventário de dados — v2 (a partir da 2.4.0)
 
 O que o PulseLab registra quando a coleta está ligada pelo pacote do polo.
-Fonte dos itens de encerramento: `web/agent-simulator/lib/contracts.js`
+Fonte dos itens de encerramento: `apps/student-pwa/lib/contracts.js`
 (manifesto do instrumento, com versão e SHA-256). Protocolo:
 [protocolo v2](protocolo-pesquisa-v2.md). Assentimento:
 [assentimento verbal](../campo/assentimento-verbal.md).

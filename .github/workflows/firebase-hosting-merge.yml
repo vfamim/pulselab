@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: 20
           cache: 'npm'
-          cache-dependency-path: web/agent-simulator/package-lock.json
+          cache-dependency-path: apps/student-pwa/package-lock.json
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,15 +30,14 @@ jobs:
 
       - name: Build PWA and generate offline packages
         run: |
-          cd web/agent-simulator
+          cd apps/student-pwa
           npm ci
           npm run build
           cd ../..
-          chmod +x scripts/build-offline-package.sh
-          ./scripts/build-offline-package.sh
+          ./tooling/release/build-offline-package.sh
 
       - name: Assemble public hosting folder
-        run: python3 scripts/build-hosting.py
+        run: python3 tooling/site/build-hosting.py
 
       - name: Deploy to Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
