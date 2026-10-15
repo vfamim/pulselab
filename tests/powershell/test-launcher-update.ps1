@@ -159,10 +159,11 @@ try {
     $badAuth = Initialize-PulseLabInstallation -InstallRoot $idRoot
     Assert-True ($badAuth.research_collection_enabled -eq $false) "autorizacao sem CAAE nao liga a coleta"
     Assert-True ($badAuth.site_id -eq "PET") "sede aplicada pelo provisionamento"
-    New-TextFile $prov '{"provisioning_id":"PET-2","site_id":"PET","research_collection_enabled":true,"research_authorization_version":"12345678.9.0000.1234","research_authorized_purposes":["academic_research"]}'
+    New-TextFile $prov '{"provisioning_id":"PET-2","site_id":"PET","research_collection_enabled":true,"research_authorization_version":"12345678.9.0000.1234","research_authorized_purposes":["academic_research"],"manifest_hmac_key":"chave-sintetica-do-polo"}'
     $goodAuth = Initialize-PulseLabInstallation -InstallRoot $idRoot
     Assert-True ($goodAuth.research_collection_enabled -eq $true) "CAAE valido liga a coleta"
     Assert-True ($goodAuth.installation_id -eq $first.installation_id -and $goodAuth.machine_label -eq "PET-LAB1-PC-03") "provisionamento preserva id e rotulo"
+    Assert-True ($goodAuth.manifest_hmac_key -eq "chave-sintetica-do-polo") "chave do pendrive copiada do provisionamento"
     $raw = Get-Content (Join-Path $idRoot "dados_locais\installation.json") -Raw
     Assert-True (-not ($raw -match [Regex]::Escape([Environment]::MachineName)) -and -not ($raw -match [Regex]::Escape([Environment]::UserName))) "sem nome do computador ou do usuario"
 } finally {

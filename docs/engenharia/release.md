@@ -60,3 +60,17 @@ não ficar quebrado.
 retenção de 1 a 365 dias, calendário de missões). A coleta de pesquisa só liga com `--caae`;
 `--sem-pesquisa` identifica o polo sem coletar. O arquivo é entregue separado do ZIP genérico, que
 nunca liga a coleta.
+
+O script também cria a chave do pendrive do polo (`manifest_hmac_key`). Ela vai no
+`provisionamento.json` e fica guardada em `dist-polos/chaves-manifesto.json`, que lista uma chave
+por polo. Gerar o pacote de novo reaproveita a chave. Nos polos, o exportador de pendrive assina a
+coleta com ela. No computador do pesquisador, o importador usa o arquivo para aceitar a coleta e
+enviá-la ao Supabase.
+
+`dist-polos/chaves-manifesto.json` é tão sensível quanto o token de cadastro. Ele fica fora do git
+e sai com permissão 0600. Faça backup num lugar seguro: se o arquivo se perder, os pendrives dos
+polos não chegam à nuvem até gerar pacotes novos e reinstalar as máquinas. Para trocar a chave de
+um polo, apague a linha dele no arquivo e gere o pacote de novo. Pendrives exportados antes da
+reinstalação continuam assinados com a chave antiga. A variável `PULSELAB_MANIFEST_HMAC_KEY`
+continua valendo: no exportador ela tem prioridade sobre a chave do polo, e no importador é aceita
+junto com a chave do polo.

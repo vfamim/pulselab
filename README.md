@@ -61,7 +61,7 @@ identificação da máquina e os registros. Guia para instrutores:
 Tudo fica em `dados_locais/` no computador, pasta que nenhuma atualização ou reinstalação apaga.
 Com internet, o bridge envia ao Supabase a cada 30 segundos: os eventos um a um e o resumo da
 sessão quando ela fecha. Polos sem internet enviam quando o instrutor conecta ou exportam por
-pendrive, e o pesquisador importa com `tooling/data/Importar-Para-Supabase.bat`.
+pendrive (veja abaixo).
 
 O cadastro das máquinas na nuvem é automático, com um token por polo:
 
@@ -75,6 +75,28 @@ python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae
 No primeiro contato com a internet, cada máquina se cadastra pela função `enroll-device`, apaga o
 token do disco e passa a renovar o acesso sozinha. O token vai dentro do ZIP do polo: se o pacote
 circular fora do polo, revogue-o (`revoked_at` em `device_enrollment_tokens`) e gere outro.
+
+### Polos sem internet (pendrive)
+
+Os dados do pendrive vão para o mesmo Supabase dos polos com internet:
+
+1. O pacote do polo leva uma chave do polo. A mesma chave fica no computador do pesquisador, em
+   `dist-polos/chaves-manifesto.json`. Gerar o pacote de novo reaproveita a chave do polo.
+2. No polo, o atalho **PulseLab - Exportar Dados** copia os registros para o pendrive e assina a
+   coleta com a chave. A chave fica no computador da escola e não vai para o pendrive.
+3. O pesquisador conecta o pendrive e roda `tooling/data/Importar-Para-Supabase.bat` (ou
+   `python3 tooling/data/importar-para-supabase.py`). O importador escolhe a chave pelo polo
+   escrito na coleta e só envia à nuvem o que confere.
+
+Guarde `dist-polos/chaves-manifesto.json` com o mesmo cuidado do token: quem tem a chave consegue
+fazer uma coleta falsa daquele polo passar como verdadeira. O arquivo fica fora do git. Se gerar
+pacotes em outro computador, leve o arquivo junto ou indique o caminho com `--chaves`. Se faltar a
+chave de um polo, o importador diz qual polo e onde colocar o arquivo. Máquinas instaladas com um
+pacote antigo exportam sem assinatura: reinstale com o pacote do polo gerado por esta versão. Sem
+chave, `--no-cloud` guarda a coleta só no SQLite local.
+
+Quando a turma não é registrada, a retirada vale mesmo se a pasta do pendrive for recusada,
+porque ela só apaga dados.
 
 ## Atualização automática
 

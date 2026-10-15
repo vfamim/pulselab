@@ -9,6 +9,11 @@ Com --token-cadastro (arquivo gerado por supabase/scripts/provision_device.py --
 cada máquina se cadastra sozinha na nuvem no primeiro contato com a internet. O token vai
 dentro do ZIP: distribua o pacote só para o polo e revogue o token se o ZIP circular.
 
+Cada polo recebe também uma chave HMAC (manifest_hmac_key) que assina as coletas exportadas por
+pendrive. A mesma chave fica do lado do pesquisador em <out-dir>/chaves-manifesto.json
+({site_id: chave}); o importador a usa para aceitar o pendrive do polo e enviá-lo à nuvem. Gerar o
+pacote de novo reutiliza a chave do polo. Guarde esse arquivo com o mesmo cuidado do token.
+
 Exemplo:
   python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234
   python3 tooling/polo/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
@@ -23,7 +28,9 @@ import argparse
 import csv
 import importlib.util
 import json
+import os
 import re
+import secrets
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -32,6 +39,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CAAE_PATTERN = re.compile(r"^\d{8}\.\d\.\d{4}\.\d{4}$")
 POLO_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{1,23}$")
+MANIFEST_KEYS_FILE = "chaves-manifesto.json"
+MANIFEST_KEY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 
 
 def load_builder():
@@ -51,6 +60,38 @@ def read_enrollment_token(bundle_path: Path, polo: str) -> str:
     if len(token) < 32:
         raise ValueError("Arquivo de token de cadastro sem enrollment_token válido.")
     return token
+
+
+def ensure_manifest_key(keys_path: Path, polo: str) -> str:
+    """Chave HMAC do polo para assinar o pendrive: reutiliza a de keys_path ou cria e grava (0600)."""
+    keys: dict[str, str] = {}
+    if keys_path.is_file():
+        try:
+            keys = json.loads(keys_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{keys_path} não é um JSON válido ({exc}); corrija o arquivo antes de gerar o pacote.") from exc
+        if not isinstance(keys, dict):
+            raise ValueError(f"{keys_path} deve ser um objeto {{polo: chave}}.")
+    current = keys.get(polo)
+    if isinstance(current, str) and MANIFEST_KEY_PATTERN.match(current):
+        return current
+    if current is not None:
+        raise ValueError(f"Chave do polo {polo} em {keys_path} é inválida (esperado hexadecimal de 64 caracteres).")
+
+    key = secrets.token_hex(32)
+    keys[polo] = key
+    keys_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = keys_path.with_name(keys_path.name + ".tmp")
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(dict(sorted(keys.items())), handle, indent=2)
+        handle.write("\n")
+    os.replace(tmp, keys_path)
+    try:
+        os.chmod(keys_path, 0o600)
+    except OSError:
+        pass
+    return key
 
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -119,12 +160,14 @@ def main(argv: list[str] | None = None) -> int:
             provisioning["enrollment_token"] = read_enrollment_token(Path(args.token_cadastro), args.polo)
         if args.calendario:
             provisioning["calendario_missoes"] = read_mission_calendar(Path(args.calendario))
+        out_dir = Path(args.out_dir).resolve()
+        keys_path = out_dir / MANIFEST_KEYS_FILE
+        provisioning["manifest_hmac_key"] = ensure_manifest_key(keys_path, args.polo)
     except ValueError as exc:
         print(f"Erro: {exc}", file=sys.stderr)
         return 2
 
     builder = load_builder()
-    out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     output = out_dir / f"PulseLab-{builder.VERSION}-{args.polo}-Windows.zip"
 
@@ -137,6 +180,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.token_cadastro:
         state += "; cadastro automático na nuvem"
     print(f"Pacote do polo {args.polo}: {output} — {state}")
+    print(f"Chave do pendrive do polo em {keys_path}: guarde com o mesmo cuidado do token (o importador precisa dela).")
     return 0
 
 

@@ -87,9 +87,11 @@ def verify_manifest_signature(
     target_dir: Path,
     hmac_key: str = "",
     require_signature: bool = False,
+    hmac_keys: list[str] | None = None,
 ) -> tuple[bool, str]:
     """
     Verifica a autenticidade do manifesto através de assinatura HMAC-SHA256 institucional.
+    - hmac_key e hmac_keys são as chaves aceitas (a do polo e a de PULSELAB_MANIFEST_HMAC_KEY).
     - Usa compare_digest para prevenir timing attacks.
     - Se require_signature=True: falha se chave ou assinatura estiverem ausentes ou inválidas.
     - Se require_signature=False e assinatura ausente: retorna (True, "unsigned").
@@ -119,27 +121,28 @@ def verify_manifest_signature(
             return False, "Assinatura institucional ausente: envio privilegiado em nuvem exige manifesto assinado (manifesto_coleta.sig)."
         return True, "unsigned"
 
-    if not hmac_key:
+    keys = [k for k in [hmac_key, *(hmac_keys or [])] if k]
+    if not keys:
         if require_signature:
-            return False, "Chave institucional ausente: envio privilegiado em nuvem exige PULSELAB_MANIFEST_HMAC_KEY configurada no ambiente."
-        return False, "Assinatura presente mas chave PULSELAB_MANIFEST_HMAC_KEY ausente."
+            return False, "Chave institucional ausente: envio privilegiado em nuvem exige a chave do polo (dist-polos/chaves-manifesto.json) ou PULSELAB_MANIFEST_HMAC_KEY."
+        return False, "Assinatura presente mas sem chave do polo nem PULSELAB_MANIFEST_HMAC_KEY para conferi-la."
 
     try:
-        expected_sig = sig_file.read_text(encoding="utf-8").strip().lower()
+        # utf-8-sig: exportadores até esta versão gravavam o .sig com BOM.
+        expected_sig = sig_file.read_text(encoding="utf-8-sig").strip().lower()
         if len(expected_sig) != 64 or not all(c in "0123456789abcdef" for c in expected_sig):
             return False, f"Formato de assinatura inválido em {sig_file.name} (esperado digest hexadecimal de 64 caracteres)."
 
         manifest_bytes = manifest_file.read_bytes()
-        actual_hmac = hmac.new(
-            hmac_key.encode("utf-8"),
-            manifest_bytes,
-            hashlib.sha256
-        ).hexdigest().lower()
-
-        if hmac.compare_digest(actual_hmac, expected_sig):
-            return True, f"Assinatura HMAC-SHA256 institucional válida ({sig_file.name})"
-        else:
-            return False, f"Assinatura HMAC-SHA256 institucional inválida ou divergente em {sig_file.name} (digest divergente)."
+        for key in keys:
+            actual_hmac = hmac.new(
+                key.encode("utf-8"),
+                manifest_bytes,
+                hashlib.sha256
+            ).hexdigest().lower()
+            if hmac.compare_digest(actual_hmac, expected_sig):
+                return True, f"Assinatura HMAC-SHA256 institucional válida ({sig_file.name})"
+        return False, f"Assinatura HMAC-SHA256 institucional inválida ou divergente em {sig_file.name} (digest divergente)."
     except Exception as exc:
         return False, f"Erro ao processar assinatura HMAC-SHA256: {exc}"
 
@@ -149,6 +152,7 @@ def validate_manifest(
     require_manifest: bool = True,
     hmac_key: str = "",
     require_signature: bool = False,
+    hmac_keys: list[str] | None = None,
 ) -> tuple[bool, str]:
     """
     Valida a integridade dos arquivos em uma pasta de coleta através do manifesto_*.txt
@@ -158,7 +162,7 @@ def validate_manifest(
     - Se houver path traversal, duplicatas de declaração ou ambiguidade em formato legado: falha de forma segura.
     - Se houver arquivo ausente ou adulterado (SHA-256 divergente): falha de forma segura.
     - Se houver arquivo .json ou .jsonl extra na pasta que não esteja declarado no manifesto: falha de forma segura.
-    - Se require_signature=True: exige assinatura HMAC válida com PULSELAB_MANIFEST_HMAC_KEY.
+    - Se require_signature=True: exige assinatura HMAC válida com a chave do polo ou PULSELAB_MANIFEST_HMAC_KEY.
     """
     manifest_candidates = list(target_dir.glob("manifesto_*.txt"))
     if not manifest_candidates:
@@ -261,9 +265,9 @@ def validate_manifest(
                     return False, f"Arquivo extra não declarado no manifesto: {cand_path.name}"
 
     # Verificação de autenticidade HMAC-SHA256 institucional
-    if require_signature or hmac_key:
+    if require_signature or hmac_key or hmac_keys:
         sig_valid, sig_msg = verify_manifest_signature(
-            target_dir, hmac_key=hmac_key, require_signature=require_signature
+            target_dir, hmac_key=hmac_key, require_signature=require_signature, hmac_keys=hmac_keys
         )
         if not sig_valid:
             return False, sig_msg
@@ -272,6 +276,53 @@ def validate_manifest(
         return True, f"Manifesto válido ({checked_files} arquivos verificados, origem não autenticada)"
 
     return True, f"Manifesto válido ({checked_files} arquivos verificados)"
+
+
+MANIFEST_KEYS_FILE = "chaves-manifesto.json"
+SIGNATURE_FAILURES = ("Assinatura institucional ausente", "Chave institucional ausente", "Assinatura HMAC-SHA256 institucional inválida")
+
+
+def load_manifest_keys(path: Path) -> dict[str, str]:
+    """Lê dist-polos/chaves-manifesto.json ({site_id: chave}), gerado por tooling/polo/gerar-pacote-polo.py."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} deve ser um objeto {{polo: chave}}.")
+    return {str(site): str(key) for site, key in data.items() if isinstance(key, str) and key}
+
+
+def read_manifest_site_id(target_dir: Path) -> str:
+    """Código do polo declarado no manifesto do pendrive (linha 'Polo (site_id)'); vazio se ausente."""
+    for manifest_file in target_dir.glob("manifesto_*.txt"):
+        try:
+            text = manifest_file.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            label, sep, value = line.partition(":")
+            if sep and label.strip() == "Polo (site_id)":
+                return value.strip()
+    return ""
+
+
+def missing_key_hint(site_id: str, keys_path: Path, polo_keys: dict[str, str]) -> str:
+    """O que fazer quando a pasta não pôde ser autenticada para envio à nuvem."""
+    if not site_id:
+        return (
+            "O pendrive não diz de que polo veio: o computador foi instalado com um pacote antigo ou genérico. "
+            "Gere o pacote do polo de novo (tooling/polo/gerar-pacote-polo.py), reinstale nesse computador e "
+            "exporte outra vez. Para guardar só no SQLite local, rode com --no-cloud."
+        )
+    if site_id not in polo_keys:
+        return (
+            f"Falta a chave do polo {site_id} em {keys_path}. Copie para esse caminho o chaves-manifesto.json "
+            f"da pasta dist-polos do computador onde o pacote do polo {site_id} foi gerado, ou indique o arquivo "
+            "com --chaves <arquivo>. Para guardar só no SQLite local, rode com --no-cloud."
+        )
+    return (
+        f"A assinatura não confere com a chave do polo {site_id} em {keys_path}. Confira se é o mesmo "
+        f"chaves-manifesto.json usado para gerar o pacote instalado no polo {site_id}; se o pacote foi gerado "
+        "em outro computador, use o arquivo de lá. Se o pendrive foi alterado, peça uma nova exportação."
+    )
 
 
 def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
@@ -1010,6 +1061,11 @@ def main() -> int:
         help="Chave HMAC-SHA256 institucional para autenticação do manifesto (ou usa PULSELAB_MANIFEST_HMAC_KEY).",
         default="",
     )
+    parser.add_argument(
+        "--chaves",
+        help="Chaves de pendrive por polo, geradas por gerar-pacote-polo.py (padrão: dist-polos/chaves-manifesto.json).",
+        default="",
+    )
 
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[2]
@@ -1072,30 +1128,51 @@ def main() -> int:
         args.manifest_hmac_key
         or os.environ.get("PULSELAB_MANIFEST_HMAC_KEY", "")
     )
+    keys_path = Path(args.chaves).resolve() if args.chaves else repo_root / "dist-polos" / MANIFEST_KEYS_FILE
+    polo_keys: dict[str, str] = {}
+    if keys_path.is_file():
+        try:
+            polo_keys = load_manifest_keys(keys_path)
+        except (OSError, ValueError) as exc:
+            print(f"[ERRO] Não foi possível ler as chaves dos polos em {keys_path}: {exc}")
+            return 1
+        print(f"[OK] Chaves de pendrive de {len(polo_keys)} polo(s) em {keys_path}\n")
+    elif args.chaves:
+        print(f"[ERRO] Arquivo de chaves não encontrado: {keys_path}")
+        print("       Use o chaves-manifesto.json da pasta dist-polos onde os pacotes dos polos foram gerados.")
+        return 1
 
     for src in sources:
         sub_collects = [p for p in src.glob("Coleta_*") if p.is_dir()]
         target_dirs = sub_collects if sub_collects else [src]
 
         for tdir in target_dirs:
+            # Retiradas valem mesmo se a pasta for rejeitada: só apagam dados, nunca acrescentam.
+            tdir_withdrawn = read_withdrawn_sessions(tdir)
+            withdrawn_from_exports |= tdir_withdrawn
+
             # Validação estrita de integridade SHA-256 e autenticidade HMAC-SHA256 institucional
             require_m = not args.allow_unverified
             require_sig = not args.no_cloud
+            site_id = read_manifest_site_id(tdir)
             valid, manifest_msg = validate_manifest(
                 tdir,
                 require_manifest=require_m,
                 hmac_key=hmac_key,
                 require_signature=require_sig,
+                hmac_keys=[polo_keys[site_id]] if site_id in polo_keys else None,
             )
             if not valid:
                 print(f"[!] SEGURANÇA: Pasta rejeitada por falha no manifesto ({tdir.name}): {manifest_msg}")
+                if manifest_msg.startswith(SIGNATURE_FAILURES):
+                    print(f"    O que fazer: {missing_key_hint(site_id, keys_path, polo_keys)}")
+                if tdir_withdrawn:
+                    print(f"    Retiradas desta pasta honradas mesmo assim: {len(tdir_withdrawn)} sessão(ões).")
                 continue
             elif "autenticado" in manifest_msg or "Assinatura HMAC-SHA256" in manifest_msg:
                 print(f"[✓] Origem autenticada e integridade comprovada via HMAC-SHA256 em: {tdir.name} ({manifest_msg})")
             elif manifest_msg != "no_manifest":
                 print(f"[!] Integridade verificada, origem não autenticada em: {tdir.name} ({manifest_msg})")
-
-            withdrawn_from_exports |= read_withdrawn_sessions(tdir)
 
             s_dir = tdir / "sessoes"
             if s_dir.is_dir():
@@ -1328,7 +1405,7 @@ def main() -> int:
         print(f"\nSincronizando com o Supabase ({sb_url})...")
 
         # 3.0 Retiradas primeiro: tombstone na nuvem e exclusão do que já tinha chegado.
-        # Só as listas desta execução, que passaram pela assinatura exigida no envio à nuvem.
+        # Listas de todas as coletas desta execução, mesmo das pastas rejeitadas: retirada só apaga dados.
         if withdrawn_from_exports:
             sent_tombstones, withdraw_err = withdraw_sessions_remote(withdrawn_from_exports, sb_url, sb_key)
             print(f"  - Sessões retiradas: {sent_tombstones}/{len(withdrawn_from_exports)} tombstones gravados na nuvem")
