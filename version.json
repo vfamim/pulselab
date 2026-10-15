@@ -1,7 +1,7 @@
 {
-  "version": "3.0.2",
+  "version": "3.0.3",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.0.2/PulseLab-3.0.2-Windows.zip",
-  "notes": "PulseLab v3.0.2 - canal legado: migra máquinas até 2.2.7 para o atualizador assinado (releases do GitHub)."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.0.3/PulseLab-3.0.3-Windows.zip",
+  "notes": "PulseLab v3.0.3 - encerramento completo do aplicativo ao encerrar turma e op\u00e7\u00e3o Fechar PulseLab na bandeja."
 }

@@ -147,26 +147,48 @@ function Invoke-TrayApi {
     return Invoke-RestMethod -Uri "$($script:BaseUrl)$Path" -TimeoutSec 3
 }
 
+function Exit-PulseLabApp {
+    $signalFile = Join-Path $InstallRoot "dados_locais\shutdown.signal"
+    try { [System.IO.File]::WriteAllText($signalFile, "shutdown") } catch {}
+    try {
+        [void](Invoke-TrayApi "/v1/shutdown" "POST")
+    } catch {}
+    try {
+        Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object {
+            try {
+                $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
+                $cmd -and ($cmd -match "43128" -or $cmd -match "alunos")
+            } catch { $false }
+        } | Stop-Process -Force -ErrorAction SilentlyContinue
+    } catch {}
+    $notify.Visible = $false
+    [System.Windows.Forms.Application]::Exit()
+}
+
 function Close-CurrentTurma {
     Update-TrayStatus
     $s = $script:LastStatus
     if (-not $s -or -not $s.session) {
-        $notify.ShowBalloonTip(3000, "PulseLab", "Nenhuma turma ativa sendo registrada no momento.", [System.Windows.Forms.ToolTipIcon]::Info)
+        $ans = Show-ModernDialog `
+            -Message "Nenhuma turma ativa no momento.`n`nDeseja fechar o PulseLab agora?" `
+            -Title "PulseLab" `
+            -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
+            -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
+        if ($ans -eq [System.Windows.Forms.DialogResult]::Yes) {
+            Exit-PulseLabApp
+        }
         return
     }
     $answer = Show-ModernDialog `
-        -Message "Deseja encerrar a turma deste computador agora?`n`nA gravação desta aula será finalizada e a próxima começará automaticamente quando o próximo programa for salvo no LEGO SPIKE." `
+        -Message "Deseja encerrar a sessão e fechar o PulseLab agora?`n`nA gravação desta aula será finalizada e o aplicativo será encerrado." `
         -Title "PulseLab — Encerrar Turma" `
         -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
         -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
     try {
         $result = Invoke-TrayApi "/v1/session/close" "POST"
-        $notify.ShowBalloonTip(4000, "PulseLab", "Turma encerrada com sucesso. Pronto para a próxima aula.", [System.Windows.Forms.ToolTipIcon]::Info)
-    } catch {
-        Show-ModernDialog -Message "Não foi possível encerrar a turma agora. Tente de novo em 1 minuto." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
-    }
-    Update-TrayStatus
+    } catch {}
+    Exit-PulseLabApp
 }
 
 function Restart-PulseLab {
@@ -205,6 +227,8 @@ $itemClose = $menu.Items.Add("Encerrar turma...")
 $itemPause = $menu.Items.Add("Não registrar esta turma")
 [void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
 $itemStatus = $menu.Items.Add("Ver situação")
+[void]$menu.Items.Add((New-Object System.Windows.Forms.ToolStripSeparator))
+$itemExit = $menu.Items.Add("Fechar PulseLab")
 $notify.ContextMenuStrip = $menu
 
 function Set-TrayText([string]$Text) {
@@ -214,9 +238,25 @@ function Set-TrayText([string]$Text) {
 }
 
 function Update-TrayStatus {
+    $signalFile = Join-Path $InstallRoot "dados_locais\shutdown.signal"
+    if (-not (Test-Path -LiteralPath $signalFile)) {
+        $signalFile = Join-Path $InstallRoot "shutdown.signal"
+    }
+    if (Test-Path -LiteralPath $signalFile) {
+        try { Remove-Item -LiteralPath $signalFile -Force -ErrorAction SilentlyContinue } catch {}
+        $notify.Visible = $false
+        [System.Windows.Forms.Application]::Exit()
+        return
+    }
     $status = $null
     try { $status = Invoke-TrayApi "/v1/status" } catch { $status = $null }
     if (-not $status) {
+        if (Test-Path -LiteralPath $signalFile) {
+            try { Remove-Item -LiteralPath $signalFile -Force -ErrorAction SilentlyContinue } catch {}
+            $notify.Visible = $false
+            [System.Windows.Forms.Application]::Exit()
+            return
+        }
         $script:Failures++
         $script:LastStatus = $null
         $notify.Icon = $script:IconRed
@@ -256,6 +296,17 @@ function Update-TrayStatus {
 }
 
 $itemClose.add_Click({ Close-CurrentTurma })
+
+$itemExit.add_Click({
+    $answer = Show-ModernDialog `
+        -Message "Deseja fechar o PulseLab agora?`n`nO monitoramento e o servidor local serão desligados." `
+        -Title "PulseLab — Fechar Aplicativo" `
+        -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
+        -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
+    if ($answer -eq [System.Windows.Forms.DialogResult]::Yes) {
+        Exit-PulseLabApp
+    }
+})
 
 $itemPause.add_Click({
     $answer = Show-ModernDialog `

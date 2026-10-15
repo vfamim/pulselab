@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { deleteLocalStore } from "../lib/student-store.js";
 
-// Página da bancada / encerramento silencioso (v3.0.2).
+// Página da bancada / encerramento silencioso (v3.0.3).
 // Durante a aula nenhuma página precisa ficar aberta. O encerramento no PC é direto e silencioso:
 // zero formulários para os alunos ou instrutor no computador da bancada.
-// A avaliação pedagógica do instrutor é realizada separadamente no portal/celular.
+// Ao encerrar a turma, o PulseLab dispara o shutdown para fechar a janela e o processo backend.
 
-const CLIENT_VERSION = "student-pwa/3.0.2";
+const CLIENT_VERSION = "student-pwa/3.0.3";
 const BRIDGE_URL = "http://127.0.0.1:43128";
 
 // Chaves das versões até 2.3.x, quando a página ficava aberta e guardava a sessão no navegador.
@@ -62,9 +62,10 @@ function LabPanel() {
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await bridgeGet("/v1/status"));
-    } catch {
-      setStatus(null);
+      const data = await bridgeGet("/v1/status");
+      setStatus(data);
+    } catch (e) {
+      setMessage(`Erro: ${e.message}`);
     }
   }, []);
 
@@ -73,30 +74,36 @@ function LabPanel() {
   }, [refresh]);
 
   async function testPause() {
-    const { status: code, body } = await bridgePost("/v1/session/pause", {}).catch(() => ({ status: 0, body: {} }));
-    setMessage(code === 200 ? `Pausado (dados apagados: ${body.purged_session ? "sim" : "não havia turma"}).` : "Falha ao pausar.");
-    void refresh();
+    setMessage("Pausando registro...");
+    try {
+      const res = await bridgePost("/v1/session/pause", {});
+      setMessage(`Pausado: ${JSON.stringify(res.body)}`);
+      await refresh();
+    } catch (e) {
+      setMessage(`Erro ao pausar: ${e.message}`);
+    }
   }
 
   return (
-    <aside className="lab-diagnostic" aria-label="Diagnóstico de laboratório">
+    <aside className="lab-diagnostic" aria-label="Painel de Diagnóstico do Laboratório">
       <div className="lab-diagnostic__card">
         <span className="eyebrow">Diagnóstico de Laboratório</span>
         <h2>Modo de Inspeção (?lab=1)</h2>
-        <p>oficina de robótica · v3.0.2 · {CLIENT_VERSION}</p>
+        <p>oficina de robótica · v3.0.3 · {CLIENT_VERSION}</p>
         <div className="lab-diagnostic__status">
           {status ? (
             <>
-              <div>Pesquisa: {status.research_active ? "autorizada" : "Modo Livre (sem pesquisa)"}{status.paused ? " · pausada" : ""}</div>
-              <div>Turma: {status.session ? `${status.session.session_id} · ${status.session.elapsed_min} min` : "nenhuma"}</div>
-              <div>Telemetria SPIKE: {status.session ? status.session.telemetry_events : 0} · pasta: {status.spike_environment?.status}</div>
-              <div>Pendentes de envio: {status.pending_sync}</div>
+              <div><strong>Status:</strong> {status.status}</div>
+              <div><strong>Versão:</strong> {status.version}</div>
+              <div><strong>Pesquisa Ativa:</strong> {status.research_active ? "Sim" : "Não"}</div>
+              <div><strong>Pausado:</strong> {status.paused ? "Sim" : "Não"}</div>
+              <div><strong>Sessão ID:</strong> {status.session?.session_id || "nenhuma"}</div>
             </>
           ) : (
-            <div>Bridge indisponível.</div>
+            <p>Carregando status do Bridge...</p>
           )}
         </div>
-        <div className="action-row">
+        <div className="turma-actions">
           <button className="button button--ghost" type="button" onClick={() => void refresh()}>Atualizar</button>
           <button className="button button--ghost" type="button" onClick={() => void testPause()}>Testar "Não registrar esta turma"</button>
         </div>
@@ -132,6 +139,15 @@ export default function StudentPage() {
     void loadCurrent();
   }, [loadCurrent]);
 
+  useEffect(() => {
+    if (step === "concluido") {
+      const timer = setTimeout(() => {
+        try { window.close(); } catch {}
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [step]);
+
   async function finish() {
     setStep("enviando");
     const payload = {
@@ -139,6 +155,7 @@ export default function StudentPage() {
     };
     const result = await bridgePost("/v1/session/close", payload).catch(() => ({ status: 0, body: {} }));
     if (result.status === 200) {
+      void bridgePost("/v1/shutdown").catch(() => {});
       setStep("concluido");
       return;
     }
@@ -208,7 +225,12 @@ export default function StudentPage() {
   } else {
     content = (
       <Card title="Turma encerrada">
-        <p>Pode fechar esta janela. A gravação foi concluída com sucesso. A próxima turma começará automaticamente quando o primeiro programa for salvo no LEGO SPIKE.</p>
+        <p>A gravação foi finalizada. O PulseLab está sendo encerrado e esta janela fechará automaticamente...</p>
+        <div className="turma-actions">
+          <button className="button button--primary" type="button" onClick={() => { try { window.close(); } catch {} }}>
+            Fechar agora
+          </button>
+        </div>
       </Card>
     );
   }

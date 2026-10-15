@@ -16,6 +16,7 @@ param(
 )
 
 $script:AutoUpdateEnabled = $false
+$script:ShutdownRequested = $false
 
 $ErrorActionPreference = "Continue"
 
@@ -165,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.0.2"
+$script:BridgeVersion = "3.0.3"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -2427,6 +2428,7 @@ try {
             $postRoutes = @(
                 "/v1/session/close",
                 "/v1/session/pause",
+                "/v1/shutdown",
                 "/update",
                 "/v1/update"
             )
@@ -2678,6 +2680,16 @@ try {
                 continue
             }
 
+            # Encerramento total do aplicativo (PWA ou bandeja)
+            if ($path -eq "/v1/shutdown" -and $request.HttpMethod -eq "POST") {
+                Write-BridgeLog "Requisicao de encerramento do PulseLab recebida." "INFO"
+                $signalFile = Join-Path $DataDir "shutdown.signal"
+                try { [System.IO.File]::WriteAllText($signalFile, "shutdown") } catch {}
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "shutting_down"; message = "PulseLab encerrando..." }
+                $script:ShutdownRequested = $true
+                break
+            }
+
             if (($path -eq "/v1/database/summary" -or $path -eq "/v1/database/export") -and $request.HttpMethod -eq "GET") {
                 $sessoesDir = Join-Path $DataDir "sessoes"
                 $totalSessions = 0
@@ -2769,5 +2781,22 @@ try {
     }
     if ($listener) {
         try { $listener.Stop() } catch {}
+    }
+    if ($script:ShutdownRequested) {
+        Write-BridgeLog "Encerramento completo do PulseLab solicitado. Finalizando bandeja e janelas..." "INFO"
+        try {
+            Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object {
+                try {
+                    $cmd = (Get-CimInstance Win32_Process -Filter "ProcessId = $($_.Id)" -ErrorAction SilentlyContinue).CommandLine
+                    $cmd -and ($cmd -match "43128" -or $cmd -match "alunos")
+                } catch { $false }
+            } | Stop-Process -Force -ErrorAction SilentlyContinue
+        } catch {}
+
+        try {
+            Get-CimInstance Win32_Process -Filter "CommandLine LIKE '%pulselab-tray.ps1%'" -ErrorAction SilentlyContinue | ForEach-Object {
+                Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+            }
+        } catch {}
     }
 }
