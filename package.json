@@ -1,6 +1,6 @@
 {
   "name": "pulselab",
-  "version": "3.0.8",
+  "version": "3.0.9",
   "private": true,
   "scripts": {
     "check:version": "python3 tooling/release/check-version-consistency.py",

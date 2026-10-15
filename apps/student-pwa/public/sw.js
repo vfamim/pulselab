@@ -1,5 +1,5 @@
 const CACHE_PREFIX = "pulselab-test-v2-";
-const CACHE_NAME = CACHE_PREFIX + "3.0.8";
+const CACHE_NAME = CACHE_PREFIX + "__PULSELAB_VERSION__"; // trocado pela versão no build
 const SHELL = [
   "/alunos/",
   "/alunos/index.html",

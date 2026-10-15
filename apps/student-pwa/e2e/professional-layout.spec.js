@@ -12,22 +12,23 @@ test.beforeEach(async ({ context }) => {
   await context.route('**/*', (route) => {
     const url = new URL(route.request().url());
     if (url.origin === 'http://127.0.0.1:4173') return route.continue();
+    if (route.request().method() === 'OPTIONS') return route.fulfill(json({}));
     if (url.pathname === '/v1/session/current') return route.fulfill(json(current));
+    if (url.pathname === '/v1/session/close') return route.fulfill(json({ status: 'closed', session_id: current.session_id }));
     if (url.pathname === '/v1/status') return route.fulfill(json(status));
     return route.abort();
   });
 });
 
 for (const [width, height] of viewports) {
-  test(`professional ${width}x${height}: formulário final legível, contraste AA e alvos de toque`, async ({ page }) => {
+  test(`professional ${width}x${height}: encerramento legível, contraste AA e alvos de toque`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto('/alunos/');
     await expect(page.getByRole('heading', { name: 'Encerrar a turma desta bancada?' })).toBeVisible();
     await audit(page, `confirmar ${width}x${height}`);
     await page.getByRole('button', { name: 'Encerrar turma' }).click();
-    await audit(page, `bancada ${width}x${height}`);
-    await page.getByRole('button', { name: /Gostamos/ }).click();
-    await audit(page, `instrutor ${width}x${height}`);
+    await expect(page.getByRole('heading', { name: 'Turma encerrada' })).toBeVisible();
+    await audit(page, `encerrada ${width}x${height}`);
 
     // Sem termos técnicos nem identificadores na tela
     const bodyText = await page.locator('main').innerText();
@@ -35,11 +36,13 @@ for (const [width, height] of viewports) {
   });
 }
 
-test('reflow at 320px: perguntas da bancada sem rolagem horizontal', async ({ page }) => {
+test('reflow at 320px: encerramento sem rolagem horizontal', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.goto('/alunos/');
+  await audit(page, '320px confirmar');
   await page.getByRole('button', { name: 'Encerrar turma' }).click();
-  await audit(page, '320px bancada');
+  await expect(page.getByRole('heading', { name: 'Turma encerrada' })).toBeVisible();
+  await audit(page, '320px encerrada');
 });
 
 test('laboratory mode (?lab=1): diagnostic panel displays cleanly with valid targets and contrast', async ({ page }) => {

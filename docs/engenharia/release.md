@@ -9,14 +9,17 @@ AGENTS.md §1; atualizador assinado em AGENTS.md §3.3.
 python3 tooling/release/bump-version.py 3.0.5 3.0.6
 ```
 
-Atualiza todas as superfícies conferidas por `tooling/release/check-version-consistency.py` e preserva o
-CRLF dos `.ps1` e `.bat`. Depois:
+Atualiza `VERSION` e os arquivos que guardam o número escrito (pacotes npm, `version.json`,
+`config/`, bridge, launcher e instalador), preservando o CRLF dos `.ps1` e `.bat`. Se algum padrão
+não casar, nada é gravado. PWA, service worker, páginas do site e empacotador leem `VERSION` no
+build pelo marcador `__PULSELAB_VERSION__` e não precisam de bump (AGENTS.md §1.2). Depois:
 
 - editar `notes` em `version.json`;
-- `npm run build` para regenerar `alunos/` (bundle e `sw.js`);
-- `./tooling/site/build-guia.sh` para regenerar o guia do instrutor (`apps/site/tutorial/`, HTML e PDF) a
-  partir de `docs/campo/guia-instrutor.md`;
 - `python3 tooling/release/check-version-consistency.py`.
+
+`alunos/` não é versionado: `npm run build` em `apps/student-pwa` o gera para testar ou empacotar
+localmente. O guia do instrutor só precisa de `./tooling/site/build-guia.sh` quando o texto em
+`docs/campo/guia-instrutor.md` mudar.
 
 O CI (`.github/workflows/ci.yml`) falha se alguma superfície divergir.
 

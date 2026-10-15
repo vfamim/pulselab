@@ -117,7 +117,7 @@ completo em [docs/engenharia/release.md](docs/engenharia/release.md).
 |---|---|
 | `apps/student-pwa/` | PWA da bancada (React + Vite); o build vai para `alunos/` |
 | `apps/site/` | Site público: início, instalador, tutorial, testes e relatório |
-| `alunos/` | Build da PWA, servido pelo bridge local e pelo site |
+| `alunos/` | Build da PWA (não versionado), empacotado no ZIP e publicado no site |
 | `runtime/windows/` | Launcher, atualizador, bridge, bandeja e atalhos `.bat`, no mesmo layout da pasta `arquivos/` do ZIP |
 | `config/` | Configuração empacotada (defaults, config, catálogo de missões) |
 | `supabase/` | Migrações, testes SQL, função `enroll-device` e scripts de cadastro |

@@ -45,6 +45,10 @@ FORBIDDEN_PATTERNS = (
 
 OUTPUT_DIR_NAME = "hosting-dist"
 
+# As páginas do site citam a versão por este marcador; a versão real vem de VERSION.
+VERSION_TOKEN = "__PULSELAB_VERSION__"
+TEMPLATED_SUFFIXES = (".html",)
+
 
 def is_forbidden(path: Path) -> bool:
     return any(path.match(pattern) for pattern in FORBIDDEN_PATTERNS)
@@ -55,6 +59,7 @@ def build(repo_root: Path, output: Path) -> list[str]:
         shutil.rmtree(output)
     output.mkdir(parents=True)
 
+    version = (repo_root / "VERSION").read_text(encoding="utf-8").strip()
     published: list[str] = []
     for entry, source_rel in PUBLIC_ENTRIES.items():
         source = repo_root / source_rel
@@ -70,7 +75,11 @@ def build(repo_root: Path, output: Path) -> list[str]:
                 continue
             target = output / relative
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(file_path, target)
+            if file_path.suffix in TEMPLATED_SUFFIXES:
+                content = file_path.read_bytes().decode("utf-8")
+                target.write_bytes(content.replace(VERSION_TOKEN, version).encode("utf-8"))
+            else:
+                shutil.copy2(file_path, target)
             published.append(relative.as_posix())
     return published
 
