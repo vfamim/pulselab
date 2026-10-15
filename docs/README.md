@@ -3,7 +3,7 @@
 | Pasta | Para quem | O que tem |
 |---|---|---|
 | [`campo/`](campo/) | Instrutores e coordenação dos polos | Roteiro de assentimento verbal e guia de uso em aula |
-| [`pesquisa/`](pesquisa/) | Pesquisadores e CEP | Protocolo v2, inventário de dados, plano de validação, roadmap, contexto institucional |
+| [`pesquisa/`](pesquisa/) | Pesquisadores e CEP | Protocolo v2, inventário de dados, plano de validação, roadmap, contexto institucional, [relatório das aulas](pesquisa/relatorio.md) |
 | [`engenharia/`](engenharia/) | Quem mantém o código | Release e decisões de arquitetura (`adr/`) |
 | [`arquivo/`](arquivo/) | Consulta histórica | Documentos de versões anteriores, preservados sem reescrita |
 

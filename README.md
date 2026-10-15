@@ -62,6 +62,8 @@ Tudo fica em `dados_locais/` no computador, pasta que nenhuma atualização ou r
 Com internet, o bridge envia ao Supabase a cada 30 segundos: os eventos um a um e o resumo da
 sessão quando ela fecha. Polos sem internet enviam quando o instrutor conecta ou exportam por
 pendrive (veja abaixo).
+O relatório das aulas (uma linha por aula e resumo semanal por polo) sai com
+`python3 tooling/data/relatorio-pulselab.py`: veja [docs/pesquisa/relatorio.md](docs/pesquisa/relatorio.md).
 
 O cadastro das máquinas na nuvem é automático, com um token por polo:
 
