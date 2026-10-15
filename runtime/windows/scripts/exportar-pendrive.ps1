@@ -70,11 +70,20 @@ if (Test-Path -LiteralPath $withdrawnFile) {
     $totalWithdrawn = @(Get-Content -LiteralPath $withdrawnFile -ErrorAction SilentlyContinue | Where-Object { $_.Trim() }).Count
 }
 
+# Aulas marcadas como nao autorizadas ("Nao registrar esta turma"): session_id<TAB>marked_at por linha.
+# O importador guarda a marca; essas aulas nunca entram em analise e sao apagadas na revisao do pesquisador.
+$unauthorizedFile = Join-Path $dataDir "sessions_unauthorized.txt"
+$totalUnauthorized = 0
+if (Test-Path -LiteralPath $unauthorizedFile) {
+    $totalUnauthorized = @(Get-Content -LiteralPath $unauthorizedFile -ErrorAction SilentlyContinue | Where-Object { $_.Trim() }).Count
+}
+
 Write-Host "      - Sessoes completas: $($sessaoFiles.Count)" -ForegroundColor White
 Write-Host "      - Eventos de processo: $totalEvents" -ForegroundColor White
 Write-Host "      - Sessoes retiradas: $totalWithdrawn" -ForegroundColor White
+Write-Host "      - Aulas nao autorizadas: $totalUnauthorized" -ForegroundColor White
 
-if ($sessaoFiles.Count -eq 0 -and $totalEvents -eq 0 -and $totalWithdrawn -eq 0) {
+if ($sessaoFiles.Count -eq 0 -and $totalEvents -eq 0 -and $totalWithdrawn -eq 0 -and $totalUnauthorized -eq 0) {
     Write-Host ""
     Write-Host "[AVISO] Nao ha dados de oficina gravados nesta maquina ainda." -ForegroundColor Yellow
     if (-not $SaveToDesktop) {
@@ -138,8 +147,12 @@ if (-not $destDrive -and -not $SaveToDesktop) {
 
 # 4. Definir pasta destino
 # Identifica a maquina pelo rotulo do PulseLab (dados_locais\installation.json), nunca pelo nome do Windows.
+# installation.json nao vai para o pendrive: dele saem so o rotulo, o id da instalacao, o polo e a
+# chave que assina o manifesto (a chave fica so na memoria deste processo).
 $machineName = "PC-SEM-ID"
 $installationId = ""
+$siteId = ""
+$installationHmacKey = ""
 $installationFile = Join-Path $dataDir "installation.json"
 if (Test-Path -LiteralPath $installationFile) {
     try {
@@ -148,6 +161,8 @@ if (Test-Path -LiteralPath $installationFile) {
             $machineName = ([string]$installation.machine_label -replace '[^A-Za-z0-9_-]', '-')
         }
         if ($installation.installation_id) { $installationId = [string]$installation.installation_id }
+        if ($installation.site_id) { $siteId = ([string]$installation.site_id -replace '[^A-Za-z0-9_-]', '') }
+        if ($installation.manifest_hmac_key) { $installationHmacKey = [string]$installation.manifest_hmac_key }
     } catch {}
 }
 $timeTag = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -207,6 +222,14 @@ if (Test-Path -LiteralPath $withdrawnFile) {
     Write-Host "      [OK] sessions_withdrawn.txt ($totalWithdrawn sessoes retiradas)" -ForegroundColor Green
 }
 
+# Aulas nao autorizadas (somente session_id e data da marcacao)
+if (Test-Path -LiteralPath $unauthorizedFile) {
+    $unauthorizedDest = Join-Path $targetExportDir "sessions_unauthorized.txt"
+    Copy-Item -LiteralPath $unauthorizedFile -Destination $unauthorizedDest -Force
+    $copiedFiles.Add($unauthorizedDest)
+    Write-Host "      [OK] sessions_unauthorized.txt ($totalUnauthorized aulas nao autorizadas)" -ForegroundColor Green
+}
+
 # Sessoes individuais
 $sessCount = 0
 foreach ($sFile in $sessaoFiles) {
@@ -226,9 +249,11 @@ $manifestContent = [System.Text.StringBuilder]::new()
 [void]$manifestContent.AppendLine("Data e Hora da Coleta : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')")
 [void]$manifestContent.AppendLine("Maquina (rotulo)      : $machineName")
 [void]$manifestContent.AppendLine("Instalacao            : $installationId")
+[void]$manifestContent.AppendLine("Polo (site_id)        : $siteId")
 [void]$manifestContent.AppendLine("Total de Sessoes      : $sessCount")
 [void]$manifestContent.AppendLine("Total de Eventos      : $totalEvents")
 [void]$manifestContent.AppendLine("Sessoes Retiradas     : $totalWithdrawn")
+[void]$manifestContent.AppendLine("Aulas Nao Autorizadas : $totalUnauthorized")
 [void]$manifestContent.AppendLine("====================================================================")
 [void]$manifestContent.AppendLine("INTEGRIDADE DOS ARQUIVOS (SHA-256):")
 [void]$manifestContent.AppendLine("")
@@ -254,8 +279,10 @@ $sha.Dispose()
 [System.IO.File]::WriteAllText($manifestFile, $manifestContent.ToString(), [System.Text.Encoding]::UTF8)
 Write-Host "      [OK] manifesto_coleta.txt (hashes SHA-256 gerados)" -ForegroundColor Green
 
-# 7. Assinatura de autenticidade institucional HMAC-SHA256 (exclusivamente via variavel de ambiente)
+# 7. Assinatura HMAC-SHA256 do manifesto: a variavel de ambiente tem prioridade; sem ela, usa a chave
+#    do polo gravada pelo pacote do polo em installation.json. A chave nunca e copiada para o pendrive.
 $manifestHmacKey = $env:PULSELAB_MANIFEST_HMAC_KEY
+if ([string]::IsNullOrWhiteSpace($manifestHmacKey)) { $manifestHmacKey = $installationHmacKey }
 if (-not [string]::IsNullOrWhiteSpace($manifestHmacKey)) {
     try {
         $sigFile = Join-Path $targetExportDir "manifesto_coleta.sig"
@@ -265,13 +292,15 @@ if (-not [string]::IsNullOrWhiteSpace($manifestHmacKey)) {
         $sigBytes = $hmac.ComputeHash($manifestBytes)
         $sigHex = ([BitConverter]::ToString($sigBytes) -replace '-').ToLowerInvariant()
         $hmac.Dispose()
-        [System.IO.File]::WriteAllText($sigFile, $sigHex, [System.Text.Encoding]::UTF8)
+        # Sem BOM: o importador compara os 64 caracteres hexadecimais.
+        [System.IO.File]::WriteAllText($sigFile, $sigHex, (New-Object System.Text.UTF8Encoding($false)))
         Write-Host "      [OK] manifesto_coleta.sig (assinatura HMAC-SHA256 institucional gerada)" -ForegroundColor Green
     } catch {
         Write-Host "      [AVISO] Falha ao assinar manifesto com HMAC-SHA256: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "      [INFO] Assinatura institucional HMAC nao gerada (PULSELAB_MANIFEST_HMAC_KEY nao definida no ambiente)." -ForegroundColor Cyan
+    Write-Host "      [AVISO] Manifesto sem assinatura: este computador nao tem a chave do polo." -ForegroundColor Yellow
+    Write-Host "              Reinstale com o pacote do polo para que a coleta possa ir para a nuvem." -ForegroundColor Yellow
 }
 
 Write-Host ""
@@ -280,8 +309,8 @@ Write-Host "  EXPORTACAO CONCLUIDA COM SUCESSO!" -ForegroundColor Green
 Write-Host "====================================================================" -ForegroundColor Green
 Write-Host " Pasta: $targetExportDir" -ForegroundColor White
 Write-Host " Arquivos exportados com seguranca." -ForegroundColor White
-Write-Host " Quando tiver acesso a internet, execute Importar-Para-Supabase.bat" -ForegroundColor Cyan
-Write-Host " no computador do pesquisador para sincronizar com o banco central." -ForegroundColor Cyan
+Write-Host " Entregue o pendrive a coordenacao do projeto. O pesquisador envia" -ForegroundColor Cyan
+Write-Host " os dados ao banco central pelo computador dele." -ForegroundColor Cyan
 Write-Host "====================================================================" -ForegroundColor Green
 Write-Host ""
 if (-not $SaveToDesktop) {

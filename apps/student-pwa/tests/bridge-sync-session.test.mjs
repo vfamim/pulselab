@@ -75,8 +75,12 @@ test("Bridge Store-and-Forward: envio só no ciclo periódico, linha corrompida 
   assert.match(sync, /if \(-not \$ev -or -not \$ev\.event_id\) \{ continue \}/, "Linha ilegível é pulada, não interrompe o envio");
   assert.match(sync, /Save-BridgeTextAtomic -Path \$eventsFile/, "Compactação por arquivo temporário");
   assert.match(code, /function Repair-BridgeEventsFile/, "Linhas cortadas são separadas na inicialização");
-  const purge = code.slice(code.indexOf("function Remove-BridgeSessionData"));
-  assert.match(purge, /\$script:SyncedSessionIds\.Remove\(\$reqSessId\)/);
+  const mark = code.slice(code.indexOf("function Set-BridgeSessionUnauthorized"));
+  assert.match(mark, /\$script:SyncedSessionIds\.Remove\(\$SessionId\)/);
+  assert.match(code, /sessions_unauthorized\.txt/);
+  const snapSync = code.slice(code.indexOf("function Sync-SessionSnapshotsToSupabase"), code.indexOf("function Test-PulseLabAllowedOrigin"));
+  assert.match(snapSync, /UnauthorizedSessions\.ContainsKey\(\$sid\)[\s\S]*?authorization_status/, "Marca do registro local vai no session_payload");
+  assert.doesNotMatch(snapSync, /UnauthorizedSessions\.ContainsKey\(\$sid\)\) \{\s*continue/, "Aula marcada continua sendo enviada");
   assert.match(code, /function\s+Invoke-RemoteSessionPurge/);
   assert.match(code, /purge_own_research_session/);
   assert.match(code, /sessions_withdrawn\.txt/);

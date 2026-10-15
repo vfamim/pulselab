@@ -87,9 +87,11 @@ def verify_manifest_signature(
     target_dir: Path,
     hmac_key: str = "",
     require_signature: bool = False,
+    hmac_keys: list[str] | None = None,
 ) -> tuple[bool, str]:
     """
     Verifica a autenticidade do manifesto através de assinatura HMAC-SHA256 institucional.
+    - hmac_key e hmac_keys são as chaves aceitas (a do polo e a de PULSELAB_MANIFEST_HMAC_KEY).
     - Usa compare_digest para prevenir timing attacks.
     - Se require_signature=True: falha se chave ou assinatura estiverem ausentes ou inválidas.
     - Se require_signature=False e assinatura ausente: retorna (True, "unsigned").
@@ -119,27 +121,28 @@ def verify_manifest_signature(
             return False, "Assinatura institucional ausente: envio privilegiado em nuvem exige manifesto assinado (manifesto_coleta.sig)."
         return True, "unsigned"
 
-    if not hmac_key:
+    keys = [k for k in [hmac_key, *(hmac_keys or [])] if k]
+    if not keys:
         if require_signature:
-            return False, "Chave institucional ausente: envio privilegiado em nuvem exige PULSELAB_MANIFEST_HMAC_KEY configurada no ambiente."
-        return False, "Assinatura presente mas chave PULSELAB_MANIFEST_HMAC_KEY ausente."
+            return False, "Chave institucional ausente: envio privilegiado em nuvem exige a chave do polo (dist-polos/chaves-manifesto.json) ou PULSELAB_MANIFEST_HMAC_KEY."
+        return False, "Assinatura presente mas sem chave do polo nem PULSELAB_MANIFEST_HMAC_KEY para conferi-la."
 
     try:
-        expected_sig = sig_file.read_text(encoding="utf-8").strip().lower()
+        # utf-8-sig: exportadores até esta versão gravavam o .sig com BOM.
+        expected_sig = sig_file.read_text(encoding="utf-8-sig").strip().lower()
         if len(expected_sig) != 64 or not all(c in "0123456789abcdef" for c in expected_sig):
             return False, f"Formato de assinatura inválido em {sig_file.name} (esperado digest hexadecimal de 64 caracteres)."
 
         manifest_bytes = manifest_file.read_bytes()
-        actual_hmac = hmac.new(
-            hmac_key.encode("utf-8"),
-            manifest_bytes,
-            hashlib.sha256
-        ).hexdigest().lower()
-
-        if hmac.compare_digest(actual_hmac, expected_sig):
-            return True, f"Assinatura HMAC-SHA256 institucional válida ({sig_file.name})"
-        else:
-            return False, f"Assinatura HMAC-SHA256 institucional inválida ou divergente em {sig_file.name} (digest divergente)."
+        for key in keys:
+            actual_hmac = hmac.new(
+                key.encode("utf-8"),
+                manifest_bytes,
+                hashlib.sha256
+            ).hexdigest().lower()
+            if hmac.compare_digest(actual_hmac, expected_sig):
+                return True, f"Assinatura HMAC-SHA256 institucional válida ({sig_file.name})"
+        return False, f"Assinatura HMAC-SHA256 institucional inválida ou divergente em {sig_file.name} (digest divergente)."
     except Exception as exc:
         return False, f"Erro ao processar assinatura HMAC-SHA256: {exc}"
 
@@ -149,6 +152,7 @@ def validate_manifest(
     require_manifest: bool = True,
     hmac_key: str = "",
     require_signature: bool = False,
+    hmac_keys: list[str] | None = None,
 ) -> tuple[bool, str]:
     """
     Valida a integridade dos arquivos em uma pasta de coleta através do manifesto_*.txt
@@ -158,7 +162,7 @@ def validate_manifest(
     - Se houver path traversal, duplicatas de declaração ou ambiguidade em formato legado: falha de forma segura.
     - Se houver arquivo ausente ou adulterado (SHA-256 divergente): falha de forma segura.
     - Se houver arquivo .json ou .jsonl extra na pasta que não esteja declarado no manifesto: falha de forma segura.
-    - Se require_signature=True: exige assinatura HMAC válida com PULSELAB_MANIFEST_HMAC_KEY.
+    - Se require_signature=True: exige assinatura HMAC válida com a chave do polo ou PULSELAB_MANIFEST_HMAC_KEY.
     """
     manifest_candidates = list(target_dir.glob("manifesto_*.txt"))
     if not manifest_candidates:
@@ -253,7 +257,7 @@ def validate_manifest(
         for cand_path in target_dir.rglob("*"):
             if cand_path.is_file() and (
                 cand_path.suffix.lower() in (".json", ".jsonl")
-                or cand_path.name.lower() == WITHDRAWN_SESSIONS_FILE
+                or cand_path.name.lower() in (WITHDRAWN_SESSIONS_FILE, UNAUTHORIZED_SESSIONS_FILE)
             ):
                 if cand_path.name.startswith("relatorio_") or cand_path.name.startswith("rejeicoes_"):
                     continue
@@ -261,9 +265,9 @@ def validate_manifest(
                     return False, f"Arquivo extra não declarado no manifesto: {cand_path.name}"
 
     # Verificação de autenticidade HMAC-SHA256 institucional
-    if require_signature or hmac_key:
+    if require_signature or hmac_key or hmac_keys:
         sig_valid, sig_msg = verify_manifest_signature(
-            target_dir, hmac_key=hmac_key, require_signature=require_signature
+            target_dir, hmac_key=hmac_key, require_signature=require_signature, hmac_keys=hmac_keys
         )
         if not sig_valid:
             return False, sig_msg
@@ -272,6 +276,53 @@ def validate_manifest(
         return True, f"Manifesto válido ({checked_files} arquivos verificados, origem não autenticada)"
 
     return True, f"Manifesto válido ({checked_files} arquivos verificados)"
+
+
+MANIFEST_KEYS_FILE = "chaves-manifesto.json"
+SIGNATURE_FAILURES = ("Assinatura institucional ausente", "Chave institucional ausente", "Assinatura HMAC-SHA256 institucional inválida")
+
+
+def load_manifest_keys(path: Path) -> dict[str, str]:
+    """Lê dist-polos/chaves-manifesto.json ({site_id: chave}), gerado por tooling/polo/gerar-pacote-polo.py."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} deve ser um objeto {{polo: chave}}.")
+    return {str(site): str(key) for site, key in data.items() if isinstance(key, str) and key}
+
+
+def read_manifest_site_id(target_dir: Path) -> str:
+    """Código do polo declarado no manifesto do pendrive (linha 'Polo (site_id)'); vazio se ausente."""
+    for manifest_file in target_dir.glob("manifesto_*.txt"):
+        try:
+            text = manifest_file.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            label, sep, value = line.partition(":")
+            if sep and label.strip() == "Polo (site_id)":
+                return value.strip()
+    return ""
+
+
+def missing_key_hint(site_id: str, keys_path: Path, polo_keys: dict[str, str]) -> str:
+    """O que fazer quando a pasta não pôde ser autenticada para envio à nuvem."""
+    if not site_id:
+        return (
+            "O pendrive não diz de que polo veio: o computador foi instalado com um pacote antigo ou genérico. "
+            "Gere o pacote do polo de novo (tooling/polo/gerar-pacote-polo.py), reinstale nesse computador e "
+            "exporte outra vez. Para guardar só no SQLite local, rode com --no-cloud."
+        )
+    if site_id not in polo_keys:
+        return (
+            f"Falta a chave do polo {site_id} em {keys_path}. Copie para esse caminho o chaves-manifesto.json "
+            f"da pasta dist-polos do computador onde o pacote do polo {site_id} foi gerado, ou indique o arquivo "
+            "com --chaves <arquivo>. Para guardar só no SQLite local, rode com --no-cloud."
+        )
+    return (
+        f"A assinatura não confere com a chave do polo {site_id} em {keys_path}. Confira se é o mesmo "
+        f"chaves-manifesto.json usado para gerar o pacote instalado no polo {site_id}; se o pacote foi gerado "
+        "em outro computador, use o arquivo de lá. Se o pendrive foi alterado, peça uma nova exportação."
+    )
 
 
 def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
@@ -303,7 +354,25 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
                 imported_at TEXT,
                 ended_by TEXT,
                 interrupted INTEGER,
-                data_quality_json TEXT
+                data_quality_json TEXT,
+                installation_id TEXT,
+                machine_label TEXT,
+                start_mode TEXT,
+                client_version TEXT,
+                instrument_version TEXT
+            )
+        """)
+
+        # Aulas marcadas como não autorizadas ("Não registrar esta turma"). Os dados ficam no
+        # banco, fora das views *_autorizad*, até a revisão do pesquisador apagar ou restaurar.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS unauthorized_sessions (
+                session_id TEXT PRIMARY KEY,
+                status TEXT NOT NULL DEFAULT 'nao_autorizada',
+                marked_at TEXT,
+                recorded_at TEXT,
+                restored_at TEXT,
+                restore_reason TEXT
             )
         """)
 
@@ -365,12 +434,25 @@ def init_sqlite_database(db_path: Path) -> sqlite3.Connection:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_session_events_session ON session_events(session_id);")
 
+        # Base para relatórios e análises: nunca inclui aula marcada como não autorizada.
+        for view, table in (("sessions_autorizadas", "sessions"), ("events_autorizados", "events"),
+                            ("session_events_autorizados", "session_events")):
+            conn.execute(f"""
+                CREATE VIEW IF NOT EXISTS {view} AS
+                SELECT * FROM {table} WHERE lower(coalesce(session_id, '')) NOT IN (
+                    SELECT lower(session_id) FROM unauthorized_sessions WHERE status = 'nao_autorizada'
+                )
+            """)
+
     # Migração retrocompatível de colunas se o banco já existia
     cur = conn.cursor()
     for tbl, cols in [
         ("events", ["occurred_at", "response_status", "knowledge_answers_json", "prior_robotics", "mission_performance", "primary_issue"]),
         ("session_events", ["occurred_at"]),
-        ("sessions", ["ended_by", "interrupted INTEGER", "data_quality_json"]),
+        ("sessions", [
+            "ended_by", "interrupted INTEGER", "data_quality_json",
+            "installation_id", "machine_label", "start_mode", "client_version", "instrument_version",
+        ]),
     ]:
         existing = {row[1] for row in cur.execute(f"PRAGMA table_info({tbl})").fetchall()}
         for col_def in cols:
@@ -579,6 +661,9 @@ def ensure_uuid(val: str | None) -> str:
 
 
 WITHDRAWN_SESSIONS_FILE = "sessions_withdrawn.txt"
+# Uma linha por aula marcada pelo bridge: session_id<TAB>marked_at (ISO-8601 UTC), UTF-8 com ou sem BOM.
+UNAUTHORIZED_SESSIONS_FILE = "sessions_unauthorized.txt"
+UNAUTHORIZED_STATUS = "nao_autorizada"
 ALLOWED_ENDED_BY = {"instrutor", "tempo", "sem_encerramento"}
 
 
@@ -634,6 +719,87 @@ def purge_withdrawn_sqlite(conn: sqlite3.Connection, withdrawn: set[str]) -> int
     return removed
 
 
+def read_unauthorized_sessions(target_dir: Path) -> dict[str, str | None]:
+    """Lê sessions_unauthorized.txt da coleta: {session_id canônico: marked_at ou None}."""
+    path = target_dir / UNAUTHORIZED_SESSIONS_FILE
+    marks: dict[str, str | None] = {}
+    if not path.is_file():
+        return marks
+    for line in path.read_text(encoding="utf-8-sig", errors="replace").splitlines():
+        parts = line.split()
+        key = session_key(parts[0]) if parts else None
+        if key:
+            marks[key] = parts[1] if len(parts) > 1 else marks.get(key)
+    return marks
+
+
+def snapshot_mark(data: dict) -> tuple[str, str | None] | None:
+    """Marca gravada pelo bridge no próprio snapshot (authorization_status + marked_at)."""
+    if data.get("authorization_status") != UNAUTHORIZED_STATUS:
+        return None
+    key = session_key(data.get("session_id"))
+    return (key, data.get("marked_at")) if key else None
+
+
+def apply_mark_to_snapshot(data: dict, marks: dict[str, str | None]) -> dict:
+    """Garante a marca no session_payload enviado à nuvem quando ela só veio na lista da coleta."""
+    key = session_key(data.get("session_id"))
+    if key in marks and data.get("authorization_status") != UNAUTHORIZED_STATUS:
+        data = {**data, "authorization_status": UNAUTHORIZED_STATUS}
+        if marks[key]:
+            data["marked_at"] = marks[key]
+    return data
+
+
+def record_unauthorized_sqlite(conn: sqlite3.Connection, marks: dict[str, str | None], now_iso: str) -> None:
+    """Grava as marcas no SQLite. INSERT OR IGNORE: restauração feita na revisão não é desfeita."""
+    with conn:
+        conn.executemany(
+            "INSERT OR IGNORE INTO unauthorized_sessions (session_id, status, marked_at, recorded_at) VALUES (?, ?, ?, ?)",
+            [(sid, UNAUTHORIZED_STATUS, marks[sid], now_iso) for sid in sorted(marks)],
+        )
+
+
+def send_unauthorized_marks_remote(
+    marks: dict[str, str | None], supabase_url: str, supabase_key: str, now_iso: str, chunk_size: int = 50
+) -> tuple[int, str | None]:
+    """
+    Grava as marcas em research_unauthorized_sessions (service_role). Cobre aula marcada cujo
+    snapshot não veio na coleta; com snapshot, o trigger da nuvem já marca pelo session_payload.
+    """
+    if not marks or not supabase_url or not supabase_key:
+        return 0, None
+    if not is_service_role_key(supabase_key):
+        return 0, "marcas diretas exigem service_role; snapshots marcados seguem pelo session_payload"
+    endpoint = supabase_url.rstrip("/") + "/rest/v1/research_unauthorized_sessions?on_conflict=session_id"
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": supabase_key,
+        "Authorization": f"Bearer {supabase_key}",
+        "Prefer": "resolution=ignore-duplicates,return=minimal",
+    }
+    ids = sorted(marks)
+    sent = 0
+    try:
+        for i in range(0, len(ids), chunk_size):
+            chunk = ids[i : i + chunk_size]
+            body = json.dumps([{"session_id": sid, "marked_at": marks[sid] or now_iso} for sid in chunk]).encode("utf-8")
+            req = urllib.request.Request(endpoint, data=body, headers=headers, method="POST")
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp.read()
+            sent += len(chunk)
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8")
+        except Exception:
+            pass
+        return sent, f"HTTP {exc.code}: {detail or exc.reason}"
+    except Exception as exc:
+        return sent, str(exc)
+    return sent, None
+
+
 def bancada_phase(data: dict) -> str:
     """Mesma regra do bridge: phase explícita; senão status; snapshot legado sem ambos conta como encerrado."""
     if data.get("phase"):
@@ -654,6 +820,14 @@ def bancada_quality_fields(data: dict) -> dict:
         "interrupted": interrupted if isinstance(interrupted, bool) else None,
         "data_quality": data_quality if isinstance(data_quality, dict) else None,
     }
+
+
+def text_or_none(val) -> str | None:
+    """Identificador curto do snapshot como texto; vazio ou estruturado vira None."""
+    if val is None or isinstance(val, (dict, list)):
+        return None
+    text = str(val).strip()
+    return text or None
 
 
 def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str, now_iso: str) -> str:
@@ -677,8 +851,9 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
                 workshop_code, class_code, activity_id, started_at, completed_at,
                 duration_seconds, team_role, status, pre_answers_json,
                 post_answers_json, spike_telemetry_json, events_count,
-                source_file, imported_at, ended_by, interrupted, data_quality_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source_file, imported_at, ended_by, interrupted, data_quality_json,
+                installation_id, machine_label, start_mode, client_version, instrument_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(session_id) DO UPDATE SET
                 group_id = excluded.group_id,
                 site_id = excluded.site_id,
@@ -700,7 +875,12 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
                 imported_at = excluded.imported_at,
                 ended_by = excluded.ended_by,
                 interrupted = excluded.interrupted,
-                data_quality_json = excluded.data_quality_json
+                data_quality_json = excluded.data_quality_json,
+                installation_id = excluded.installation_id,
+                machine_label = excluded.machine_label,
+                start_mode = excluded.start_mode,
+                client_version = excluded.client_version,
+                instrument_version = excluded.instrument_version
         """, (
             sess_id,
             data.get("group_id", ""),
@@ -724,6 +904,11 @@ def upsert_session_sqlite(conn: sqlite3.Connection, data: dict, source_name: str
             quality["ended_by"],
             None if interrupted is None else int(interrupted),
             json.dumps(quality["data_quality"]) if quality["data_quality"] is not None else None,
+            text_or_none(data.get("installation_id")),
+            text_or_none(data.get("computer_id")),
+            text_or_none(data.get("start_mode")),
+            text_or_none(data.get("client_version")),
+            text_or_none(data.get("instrument_version")),
         ))
     return "updated" if row is not None else "inserted"
 
@@ -809,7 +994,8 @@ def withdraw_sessions_remote(
                 resp.read()
             sent += len(chunk)
             id_list = ",".join(chunk)
-            for table in ("instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions"):
+            for table in ("instructor_evaluations", "research_events", "research_session_events", "research_bancada_sessions",
+                          "research_unauthorized_sessions"):
                 req = urllib.request.Request(
                     f"{base}/{table}?session_id=in.({id_list})",
                     headers={**headers, "Prefer": "return=minimal"},
@@ -1010,6 +1196,11 @@ def main() -> int:
         help="Chave HMAC-SHA256 institucional para autenticação do manifesto (ou usa PULSELAB_MANIFEST_HMAC_KEY).",
         default="",
     )
+    parser.add_argument(
+        "--chaves",
+        help="Chaves de pendrive por polo, geradas por gerar-pacote-polo.py (padrão: dist-polos/chaves-manifesto.json).",
+        default="",
+    )
 
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[2]
@@ -1067,35 +1258,60 @@ def main() -> int:
     events_files: list[Path] = []
     raw_sessions_data: list[dict] = []
     withdrawn_from_exports: set[str] = set()
+    unauthorized_marks: dict[str, str | None] = {}
 
     hmac_key = (
         args.manifest_hmac_key
         or os.environ.get("PULSELAB_MANIFEST_HMAC_KEY", "")
     )
+    keys_path = Path(args.chaves).resolve() if args.chaves else repo_root / "dist-polos" / MANIFEST_KEYS_FILE
+    polo_keys: dict[str, str] = {}
+    if keys_path.is_file():
+        try:
+            polo_keys = load_manifest_keys(keys_path)
+        except (OSError, ValueError) as exc:
+            print(f"[ERRO] Não foi possível ler as chaves dos polos em {keys_path}: {exc}")
+            return 1
+        print(f"[OK] Chaves de pendrive de {len(polo_keys)} polo(s) em {keys_path}\n")
+    elif args.chaves:
+        print(f"[ERRO] Arquivo de chaves não encontrado: {keys_path}")
+        print("       Use o chaves-manifesto.json da pasta dist-polos onde os pacotes dos polos foram gerados.")
+        return 1
 
     for src in sources:
         sub_collects = [p for p in src.glob("Coleta_*") if p.is_dir()]
         target_dirs = sub_collects if sub_collects else [src]
 
         for tdir in target_dirs:
+            # Retiradas valem mesmo se a pasta for rejeitada: só apagam dados, nunca acrescentam.
+            tdir_withdrawn = read_withdrawn_sessions(tdir)
+            withdrawn_from_exports |= tdir_withdrawn
+            # Marcas de "não autorizada" também: só excluem dados da análise.
+            for sid, marked_at in read_unauthorized_sessions(tdir).items():
+                unauthorized_marks[sid] = marked_at or unauthorized_marks.get(sid)
+
             # Validação estrita de integridade SHA-256 e autenticidade HMAC-SHA256 institucional
             require_m = not args.allow_unverified
             require_sig = not args.no_cloud
+            site_id = read_manifest_site_id(tdir)
             valid, manifest_msg = validate_manifest(
                 tdir,
                 require_manifest=require_m,
                 hmac_key=hmac_key,
                 require_signature=require_sig,
+                hmac_keys=[polo_keys[site_id]] if site_id in polo_keys else None,
             )
             if not valid:
                 print(f"[!] SEGURANÇA: Pasta rejeitada por falha no manifesto ({tdir.name}): {manifest_msg}")
+                if manifest_msg.startswith(SIGNATURE_FAILURES):
+                    print(f"    O que fazer: {missing_key_hint(site_id, keys_path, polo_keys)}")
+                if tdir_withdrawn:
+                    print(f"    Retiradas desta pasta honradas mesmo assim: {len(tdir_withdrawn)} sessão(ões).")
                 continue
             elif "autenticado" in manifest_msg or "Assinatura HMAC-SHA256" in manifest_msg:
                 print(f"[✓] Origem autenticada e integridade comprovada via HMAC-SHA256 em: {tdir.name} ({manifest_msg})")
             elif manifest_msg != "no_manifest":
                 print(f"[!] Integridade verificada, origem não autenticada em: {tdir.name} ({manifest_msg})")
-
-            withdrawn_from_exports |= read_withdrawn_sessions(tdir)
 
             s_dir = tdir / "sessoes"
             if s_dir.is_dir():
@@ -1113,7 +1329,7 @@ def main() -> int:
     session_files = list({p.resolve(): p for p in session_files}.values())
     events_files = list({p.resolve(): p for p in events_files}.values())
 
-    if not args.no_cloud and not session_files and not events_files and not withdrawn_from_exports:
+    if not args.no_cloud and not session_files and not events_files and not withdrawn_from_exports and not unauthorized_marks:
         print("[ERRO] Nenhuma pasta de coleta atendeu aos requisitos de integridade e autenticidade institucional para envio à nuvem.")
         return 1
 
@@ -1147,6 +1363,10 @@ def main() -> int:
                 withdrawn_snapshots_skipped += 1
                 continue
 
+            mark = snapshot_mark(data)
+            if mark:
+                unauthorized_marks[mark[0]] = mark[1] or unauthorized_marks.get(mark[0])
+            data = apply_mark_to_snapshot(data, unauthorized_marks)
             raw_sessions_data.append(data)
             events_list = data.get("events") or []
             if isinstance(events_list, list):
@@ -1163,6 +1383,15 @@ def main() -> int:
             print(f"[!] Erro ao processar sessão {sf.name}: {exc}")
 
     print(f"[✓] Sessões SQLite: {sessions_inserted} inseridas, {sessions_updated} atualizadas.")
+
+    # Marcas de aula não autorizada: guardadas (nunca apagadas aqui), fora das views de análise.
+    unauthorized_marks = {sid: m for sid, m in unauthorized_marks.items() if sid not in withdrawn}
+    record_unauthorized_sqlite(conn, unauthorized_marks, now_iso)
+    if unauthorized_marks:
+        print(
+            f"[✓] Aulas não autorizadas: {len(unauthorized_marks)} marca(s) preservada(s); "
+            "revise com tooling/data/revisar-nao-autorizadas.py."
+        )
     if sessions_kept_completed:
         print(f"[✓] Sessões já encerradas mantidas (snapshot em andamento ignorado): {sessions_kept_completed}.")
 
@@ -1328,12 +1557,19 @@ def main() -> int:
         print(f"\nSincronizando com o Supabase ({sb_url})...")
 
         # 3.0 Retiradas primeiro: tombstone na nuvem e exclusão do que já tinha chegado.
-        # Só as listas desta execução, que passaram pela assinatura exigida no envio à nuvem.
+        # Listas de todas as coletas desta execução, mesmo das pastas rejeitadas: retirada só apaga dados.
         if withdrawn_from_exports:
             sent_tombstones, withdraw_err = withdraw_sessions_remote(withdrawn_from_exports, sb_url, sb_key)
             print(f"  - Sessões retiradas: {sent_tombstones}/{len(withdrawn_from_exports)} tombstones gravados na nuvem")
             if withdraw_err:
                 print(f"    [!] Retirada remota pendente: {withdraw_err}")
+
+        # 3.0.1 Marcas de aula não autorizada antes dos dados da aula.
+        if unauthorized_marks:
+            sent_marks, marks_err = send_unauthorized_marks_remote(unauthorized_marks, sb_url, sb_key, now_iso)
+            print(f"  - Aulas não autorizadas: {sent_marks}/{len(unauthorized_marks)} marcas gravadas na nuvem")
+            if marks_err:
+                print(f"    [!] {marks_err}")
 
         # 3.1 research_events
         res_dict = {e["event_id"]: e for e in events_to_upload_research}
@@ -1430,6 +1666,7 @@ Data/Hora da Execução : {now_iso}
 Base SQLite Local     : {sqlite_file}
 Sessões Inseridas     : {sessions_inserted}
 Sessões Atualizadas   : {sessions_updated}
+Aulas Não Autorizadas : {len(unauthorized_marks)} (guardadas, fora das análises até a revisão)
 Sessões Retiradas     : {len(withdrawn)} (snapshots descartados: {withdrawn_snapshots_skipped}, eventos descartados: {withdrawn_events_skipped}, apagados do SQLite: {withdrawn_purged_sqlite})
 Eventos Inseridos     : {events_inserted_sqlite}
 Eventos Duplicados    : {events_duplicate_sqlite}

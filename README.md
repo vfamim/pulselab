@@ -14,7 +14,7 @@ O instrutor usa o menu do ícone da bandeja (botão direito):
 | Item | O que faz |
 |---|---|
 | **Encerrar turma…** | Fecha a gravação da turma. A próxima começa sozinha no primeiro programa salvo no SPIKE. |
-| **Não registrar esta turma** | Para recusas: apaga os dados da turma atual neste computador e pausa o registro até a próxima aula. |
+| **Não registrar esta turma** | Para recusas: mostra a aula ("Aula que começou às 14:05 (50 min)"), marca como não autorizada e pausa o registro até a próxima aula. Vale para a aula em andamento ou, sem ela, para a última encerrada. |
 | **Ver situação** | Mostra se o registro está ativo, pausado ou desligado. |
 | **Fechar PulseLab** | Desliga tudo até o computador ser ligado de novo ou o atalho ser usado. |
 
@@ -29,7 +29,8 @@ Sem encerramento, a sessão fecha sozinha depois de 3 horas ou quando o computad
   de tela ou teclado.
 - **Assentimento verbal.** No início da aula o instrutor lê o
   [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
-  turma**: os dados da turma são apagados e marcados contra reenvio, no computador e na nuvem.
+  turma**: a aula é marcada como não autorizada e nunca entra em análise. A exclusão definitiva é
+  feita na revisão do pesquisador, com marca contra reenvio (veja "Dados e nuvem").
 - **O que é registrado:** como a sessão terminou, interrupções, situação da pasta do SPIKE e, de
   cada versão salva do programa, só os tipos de blocos. Daí saem um escore de pensamento
   computacional adaptado de Dr. Scratch (ainda não validado) e, com calendário de missões, a
@@ -61,7 +62,24 @@ identificação da máquina e os registros. Guia para instrutores:
 Tudo fica em `dados_locais/` no computador, pasta que nenhuma atualização ou reinstalação apaga.
 Com internet, o bridge envia ao Supabase a cada 30 segundos: os eventos um a um e o resumo da
 sessão quando ela fecha. Polos sem internet enviam quando o instrutor conecta ou exportam por
-pendrive, e o pesquisador importa com `tooling/data/Importar-Para-Supabase.bat`.
+pendrive (veja abaixo).
+O relatório das aulas (uma linha por aula e resumo semanal por polo) sai com
+`python3 tooling/data/relatorio-pulselab.py`: veja [docs/pesquisa/relatorio.md](docs/pesquisa/relatorio.md).
+
+Aulas marcadas como não autorizadas sobem com `authorization_status = "nao_autorizada"` (e saem no
+pendrive em `sessions_unauthorized.txt`), ficam guardadas e fora das views de análise e de qualidade
+(`research_session_is_authorized`). Não há prazo automático para apagar, porque há polos que entregam
+pendrive meses depois. O pesquisador revisa:
+
+```sh
+python3 tooling/data/revisar-nao-autorizadas.py                       # lista (nuvem e SQLite consolidado)
+python3 tooling/data/revisar-nao-autorizadas.py --apagar <session_id>  # ou --apagar-todas: o padrão
+python3 tooling/data/revisar-nao-autorizadas.py --restaurar <session_id> --motivo "texto"
+```
+
+Apagar grava o tombstone em `research_withdrawals` (e no SQLite) antes de remover, o que barra reenvio
+pelo bridge e reimportação por pendrive. Usa as mesmas credenciais do importador
+(`PULSELAB_SERVICE_ROLE_KEY`).
 
 O cadastro das máquinas na nuvem é automático, com um token por polo:
 
@@ -75,6 +93,28 @@ python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae
 No primeiro contato com a internet, cada máquina se cadastra pela função `enroll-device`, apaga o
 token do disco e passa a renovar o acesso sozinha. O token vai dentro do ZIP do polo: se o pacote
 circular fora do polo, revogue-o (`revoked_at` em `device_enrollment_tokens`) e gere outro.
+
+### Polos sem internet (pendrive)
+
+Os dados do pendrive vão para o mesmo Supabase dos polos com internet:
+
+1. O pacote do polo leva uma chave do polo. A mesma chave fica no computador do pesquisador, em
+   `dist-polos/chaves-manifesto.json`. Gerar o pacote de novo reaproveita a chave do polo.
+2. No polo, o atalho **PulseLab - Exportar Dados** copia os registros para o pendrive e assina a
+   coleta com a chave. A chave fica no computador da escola e não vai para o pendrive.
+3. O pesquisador conecta o pendrive e roda `tooling/data/Importar-Para-Supabase.bat` (ou
+   `python3 tooling/data/importar-para-supabase.py`). O importador escolhe a chave pelo polo
+   escrito na coleta e só envia à nuvem o que confere.
+
+Guarde `dist-polos/chaves-manifesto.json` com o mesmo cuidado do token: quem tem a chave consegue
+fazer uma coleta falsa daquele polo passar como verdadeira. O arquivo fica fora do git. Se gerar
+pacotes em outro computador, leve o arquivo junto ou indique o caminho com `--chaves`. Se faltar a
+chave de um polo, o importador diz qual polo e onde colocar o arquivo. Máquinas instaladas com um
+pacote antigo exportam sem assinatura: reinstale com o pacote do polo gerado por esta versão. Sem
+chave, `--no-cloud` guarda a coleta só no SQLite local.
+
+Quando a turma não é registrada, a retirada vale mesmo se a pasta do pendrive for recusada,
+porque ela só apaga dados.
 
 ## Atualização automática
 

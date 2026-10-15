@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.0.9"
+$script:BridgeVersion = "3.1.0"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -242,8 +242,9 @@ if (Test-Path $script:QuarantinedSessionsTrackerFile) {
     } catch {}
 }
 
-# Tombstones de retirada impedem que arquivos atrasados voltem a ser sincronizados.
-# A fila pendente guarda apenas session_id e sobrevive a reinicios ate a exclusao remota.
+# Tombstones de retirada (gravados ate a versao 3.0.x, quando "Nao registrar esta turma" apagava na hora)
+# impedem que arquivos atrasados voltem a ser sincronizados. A fila pendente guarda apenas session_id e
+# sobrevive a reinicios ate a exclusao remota.
 $script:WithdrawnSessionIds = [System.Collections.Generic.HashSet[string]]::new()
 $script:WithdrawnSessionsTrackerFile = Join-Path $DataDir "sessions_withdrawn.txt"
 $script:PendingWithdrawalIds = [System.Collections.Generic.HashSet[string]]::new()
@@ -287,19 +288,6 @@ function Invoke-RemoteSessionPurge {
     }
 }
 
-function Register-SessionWithdrawal {
-    param([Parameter(Mandatory = $true)][string]$SessionId)
-    [void]$script:WithdrawnSessionIds.Add($SessionId)
-    [void]$script:PendingWithdrawalIds.Add($SessionId)
-    Save-WithdrawalTrackers
-    if (Invoke-RemoteSessionPurge -SessionId $SessionId) {
-        [void]$script:PendingWithdrawalIds.Remove($SessionId)
-        Save-WithdrawalTrackers
-        return $true
-    }
-    return $false
-}
-
 function Sync-PendingWithdrawals {
     if (-not $script:SupabaseOperationalJwt -or $script:PendingWithdrawalIds.Count -eq 0) { return }
     foreach ($pendingSessionId in @($script:PendingWithdrawalIds)) {
@@ -308,6 +296,25 @@ function Sync-PendingWithdrawals {
         }
     }
     Save-WithdrawalTrackers
+}
+
+# Aulas marcadas como nao autorizadas ("Nao registrar esta turma"). Os dados ficam no computador pela
+# retencao normal e sobem a nuvem com authorization_status = "nao_autorizada"; nunca entram em analise
+# e sao apagados de vez na revisao do pesquisador. Uma linha por aula: session_id<TAB>marked_at.
+$script:UnauthorizedSessions = @{}
+$script:UnauthorizedTrackerFile = Join-Path $DataDir "sessions_unauthorized.txt"
+if (Test-Path $script:UnauthorizedTrackerFile) {
+    try {
+        Get-Content $script:UnauthorizedTrackerFile | ForEach-Object {
+            $parts = @($_.Trim() -split '\s+')
+            if ($parts[0]) { $script:UnauthorizedSessions[$parts[0]] = if ($parts.Count -gt 1) { $parts[1] } else { "" } }
+        }
+    } catch {}
+}
+
+function Save-UnauthorizedTracker {
+    $text = (@($script:UnauthorizedSessions.Keys | Sort-Object) | ForEach-Object { "$_`t$($script:UnauthorizedSessions[$_])`r`n" }) -join ""
+    Save-BridgeTextAtomic -Path $script:UnauthorizedTrackerFile -Text $text
 }
 
 $script:HasLoggedJwtWarning = $false
@@ -626,6 +633,11 @@ function Sync-SessionSnapshotsToSupabase {
             $sid = [string]$sdata.session_id
             if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid) -or $script:WithdrawnSessionIds.Contains($sid)) {
                 continue
+            }
+            # A marca do registro local vale mesmo se o snapshot nao chegou a ser regravado com ela.
+            if ($script:UnauthorizedSessions.ContainsKey($sid) -and $sdata.authorization_status -ne "nao_autorizada") {
+                $sdata | Add-Member -NotePropertyName authorization_status -NotePropertyValue "nao_autorizada" -Force
+                $sdata | Add-Member -NotePropertyName marked_at -NotePropertyValue $script:UnauthorizedSessions[$sid] -Force
             }
             # Snapshots sao so de insercao para o dispositivo: envia uma vez, com a turma encerrada
             # ou abandonada ha mais de 12 horas, para nao congelar o estado inicial.
@@ -1075,6 +1087,8 @@ $script:HeartbeatSeconds = Get-BridgeIntSetting "PULSELAB_HEARTBEAT_SECONDS" 300
 $script:SpikePollSeconds = Get-BridgeIntSetting "PULSELAB_SPIKE_POLL_SECONDS" 15 1 600
 
 $script:SessionStateFile = Join-Path $DataDir "active_session.json"
+# Ultima turma encerrada; apagado quando outra turma comeca (alvo de "Nao registrar esta turma").
+$script:LastClosedFile = Join-Path $DataDir "last_closed_session.json"
 $script:PauseFile = Join-Path $DataDir "collection_pause.json"
 $script:ActiveSession = $null
 $script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
@@ -1470,6 +1484,7 @@ function Start-BridgeSession {
         last_structure_hash = $null
         last_summary = $null
     }
+    Remove-Item -LiteralPath $script:LastClosedFile -Force -ErrorAction SilentlyContinue
     $script:AwaitingActivity = $false
     $script:LastHeartbeat = [DateTime]::UtcNow
     $script:LastSpikePoll = [DateTime]::MinValue
@@ -1585,6 +1600,13 @@ function Close-BridgeSession {
     }
     Save-BridgeSnapshot $snapshot
     try { Update-BridgeSessionCatalog $snapshot } catch { Write-BridgeLog "Aviso ao atualizar catalogo: $($_.Exception.Message)" "WARN" }
+    try {
+        Save-BridgeTextAtomic -Path $script:LastClosedFile -Text ([ordered]@{
+            session_id = [string]$s.session_id
+            started_at_ms = [int64]$s.started_at_ms
+            ended_at_ms = [int64]$endMs
+        } | ConvertTo-Json)
+    } catch { Write-BridgeLog "Aviso ao guardar a ultima turma encerrada: $($_.Exception.Message)" "WARN" }
 
     Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
     $script:ActiveSession = $null
@@ -1642,14 +1664,79 @@ function Test-BridgeCollectionPaused {
     return $true
 }
 
-# "Nao registrar esta turma" (bandeja): apaga os dados da turma atual e pausa ate a proxima aula.
+# Alvo de "Nao registrar esta turma": a turma em andamento ou, sem ela, a ultima turma encerrada,
+# desde que nenhuma turma tenha comecado depois (Start-BridgeSession apaga last_closed_session.json).
+# Devolve so dados tecnicos da sessao (id interno, inicio e duracao), nunca dados das criancas.
+function Get-BridgeMarkTarget {
+    $nowMs = Get-BridgeNowMs
+    $s = $script:ActiveSession
+    $active = [bool]$s
+    if ($s) {
+        $sid = [string]$s.session_id
+        $startMs = [int64]$s.started_at_ms
+        $endMs = $nowMs
+    } else {
+        if (-not (Test-Path -LiteralPath $script:LastClosedFile)) { return $null }
+        $last = $null
+        try { $last = Get-Content -LiteralPath $script:LastClosedFile -Raw -Encoding UTF8 | ConvertFrom-Json } catch { $last = $null }
+        if (-not $last -or -not $last.session_id) { return $null }
+        $sid = [string]$last.session_id
+        if ($script:UnauthorizedSessions.ContainsKey($sid)) { return $null }
+        if (-not (Test-Path -LiteralPath (Get-BridgeSessionFile $sid))) { return $null }
+        $startMs = [int64]$last.started_at_ms
+        $endMs = [int64]$last.ended_at_ms
+    }
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    $startLocal = (ConvertFrom-BridgeMs $startMs).ToLocalTime()
+    return [ordered]@{
+        session_id = $sid
+        active = $active
+        started_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $startMs)
+        started_local = $startLocal.ToString("HH:mm", $inv)
+        started_local_date = $startLocal.ToString("dd/MM/yyyy", $inv)
+        started_today = ($startLocal.Date -eq (Get-Date).Date)
+        duration_min = [int][Math]::Round([Math]::Max(0, $endMs - $startMs) / 60000.0)
+    }
+}
+
+# Marca a aula como nao autorizada: registro local, snapshot e novo envio a nuvem. Nada e apagado.
+function Set-BridgeSessionUnauthorized {
+    param([Parameter(Mandatory = $true)][string]$SessionId)
+    $markedAt = ConvertTo-BridgeIso ([DateTime]::UtcNow)
+    # Registro local primeiro: se a gravacao do snapshot falhar, o envio aplica a marca mesmo assim.
+    $script:UnauthorizedSessions[$SessionId] = $markedAt
+    Save-UnauthorizedTracker
+    try {
+        $snap = Get-Content -LiteralPath (Get-BridgeSessionFile $SessionId) -Raw -Encoding UTF8 | ConvertFrom-Json
+        $snap | Add-Member -NotePropertyName authorization_status -NotePropertyValue "nao_autorizada" -Force
+        $snap | Add-Member -NotePropertyName marked_at -NotePropertyValue $markedAt -Force
+        Save-BridgeSnapshot $snap
+    } catch {
+        Write-BridgeLog "Aviso ao marcar o snapshot da aula $SessionId`: $($_.Exception.Message)" "WARN"
+    }
+    # Aula ja enviada: sai da lista de enviadas e sobe de novo, agora com a marca.
+    if ($script:SyncedSessionIds.Remove($SessionId)) {
+        try {
+            $sessSyncTmp = Join-Path $DataDir "sessions_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
+            [System.IO.File]::WriteAllLines($sessSyncTmp, [string[]]$script:SyncedSessionIds, [System.Text.Encoding]::UTF8)
+            Move-BridgeAtomicFile -SourcePath $sessSyncTmp -DestinationPath $script:SyncedSessionsTrackerFile
+        } catch {}
+    }
+    Write-BridgeLog "Aula $SessionId marcada como nao autorizada pelo instrutor; dados mantidos ate a revisao do pesquisador." "INFO"
+    return $markedAt
+}
+
+# "Nao registrar esta turma" (bandeja): marca a aula alvo como nao autorizada e pausa ate a proxima aula.
 function Suspend-BridgeCollection {
-    $sessionId = if ($script:ActiveSession) { [string]$script:ActiveSession.session_id } else { $null }
+    $target = Get-BridgeMarkTarget
+    $markedAt = $null
+    if ($target) {
+        if ($target.active) { [void](Close-BridgeSession -EndedBy "instrutor") }
+        $markedAt = Set-BridgeSessionUnauthorized -SessionId $target.session_id
+    }
     $script:ActiveSession = $null
     $script:SessionTimeline = [System.Collections.Generic.List[object]]::new()
     Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
-    $remoteConfirmed = $true
-    if ($sessionId) { $remoteConfirmed = Remove-BridgeSessionData -SessionId $sessionId -Reason "nao_registrar_turma" }
     $nowMs = Get-BridgeNowMs
     $script:CollectionPause = [pscustomobject][ordered]@{
         paused_at = ConvertTo-BridgeIso (ConvertFrom-BridgeMs $nowMs)
@@ -1658,8 +1745,8 @@ function Suspend-BridgeCollection {
     }
     Save-BridgeTextAtomic -Path $script:PauseFile -Text ($script:CollectionPause | ConvertTo-Json)
     $script:AwaitingActivity = $false
-    Write-BridgeLog "Registro desta turma cancelado pelo instrutor; dados apagados e coleta pausada ate a proxima aula." "INFO"
-    return [ordered]@{ purged_session = [bool]$sessionId; remote_pending = (-not $remoteConfirmed) }
+    if (-not $target) { Write-BridgeLog "Nao registrar esta turma: nenhuma aula para marcar; coleta pausada ate a proxima aula." "INFO" }
+    return [ordered]@{ marked = [bool]$target; target = $target; marked_at = $markedAt }
 }
 
 function Add-BridgeHeartbeat {
@@ -1887,6 +1974,8 @@ function Get-BridgeStatus {
         paused = [bool]$script:CollectionPause
         awaiting_activity = [bool]$script:AwaitingActivity
         session = $session
+        # Aula que "Nao registrar esta turma" marcaria agora (a bandeja mostra antes de confirmar).
+        mark_target = if ($ctx) { Get-BridgeMarkTarget } else { $null }
         session_max_minutes = $script:SessionMaxMinutes
         spike_environment = Get-BridgeSpikeEnvironment
         cloud_enabled = [bool]$script:SupabaseOperationalJwt
@@ -1947,158 +2036,6 @@ function Send-BridgeResponse {
         $Response.ContentLength64 = 0
     }
     $Response.Close()
-}
-
-# Expurgo local completo de uma sessao (retirada ou "Nao registrar esta turma"), com tombstone
-# gravado antes de apagar qualquer arquivo e exclusao remota com nova tentativa.
-function Remove-BridgeSessionData {
-    param(
-        [Parameter(Mandatory = $true)][string]$SessionId,
-        [string]$Reason = ""
-    )
-    $reqSessId = $SessionId
-    $reason = $Reason
-    $catFile = Join-Path $DataDir "catalogo_sessoes.json"
-    # Registra o tombstone antes de apagar qualquer arquivo. Assim, mesmo em caso
-    # de queda ou falha de rede, nenhum payload atrasado desta sessao volta a subir.
-    $remotePurgeConfirmed = Register-SessionWithdrawal -SessionId $reqSessId
-
-    # PURGA ATOMICA
-    $safeSessId = ($reqSessId -replace '[^a-zA-Z0-9_-]', '_')
-
-    # Snapshot/arquivo da sessao
-    $sessoesDir = Join-Path $DataDir "sessoes"
-    $sessFile = Join-Path $sessoesDir "sessao_$safeSessId.json"
-    if (Test-Path $sessFile) {
-        try { Remove-Item -LiteralPath $sessFile -Force -ErrorAction SilentlyContinue } catch {}
-    }
-
-    # Eventos de events.jsonl
-    $purgedEventIds = [System.Collections.Generic.HashSet[string]]::new()
-    $eventsFile = Join-Path $DataDir "events.jsonl"
-    if (Test-Path $eventsFile) {
-        try {
-            $allLines = [System.IO.File]::ReadAllLines($eventsFile, [System.Text.Encoding]::UTF8)
-            $survivingLines = [System.Collections.Generic.List[string]]::new()
-            foreach ($line in $allLines) {
-                if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                try {
-                    $evObj = $line | ConvertFrom-Json
-                    if ($evObj.session_id -eq $reqSessId) {
-                        if ($evObj.event_id) { [void]$purgedEventIds.Add([string]$evObj.event_id) }
-                        continue
-                    }
-                    $survivingLines.Add($line)
-                } catch {
-                    $survivingLines.Add($line)
-                }
-            }
-            $eventsTmp = Join-Path $DataDir "events.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-            [System.IO.File]::WriteAllLines($eventsTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-            Move-BridgeAtomicFile -SourcePath $eventsTmp -DestinationPath $eventsFile
-        } catch {
-            Write-BridgeLog "Aviso ao purgar eventos de $safeSessId`: $($_.Exception.Message)" "WARN"
-        }
-    }
-
-    # Eventos arquivados e payloads de quarentena pertencem ao mesmo registro da sessao.
-    foreach ($jsonlSpec in @(
-        @{ Path = (Join-Path $DataDir "events_archive.jsonl"); Nested = $false; TempPrefix = "events_archive_purge" },
-        @{ Path = (Join-Path $DataDir "events_quarantine.jsonl"); Nested = $true; TempPrefix = "events_quarantine_payloads_purge" }
-    )) {
-        if (-not (Test-Path -LiteralPath $jsonlSpec.Path)) { continue }
-        try {
-            $allLines = [System.IO.File]::ReadAllLines($jsonlSpec.Path, [System.Text.Encoding]::UTF8)
-            $survivingLines = [System.Collections.Generic.List[string]]::new()
-            foreach ($line in $allLines) {
-                if ([string]::IsNullOrWhiteSpace($line)) { continue }
-                try {
-                    $recordObj = $line | ConvertFrom-Json
-                    $recordSessionId = if ($jsonlSpec.Nested) {
-                        if ($recordObj.session_id) { [string]$recordObj.session_id } elseif ($recordObj.event -and $recordObj.event.session_id) { [string]$recordObj.event.session_id } else { "" }
-                    } else {
-                        [string]$recordObj.session_id
-                    }
-                    if ($recordSessionId -eq $reqSessId) {
-                        if ($recordObj.event_id) { [void]$purgedEventIds.Add([string]$recordObj.event_id) }
-                        continue
-                    }
-                    $survivingLines.Add($line)
-                } catch {
-                    $survivingLines.Add($line)
-                }
-            }
-            $jsonlTmp = Join-Path $DataDir "$($jsonlSpec.TempPrefix).tmp.$([System.Guid]::NewGuid().ToString('N'))"
-            [System.IO.File]::WriteAllLines($jsonlTmp, $survivingLines, [System.Text.Encoding]::UTF8)
-            Move-BridgeAtomicFile -SourcePath $jsonlTmp -DestinationPath $jsonlSpec.Path
-        } catch {
-            Write-BridgeLog "Aviso ao purgar $($jsonlSpec.Path) para $safeSessId`: $($_.Exception.Message)" "WARN"
-        }
-    }
-
-    # Catalogo de sessoes
-    if (Test-Path $catFile) {
-        try {
-            $catExisting = Get-Content -Path $catFile -Raw -Encoding UTF8 | ConvertFrom-Json
-            $survivingCatalog = [System.Collections.Generic.List[object]]::new()
-            if ($catExisting -is [System.Collections.IEnumerable]) {
-                foreach ($item in $catExisting) {
-                    if ($item.session_id -ne $reqSessId) {
-                        $survivingCatalog.Add($item)
-                    }
-                }
-            } elseif ($catExisting -and $catExisting.session_id -ne $reqSessId) {
-                $survivingCatalog.Add($catExisting)
-            }
-            $catJson = $survivingCatalog | ConvertTo-Json -Depth 5
-            $catTmp = Join-Path $DataDir "catalogo_sessoes.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-            [System.IO.File]::WriteAllText($catTmp, $catJson, [System.Text.Encoding]::UTF8)
-            Move-BridgeAtomicFile -SourcePath $catTmp -DestinationPath $catFile
-        } catch {
-            Write-BridgeLog "Aviso ao purgar catalogo para $safeSessId`: $($_.Exception.Message)" "WARN"
-        }
-    }
-
-    # Trackers locais
-    if ($purgedEventIds.Count -gt 0) {
-        foreach ($purgedId in $purgedEventIds) {
-            [void]$script:SyncedEventIds.Remove($purgedId)
-            [void]$script:QuarantinedEventIds.Remove($purgedId)
-        }
-        if (Test-Path $script:SyncedTrackerFile) {
-            try {
-                $syncTmp = Join-Path $DataDir "events_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                [System.IO.File]::WriteAllLines($syncTmp, [string[]]$script:SyncedEventIds, [System.Text.Encoding]::UTF8)
-                Move-BridgeAtomicFile -SourcePath $syncTmp -DestinationPath $script:SyncedTrackerFile
-            } catch {}
-        }
-        if (Test-Path $script:QuarantinedTrackerFile) {
-            try {
-                $quarTmp = Join-Path $DataDir "events_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-                [System.IO.File]::WriteAllLines($quarTmp, [string[]]$script:QuarantinedEventIds, [System.Text.Encoding]::UTF8)
-                Move-BridgeAtomicFile -SourcePath $quarTmp -DestinationPath $script:QuarantinedTrackerFile
-            } catch {}
-        }
-    }
-
-    [void]$script:SyncedSessionIds.Remove($reqSessId)
-    [void]$script:QuarantinedSessionIds.Remove($reqSessId)
-    if (Test-Path $script:SyncedSessionsTrackerFile) {
-        try {
-            $sessSyncTmp = Join-Path $DataDir "sessions_synced.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-            [System.IO.File]::WriteAllLines($sessSyncTmp, [string[]]$script:SyncedSessionIds, [System.Text.Encoding]::UTF8)
-            Move-BridgeAtomicFile -SourcePath $sessSyncTmp -DestinationPath $script:SyncedSessionsTrackerFile
-        } catch {}
-    }
-    if (Test-Path $script:QuarantinedSessionsTrackerFile) {
-        try {
-            $sessQuarTmp = Join-Path $DataDir "sessions_quarantine.tmp.$([System.Guid]::NewGuid().ToString('N'))"
-            [System.IO.File]::WriteAllLines($sessQuarTmp, [string[]]$script:QuarantinedSessionIds, [System.Text.Encoding]::UTF8)
-            Move-BridgeAtomicFile -SourcePath $sessQuarTmp -DestinationPath $script:QuarantinedSessionsTrackerFile
-        } catch {}
-    }
-    Write-BridgeLog "Sessao $safeSessId expurgada localmente (motivo: $reason; remoto confirmado: $remotePurgeConfirmed)." "INFO"
-    return $remotePurgeConfirmed
 }
 
 # Executar limpeza de retencao absoluta na inicializacao
@@ -2664,19 +2601,36 @@ try {
                 continue
             }
 
-            # "Nao registrar esta turma" (bandeja): apaga a turma atual e pausa ate a proxima aula.
+            # "Nao registrar esta turma" (bandeja): marca a aula como nao autorizada e pausa ate a proxima aula.
             if ($path -eq "/v1/session/pause" -and $request.HttpMethod -eq "POST") {
                 $readRes = Read-BoundedRequestBody -Request $request -MaxBytes 4096
                 if (-not $readRes.Success) {
                     Send-BridgeResponse -Response $response -StatusCode $readRes.StatusCode -Payload @{ error = $readRes.Error }
                     continue
                 }
+                $pauseObj = $null
+                try {
+                    if (-not [string]::IsNullOrWhiteSpace($readRes.Body)) { $pauseObj = $readRes.Body | ConvertFrom-Json }
+                } catch {
+                    Send-BridgeResponse -Response $response -StatusCode 400 -Payload @{ error = "Bad Request"; message = "JSON invalido" }
+                    continue
+                }
                 if (-not (Get-BridgeResearchContext)) {
                     Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "Este computador nao registra dados de pesquisa." }
                     continue
                 }
+                # A aula precisa ser a mesma que a bandeja mostrou ao instrutor ("" = nenhuma aula).
+                if ($null -ne $pauseObj -and $pauseObj.PSObject.Properties["session_id"]) {
+                    $currentTarget = Get-BridgeMarkTarget
+                    $shownSessId = if ($pauseObj.session_id) { [string]$pauseObj.session_id } else { "" }
+                    $targetSessId = if ($currentTarget) { [string]$currentTarget.session_id } else { "" }
+                    if ($shownSessId -ne $targetSessId) {
+                        Send-BridgeResponse -Response $response -StatusCode 409 -Payload @{ error = "Conflict"; message = "A aula mudou desde que a janela foi aberta."; mark_target = $currentTarget }
+                        continue
+                    }
+                }
                 $pauseResult = Suspend-BridgeCollection
-                Send-BridgeResponse -Response $response -StatusCode 200 -Payload @{ status = "paused"; purged_session = $pauseResult.purged_session; remote_pending = $pauseResult.remote_pending }
+                Send-BridgeResponse -Response $response -StatusCode 200 -Payload ([ordered]@{ status = "paused"; marked = $pauseResult.marked; marked_at = $pauseResult.marked_at; target = $pauseResult.target })
                 continue
             }
 

@@ -67,6 +67,8 @@ apps/student-pwa/playwright-report/
 
 # Offline research data storage (LGPD compliance), em qualquer pasta
 dados_locais/
+# Relatórios gerados por tooling/data/relatorio-pulselab.py
+/relatorios/
 
 # Pasta montada por tooling/site/build-hosting.py para o Firebase Hosting
 hosting-dist/

@@ -5,6 +5,7 @@
 #   - installation_id: UUID aleatorio gerado uma unica vez nesta maquina;
 #   - machine_label: rotulo legivel (ex.: PET-LAB1-PC03), usado em exportacoes e etiquetas;
 #   - dados do polo vindos de provisionamento.json (sede, escola, autorizacao de pesquisa).
+#   - manifest_hmac_key: chave do polo que assina o pendrive (exportar-pendrive.ps1); nunca e exportada.
 #
 # O arquivo fica em dados_locais, que atualizacoes e reinstalacoes nunca sobrescrevem.
 # Nenhum nome de computador, usuario do Windows ou caminho pessoal e gravado.
@@ -20,7 +21,8 @@ $script:PulseLabProvisioningFields = @(
     "research_authorized_purposes",
     "retention_days",
     "calendario_missoes",
-    "enrollment_token"
+    "enrollment_token",
+    "manifest_hmac_key"
 )
 
 function ConvertTo-PulseLabMachineLabel {

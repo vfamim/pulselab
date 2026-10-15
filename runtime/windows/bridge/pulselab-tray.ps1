@@ -4,7 +4,7 @@
 # Mostra que o PulseLab está ligado sem abrir janelas durante a aula.
 # Menu (clique direito), para o instrutor:
 #   - Encerrar turma...         encerra a turma atual silenciosamente (sem abrir janelas)
-#   - Não registrar esta turma  apaga os dados da turma atual e pausa até a próxima aula
+#   - Não registrar esta turma  mostra a aula, marca como não autorizada e pausa até a próxima aula
 #   - Ver situação              resumo do registro neste computador
 #   - Fechar PulseLab           desliga o servidor local e a bandeja até o próximo início
 # Também religa o PulseLab se o servidor local parar de responder.
@@ -140,10 +140,10 @@ $script:LastRestart = [DateTime]::MinValue
 $script:LastStatus = $null
 
 function Invoke-TrayApi {
-    param([string]$Path, [string]$Method = "GET")
+    param([string]$Path, [string]$Method = "GET", [string]$Body = "{}")
     if ($Method -eq "POST") {
         # O bridge exige a origem local nos métodos que alteram dados.
-        return Invoke-RestMethod -Uri "$($script:BaseUrl)$Path" -Method Post -Body "{}" -ContentType "application/json" -Headers @{ Origin = $script:BaseUrl } -TimeoutSec 10
+        return Invoke-RestMethod -Uri "$($script:BaseUrl)$Path" -Method Post -Body $Body -ContentType "application/json" -Headers @{ Origin = $script:BaseUrl } -TimeoutSec 10
     }
     return Invoke-RestMethod -Uri "$($script:BaseUrl)$Path" -TimeoutSec 3
 }
@@ -295,20 +295,52 @@ $itemExit.add_Click({
     }
 })
 
+# Aula alvo como o instrutor a reconhece: "às 14:05 (50 min)", com a data se não for de hoje.
+function Format-TrayAula($Target) {
+    $when = "às $($Target.started_local)"
+    if (-not $Target.started_today) { $when = "em $($Target.started_local_date) $when" }
+    return "$when ($($Target.duration_min) min)"
+}
+
 $itemPause.add_Click({
+    Update-TrayStatus
+    $s = $script:LastStatus
+    if (-not $s) {
+        Show-ModernDialog -Message "Não foi possível falar com o PulseLab agora. Tente de novo em 1 minuto." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+        return
+    }
+    # A bandeja mostra a aula que será marcada; o bridge recusa se ela mudar antes da confirmação.
+    $target = $s.mark_target
+    if ($target) {
+        $question = "Use quando alguém da bancada (ou a família) não quiser participar.`n`nAula que começou $(Format-TrayAula $target). Marcar esta aula como não autorizada? Os dados não serão usados na pesquisa.`n`nO registro fica pausado até a próxima aula. A bancada continua usando tudo normalmente."
+        $shownId = [string]$target.session_id
+    } else {
+        $question = "Não há aula registrada neste computador agora. O registro fica pausado até a próxima aula.`n`nContinuar?"
+        $shownId = ""
+    }
     $answer = Show-ModernDialog `
-        -Message "Use quando alguém da turma (ou a família) não quiser participar.`n`nOs dados desta turma neste computador serão apagados e o registro fica pausado até a próxima aula. A bancada continua funcionando normalmente.`n`nNão registrar esta turma?" `
-        -Title "PulseLab" `
+        -Message $question `
+        -Title "PulseLab — Não registrar esta turma" `
         -Buttons ([System.Windows.Forms.MessageBoxButtons]::YesNo) `
         -Icon ([System.Windows.Forms.MessageBoxIcon]::Question)
     if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
     try {
-        $result = Invoke-TrayApi "/v1/session/pause" "POST"
-        $message = "Os dados desta turma foram apagados neste computador. O registro volta na próxima aula."
-        if ($result.remote_pending) { $message += " A cópia na nuvem será apagada quando houver internet." }
+        $result = Invoke-TrayApi "/v1/session/pause" "POST" (@{ session_id = $shownId } | ConvertTo-Json -Compress)
+        if ($result.marked -and $result.target) {
+            $message = "Aula que começou $(Format-TrayAula $result.target) marcada como não autorizada. Os dados não serão usados na pesquisa. O registro volta na próxima aula."
+        } else {
+            $message = "Nenhuma aula foi marcada. O registro fica pausado até a próxima aula."
+        }
         $notify.ShowBalloonTip(6000, "PulseLab", $message, [System.Windows.Forms.ToolTipIcon]::Info)
     } catch {
-        Show-ModernDialog -Message "Não foi possível falar com o PulseLab agora. Tente de novo em 1 minuto." -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
+        $httpStatus = 0
+        try { $httpStatus = [int]$_.Exception.Response.StatusCode } catch {}
+        $failure = if ($httpStatus -eq 409) {
+            "A aula mudou enquanto a janela estava aberta. Nada foi marcado. Abra o menu e escolha Não registrar esta turma de novo."
+        } else {
+            "Não foi possível falar com o PulseLab agora. Nada foi marcado. Tente de novo em 1 minuto."
+        }
+        Show-ModernDialog -Message $failure -Title "PulseLab" -Icon ([System.Windows.Forms.MessageBoxIcon]::Warning) | Out-Null
     }
     Update-TrayStatus
 })

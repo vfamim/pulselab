@@ -55,12 +55,12 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
 3. **Assentimento Verbal, Livre e Não-Punitivo** (desde a 2.4.0):
    - No início de cada aula o instrutor lê o roteiro padronizado de `docs/campo/assentimento-verbal.md`: o que é registrado, que a participação é voluntária e que qualquer pessoa pode recusar a qualquer momento, sem consequência. As famílias são informadas antes, conforme o TCLE aprovado pelo CEP.
    - Nenhuma tela de assentimento, questionário, contador ou alerta aparece para as crianças durante a aula; o PulseLab fica só como ícone na bandeja.
-   - A recusa de qualquer membro da bancada (ou da família) leva o instrutor a usar **"Não registrar esta turma"** no ícone da bandeja: os dados daquela turma no computador são apagados e o registro pausa até a próxima aula, com acesso pedagógico integral às ferramentas de robótica.
+   - A recusa de qualquer membro da bancada (ou da família) leva o instrutor a usar **"Não registrar esta turma"** no ícone da bandeja: a aula daquela turma é marcada imediatamente como não autorizada (dados nunca usados) e o registro pausa até a próxima aula, com acesso pedagógico integral às ferramentas de robótica. A exclusão definitiva é feita na revisão do pesquisador.
 
-4. **Retenção Local Configurável e Retirada Imediata**:
+4. **Retenção Local Configurável e Retirada com Revisão**:
    - Dados locais do Bridge expiram no prazo `retention_days` do provisionamento do polo (1 a 365 dias), com padrão de 180 dias (`Invoke-BridgeRetentionCleanup`). Desde a 2.4.0 o navegador não guarda dados (o formulário final apaga o IndexedDB das versões antigas). O prazo deve constar no protocolo e no TCLE aprovados pelo CEP.
    - A cópia local permanece no computador durante todo o prazo, mesmo depois do envio à nuvem ou da exportação.
-   - "Não registrar esta turma" executa o expurgo definitivo e imediato dos dados locais da turma, registra tombstone contra reenvio (local e na tabela `research_withdrawals`, que também barra reimportação por pendrive) e executa exclusão remota autenticada com retry.
+   - "Não registrar esta turma" executa a marcação imediata como não autorizada (dados nunca usados) e exclusão definitiva na revisão do pesquisador, com tombstone contra reenvio (na tabela `research_withdrawals`, que também barra reimportação por pendrive). Não há prazo automático para apagar: polos sem internet entregam pendrive meses depois. A marca vai junto com a sessão (`authorization_status = "nao_autorizada"`) e toda view de análise ou de qualidade filtra com `research_session_is_authorized(session_id)`.
 
 5. **Proibição de Telemetria Invasiva**:
    - Captura de tela (screenshots) e interceptação global de teclas (`GetAsyncKeyState`) são terminantemente proibidas e abolidas.
