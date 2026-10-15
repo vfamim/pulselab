@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.1.0"
+$script:BridgeVersion = "3.1.1"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1082,6 +1082,7 @@ function Get-BridgeIntSetting([string]$EnvName, [int]$Default, [int]$Min, [int]$
 
 # Variaveis de ambiente existem so para os testes automatizados encurtarem os prazos.
 $script:SessionMaxMinutes = Get-BridgeIntSetting "PULSELAB_SESSION_MAX_MINUTES" 180 1 720
+$script:SessionIdleMinutes = Get-BridgeIntSetting "PULSELAB_SESSION_IDLE_MINUTES" 40 1 720
 $script:ResumeGapMinutes = Get-BridgeIntSetting "PULSELAB_RESUME_GAP_MINUTES" 20 1 240
 $script:HeartbeatSeconds = Get-BridgeIntSetting "PULSELAB_HEARTBEAT_SECONDS" 300 1 3600
 $script:SpikePollSeconds = Get-BridgeIntSetting "PULSELAB_SPIKE_POLL_SECONDS" 15 1 600
@@ -1476,6 +1477,7 @@ function Start-BridgeSession {
         spike_status = [string]$spikeEnv.status
         telemetry_events = 0
         first_program_at = $null
+        last_program_ms = 0
         baseline = $baseline
         files = @()
         last_file_key = $null
@@ -1499,6 +1501,7 @@ function Start-BridgeSession {
         baseline_projects = $baseline.Count
         mission_id = $missionId
         session_max_minutes = $script:SessionMaxMinutes
+        session_idle_minutes = $script:SessionIdleMinutes
     }))
     Write-BridgeLog "Turma iniciada nesta bancada ($StartMode)." "INFO"
     return $true
@@ -1519,7 +1522,7 @@ function Get-BridgeDataQuality {
 
 function Close-BridgeSession {
     param(
-        [Parameter(Mandatory = $true)][ValidateSet("instrutor", "tempo", "sem_encerramento")][string]$EndedBy,
+        [Parameter(Mandatory = $true)][ValidateSet("instrutor", "tempo", "sem_encerramento", "inatividade")][string]$EndedBy,
         [int64]$EndedAtMs = 0,
         $Experience = $null,
         $Rubric = $null
@@ -1841,6 +1844,9 @@ function Update-BridgeSpikeTelemetry {
         if ($coverage) { $details.mission_coverage = $coverage }
     }
     $s.telemetry_events = [int]$s.telemetry_events + 1
+    # Nova versao salva no SPIKE: zera o relogio de inatividade (Add-Member: estado salvo por versoes antigas nao tem o campo).
+    $savedMs = [DateTimeOffset]::new([DateTime]::SpecifyKind($newest.LastWriteTimeUtc, [DateTimeKind]::Utc)).ToUnixTimeMilliseconds()
+    $s | Add-Member -NotePropertyName last_program_ms -NotePropertyValue ([Math]::Max([int64]$s.started_at_ms, [Math]::Max([int64]$s.last_program_ms, $savedMs))) -Force
     $s.last_structure_hash = $hash
     $s.last_telemetry_file_key = $key
     $s.last_summary = [ordered]@{
@@ -1850,6 +1856,16 @@ function Update-BridgeSpikeTelemetry {
     }
     $stage = if ($first) { "primeira_programacao_detectada" } else { "atualizacao_codigo_spike" }
     [void](Add-BridgeSessionEvent -EventType "spike_telemetry" -Stage $stage -Details $details)
+}
+
+# Fim por inatividade: limite contado da ultima versao salva no SPIKE ou, sem nenhuma, do inicio da turma.
+# Ultimo sinal de atividade da turma: ultima versao salva no SPIKE ou, sem nenhuma, o inicio.
+function Get-BridgeLastActivityMs($Session) {
+    return [Math]::Max([int64]$Session.started_at_ms, [int64]$Session.last_program_ms)
+}
+
+function Get-BridgeIdleDeadlineMs($Session) {
+    return (Get-BridgeLastActivityMs $Session) + [int64]$script:SessionIdleMinutes * 60000
 }
 
 function Initialize-BridgeSession {
@@ -1869,8 +1885,13 @@ function Initialize-BridgeSession {
         $s.corrupted_lines = [int]$s.corrupted_lines + $script:CorruptedLinesFound
         $gapMin = ($nowMs - [int64]$s.last_alive_ms) / 60000.0
         $ageMin = ($nowMs - [int64]$s.started_at_ms) / 60000.0
+        $idleEndMs = Get-BridgeIdleDeadlineMs $s
         if ($gapMin -ge $script:ResumeGapMinutes) {
             [void](Close-BridgeSession -EndedBy "sem_encerramento" -EndedAtMs ([int64]$s.last_alive_ms))
+        } elseif ($nowMs -ge $idleEndMs -and $idleEndMs -lt ([int64]$s.started_at_ms + [int64]$script:SessionMaxMinutes * 60000)) {
+            # Sem programa salvo pelo limite: a turma acabou e a proxima abre no primeiro programa salvo.
+            [void](Close-BridgeSession -EndedBy "inatividade" -EndedAtMs (Get-BridgeLastActivityMs $s))
+            return
         } elseif ($ageMin -ge $script:SessionMaxMinutes) {
             [void](Close-BridgeSession -EndedBy "tempo" -EndedAtMs ([int64]$s.started_at_ms + [int64]$script:SessionMaxMinutes * 60000))
         } else {
@@ -1904,9 +1925,16 @@ function Invoke-BridgeSessionTick {
             [void](Close-BridgeSession -EndedBy "tempo")
             return
         }
-        if (($now - $script:LastSpikePoll).TotalSeconds -ge $script:SpikePollSeconds) {
+        # No limite de inatividade le o SPIKE antes de encerrar: um programa salvo nos ultimos segundos ainda conta.
+        if (($now - $script:LastSpikePoll).TotalSeconds -ge $script:SpikePollSeconds -or $nowMs -ge (Get-BridgeIdleDeadlineMs $s)) {
             $script:LastSpikePoll = $now
             try { Update-BridgeSpikeTelemetry } catch { Write-BridgeLog "Aviso na leitura do SPIKE: $($_.Exception.Message)" "WARN" }
+        }
+        # Turma esquecida aberta: sem nova versao salva no SPIKE pelo limite, encerra e espera o proximo programa.
+        $idleEndMs = Get-BridgeIdleDeadlineMs $script:ActiveSession
+        if ($nowMs -ge $idleEndMs) {
+            [void](Close-BridgeSession -EndedBy "inatividade" -EndedAtMs (Get-BridgeLastActivityMs $script:ActiveSession))
+            return
         }
         if ($script:ActiveSession -and ($now - $script:LastHeartbeat).TotalSeconds -ge $script:HeartbeatSeconds) {
             $script:LastHeartbeat = $now

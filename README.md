@@ -18,8 +18,12 @@ O instrutor usa o menu do ícone da bandeja (botão direito):
 | **Ver situação** | Mostra se o registro está ativo, pausado ou desligado. |
 | **Fechar PulseLab** | Desliga tudo até o computador ser ligado de novo ou o atalho ser usado. |
 
-Sem encerramento, a sessão fecha sozinha depois de 3 horas ou quando o computador passa mais de
-20 minutos desligado ou suspenso.
+Sem encerramento, a sessão fecha sozinha depois de 40 minutos sem programa salvo no SPIKE
+(`ended_by = "inatividade"`, contados da última versão salva ou, sem nenhuma, do início da aula;
+o fim registrado é o último programa salvo),
+depois de 3 horas ou quando o computador passa mais de 20 minutos desligado ou suspenso. Depois
+de fechar por inatividade, a próxima turma começa no primeiro programa salvo e, até lá, **Não
+registrar esta turma** vale para a aula que fechou sozinha.
 
 ## Pesquisa e privacidade
 

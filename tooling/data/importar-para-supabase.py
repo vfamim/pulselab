@@ -664,7 +664,7 @@ WITHDRAWN_SESSIONS_FILE = "sessions_withdrawn.txt"
 # Uma linha por aula marcada pelo bridge: session_id<TAB>marked_at (ISO-8601 UTC), UTF-8 com ou sem BOM.
 UNAUTHORIZED_SESSIONS_FILE = "sessions_unauthorized.txt"
 UNAUTHORIZED_STATUS = "nao_autorizada"
-ALLOWED_ENDED_BY = {"instrutor", "tempo", "sem_encerramento"}
+ALLOWED_ENDED_BY = {"instrutor", "tempo", "sem_encerramento", "inatividade"}
 
 
 def session_key(val) -> str | None:

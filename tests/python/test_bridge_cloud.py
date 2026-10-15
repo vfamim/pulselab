@@ -2,7 +2,8 @@
 
 Cobre o cadastro pelo token do polo, a renovação de token após 401 e a sessão da turma,
 que desde a 2.4.0 é do Bridge: abre sozinha, registra o programa SPIKE e o sinal de vida,
-fecha pelo formulário final, por tempo ou por computador desligado, e "Não registrar esta
+fecha pelo formulário final, por tempo, por computador desligado ou sem programa salvo no SPIKE
+(inatividade), e "Não registrar esta
 turma" marca a aula como não autorizada (sem apagar), reenvia com a marca e pausa. Sem pwsh no
 PATH, os testes de integração são pulados.
 """
@@ -21,6 +22,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -384,12 +386,14 @@ class BridgeRestartTest(unittest.TestCase):
         self.assertTrue(wait_for(lambda: self.bridge.get("/v1/session/current")["active"]))
         return self.bridge.get("/v1/session/current")["session_id"]
 
-    def shift_state(self, started_min_ago: float, alive_min_ago: float):
+    def shift_state(self, started_min_ago: float, alive_min_ago: float, program_min_ago: float | None = None):
         state_file = self.bridge.data / "active_session.json"
         state = read_json(state_file)
         now_ms = int(time.time() * 1000)
         state["started_at_ms"] = now_ms - int(started_min_ago * 60000)
         state["last_alive_ms"] = now_ms - int(alive_min_ago * 60000)
+        if program_min_ago is not None:
+            state["last_program_ms"] = now_ms - int(program_min_ago * 60000)
         write_json(state_file, state)
 
     def snapshot(self, session_id: str) -> dict:
@@ -435,12 +439,44 @@ class BridgeRestartTest(unittest.TestCase):
     def test_class_longer_than_limit_closes_by_time(self):
         first = self.start_and_get_session()
         self.bridge.stop()
-        self.shift_state(started_min_ago=200, alive_min_ago=1)
+        # Programa salvo há 1 minuto: a turma está em uso e só o limite de 3 horas a fecha.
+        self.shift_state(started_min_ago=200, alive_min_ago=1, program_min_ago=1)
         second = self.start_and_get_session()
         self.assertNotEqual(second, first)
         snap = self.snapshot(first)
         self.assertEqual(snap["ended_by"], "tempo")
         self.assertEqual(snap["duration_seconds"], 180 * 60)
+
+    def test_recent_program_keeps_class_open_after_restart(self):
+        first = self.start_and_get_session()
+        self.bridge.stop()
+        # 100 min de aula, mas o último programa foi salvo há 30 min: o relógio conta dele.
+        self.shift_state(started_min_ago=100, alive_min_ago=1, program_min_ago=30)
+        self.assertEqual(self.start_and_get_session(), first)
+
+    def test_idle_class_closes_on_restart_and_can_be_marked(self):
+        first = self.start_and_get_session()
+        self.bridge.stop()
+        # Nenhum programa salvo em 50 min: fecha por inatividade; o fim é o último sinal de atividade (o início).
+        self.shift_state(started_min_ago=50, alive_min_ago=1)
+        self.bridge.start()
+        status = self.bridge.get("/v1/status")
+        self.assertIsNone(status["session"])
+        self.assertTrue(status["awaiting_activity"], "a próxima turma abre no primeiro programa salvo")
+        snap = self.snapshot(first)
+        self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "inatividade"))
+        self.assertEqual(snap["duration_seconds"], 0)
+        self.assertEqual(snap["data_quality"]["telemetry_events"], 0)
+        completed = [e for e in read_events(self.bridge.data) if e["session_id"] == first and e["event_type"] == "session_completed"]
+        self.assertEqual(completed[-1]["details"]["ended_by"], "inatividade")
+        # "Não registrar esta turma" depois disso marca a aula encerrada por inatividade
+        target = status["mark_target"]
+        self.assertEqual((target["session_id"], target["active"], target["duration_min"]), (first, False, 0))
+        status_code, body = self.bridge.post("/v1/session/pause", {"session_id": first})
+        self.assertEqual((status_code, body["marked"], body["target"]["session_id"]), (200, True, first))
+        snap = self.snapshot(first)
+        self.assertEqual((snap["ended_by"], snap["authorization_status"]), ("inatividade", "nao_autorizada"))
+        self.assertTrue(self.bridge.get("/v1/status")["paused"])
 
     def test_without_site_package_nothing_is_recorded(self):
         write_json(self.bridge.data / "installation.json", {"installation_id": INSTALLATION_ID, "site_id": "PET", "research_collection_enabled": False})
@@ -449,6 +485,53 @@ class BridgeRestartTest(unittest.TestCase):
         self.assertFalse(current["research_active"])
         self.assertFalse(current["active"])
         self.assertEqual(read_events(self.bridge.data), [])
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeIdleTest(unittest.TestCase):
+    """Turma esquecida aberta fecha sozinha sem programa salvo no SPIKE (limite de 1 min no teste)."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-idle-"))
+        self.bridge = BridgeProcess(self.tmp, "http://127.0.0.1:9", {"PULSELAB_SESSION_IDLE_MINUTES": "1"})
+        write_json(self.bridge.data / "installation.json", authorized_installation())
+
+    def tearDown(self):
+        self.bridge.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_class_without_new_program_closes_and_next_program_opens_new_class(self):
+        data = self.bridge.data
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/session/current")["active"]))
+        first = self.bridge.get("/v1/session/current")["session_id"]
+        started = [e for e in read_events(data) if e["event_type"] == "session_started"][0]
+        self.assertEqual(started["details"]["session_idle_minutes"], 1)
+
+        # Programa salvo: o relógio de inatividade passa a contar dele
+        write_llsp3(self.bridge.spike / "Projeto1.llsp3", json.dumps(project_json(known_blocks())))
+        self.assertTrue(wait_for(lambda: any(e["event_type"] == "spike_telemetry" for e in read_events(data))))
+        saved_at = [e for e in read_events(data) if e["event_type"] == "spike_telemetry"][-1]["details"]["saved_at"]
+
+        self.assertTrue(wait_for(lambda: not self.bridge.get("/v1/session/current")["active"], timeout=100), "turma sem uso não fechou")
+        snap = read_json(data / "sessoes" / f"sessao_{first}.json")
+        self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "inatividade"))
+        self.assertEqual(snap["data_quality"]["telemetry_events"], 1)
+        to_dt = lambda iso: datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        self.assertAlmostEqual((to_dt(snap["completed_at"]) - to_dt(saved_at)).total_seconds(), 0, delta=1)
+        status = self.bridge.get("/v1/status")
+        self.assertTrue(status["awaiting_activity"])
+        self.assertFalse(status["paused"])
+        self.assertEqual((status["mark_target"]["session_id"], status["mark_target"]["active"]), (first, False))
+
+        # O próximo programa salvo abre outra turma
+        time.sleep(1.1)
+        write_llsp3(self.bridge.spike / "Projeto1.llsp3", json.dumps(project_json(known_blocks())))
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/session/current")["active"]))
+        second = self.bridge.get("/v1/session/current")["session_id"]
+        self.assertNotEqual(second, first)
+        second_start = [e for e in read_events(data) if e["session_id"] == second and e["event_type"] == "session_started"][0]
+        self.assertEqual(second_start["details"]["start_mode"], "atividade_spike")
+
 
 if __name__ == "__main__":
     unittest.main()

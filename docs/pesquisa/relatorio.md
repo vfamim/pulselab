@@ -53,7 +53,7 @@ qualidade ruim), o resumo semanal por polo e a lista de aulas.
 | `installation_id` | Código aleatório da instalação do PulseLab na máquina. |
 | `data_local`, `hora_inicio`, `hora_fim` | Dia e horários da aula. Sem `hora_fim`, a aula não foi encerrada. |
 | `duracao_min` | Duração em minutos. |
-| `encerrada_por` | `instrutor` (menu da bandeja), `tempo` (limite de 3 horas) ou `sem_encerramento` (computador desligado ou suspenso por mais de 20 minutos). |
+| `encerrada_por` | `instrutor` (menu da bandeja), `tempo` (limite de 3 horas), `sem_encerramento` (computador desligado ou suspenso por mais de 20 minutos) ou `inatividade` (40 minutos sem programa salvo no SPIKE; no relatório, "sem uso do SPIKE por 40 min"). Fechar por inatividade não torna a aula ruim. O fim registrado é o último programa salvo. Sessão fechada por inatividade **sem nenhuma versão salva** é computador ligado sem aula: fica fora das contagens e aparece só como aviso. |
 | `interrompida` | `sim` se o computador ficou sem sinal no meio da aula, o PulseLab reiniciou ou houve registro corrompido. |
 | `fase` | `completed` (encerrada) ou `in_progress` (ainda aberta quando os dados saíram). |
 | `modo_inicio` | `atividade_spike` (começou no primeiro programa salvo) ou `abertura_app` (começou quando o PulseLab abriu). |

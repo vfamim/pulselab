@@ -1,7 +1,7 @@
 {
-  "version": "3.1.0",
+  "version": "3.1.1",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.1.0/PulseLab-3.1.0-Windows.zip",
-  "notes": "PulseLab v3.1.0 - relat\u00f3rio autom\u00e1tico das aulas, pendrive dos polos offline chega \u00e0 nuvem e Nao registrar esta turma marca a aula para revis\u00e3o do pesquisador."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.1.1/PulseLab-3.1.1-Windows.zip",
+  "notes": "PulseLab v3.1.1 - a aula se encerra sozinha depois de 40 minutos sem programa salvo no SPIKE."
 }
