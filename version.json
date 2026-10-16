@@ -1,7 +1,7 @@
 {
-  "version": "3.2.1",
+  "version": "3.2.2",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.1/PulseLab-3.2.1-Windows.zip",
-  "notes": "PulseLab v3.2.1 - questionario interativo no instalador para definir polo, regional e CEP/CAAE de pesquisa."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.2/PulseLab-3.2.2-Windows.zip",
+  "notes": "PulseLab v3.2.2 - separacao entre blocos conectados (executable_blocks) e blocos soltos/orfaos (orphan_blocks) no parser SPIKE."
 }

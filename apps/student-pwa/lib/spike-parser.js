@@ -52,12 +52,18 @@ export const CONDITION_OPCODES = [
 
 export function classifyOpcode(opcode = "") {
   const lower = opcode.toLowerCase();
+  const isHat =
+    lower.startsWith("event_") ||
+    lower.includes("events_when") ||
+    lower.includes("when") ||
+    lower === "procedures_definition";
   return {
     isMotor: MOTOR_OPCODES.some((pattern) => lower.includes(pattern)),
     isSensor: SENSOR_OPCODES.some((pattern) => lower.includes(pattern)),
     isLoop: LOOP_OPCODES.some((pattern) => lower.includes(pattern)),
     isCondition: CONDITION_OPCODES.some((pattern) => lower.includes(pattern)),
     isEvent: lower.startsWith("event_") || lower.includes("when"),
+    isHat,
     isVariable: lower.startsWith("data_") || lower.includes("variable"),
     isProcedure: lower.startsWith("procedures_") || lower.includes("custom_block")
   };
@@ -107,6 +113,7 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
         format: "corrupted_or_invalid_json",
         error_code: "json_parse_error",
         executable_blocks: 0,
+        orphan_blocks: 0,
         top_level_stacks: 0,
         uses_motor: false,
         uses_sensor: false,
@@ -128,6 +135,7 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
       project_saved: false,
       format: "unknown",
       executable_blocks: 0,
+      orphan_blocks: 0,
       top_level_stacks: 0,
       uses_motor: false,
       uses_sensor: false,
@@ -158,6 +166,7 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
       language: "python",
       error_code: "unsupported_block_parser_for_python",
       executable_blocks: 0,
+      orphan_blocks: 0,
       top_level_stacks: 0,
       uses_motor: false,
       uses_sensor: false,
@@ -180,6 +189,7 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
 
   let totalBlocks = 0;
   let executableBlocks = 0;
+  let orphanBlocks = 0;
   let topLevelStacks = 0;
 
   let usesMotor = false;
@@ -188,8 +198,6 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
   let usesCondition = false;
   let usesVariable = false;
   let usesProcedure = false;
-
-  const currentBlockIds = new Set();
 
   for (const target of targets) {
     if (!target || typeof target !== "object") continue;
@@ -201,30 +209,138 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
       ? blocks.map((b, idx) => [b?.id || String(idx), b])
       : Object.entries(blocks);
 
+    const validEntries = [];
+    let hasGraphOrNonHatTop = false;
+
     for (const [blockId, blockData] of entries) {
-      if (!blockData || typeof blockData !== "object") continue;
+      if (!blockData || typeof blockData !== "object" || Array.isArray(blockData)) continue;
+      validEntries.push([blockId, blockData]);
 
-      currentBlockIds.add(blockId);
-      totalBlocks += 1;
-
-      // Bloco sombra (argumento interno) não é bloco executável principal
-      if (blockData.shadow !== true) {
-        executableBlocks += 1;
+      if (
+        blockData.next !== undefined ||
+        blockData.parent !== undefined ||
+        blockData.inputs !== undefined
+      ) {
+        hasGraphOrNonHatTop = true;
       }
 
       if (blockData.topLevel === true) {
-        topLevelStacks += 1;
+        const { isHat } = classifyOpcode(blockData.opcode || "");
+        if (!isHat) {
+          hasGraphOrNonHatTop = true;
+        }
+      }
+    }
+
+    if (hasGraphOrNonHatTop) {
+      const blocksById = new Map();
+      const allNonShadowIds = new Set();
+      const hatRootIds = [];
+
+      for (const [blockId, blockData] of validEntries) {
+        blocksById.set(blockId, blockData);
+        totalBlocks += 1;
+
+        if (blockData.shadow !== true) {
+          allNonShadowIds.add(blockId);
+          if (blockData.topLevel === true) {
+            const { isHat } = classifyOpcode(blockData.opcode || "");
+            if (isHat) {
+              hatRootIds.push(blockId);
+            }
+          }
+        }
       }
 
-      const opcode = blockData.opcode || "";
-      const classification = classifyOpcode(opcode);
+      const connectedIds = new Set();
+      const stack = [...hatRootIds];
 
-      if (classification.isMotor) usesMotor = true;
-      if (classification.isSensor) usesSensor = true;
-      if (classification.isLoop) usesLoop = true;
-      if (classification.isCondition) usesCondition = true;
-      if (classification.isVariable) usesVariable = true;
-      if (classification.isProcedure) usesProcedure = true;
+      while (stack.length > 0) {
+        const id = stack.pop();
+        if (!id || typeof id !== "string") continue;
+        if (connectedIds.has(id)) continue;
+        const block = blocksById.get(id);
+        if (!block || typeof block !== "object") continue;
+        if (block.shadow === true) continue;
+
+        connectedIds.add(id);
+
+        if (block.next && typeof block.next === "string") {
+          const nextBlock = blocksById.get(block.next);
+          if (nextBlock && nextBlock.shadow !== true) {
+            stack.push(block.next);
+          }
+        }
+
+        if (block.inputs && typeof block.inputs === "object") {
+          for (const inputVal of Object.values(block.inputs)) {
+            if (!Array.isArray(inputVal) || inputVal.length < 2) continue;
+            const ref = inputVal[1];
+            if (typeof ref === "string") {
+              const child = blocksById.get(ref);
+              if (child && child.shadow !== true) {
+                stack.push(ref);
+              }
+            }
+          }
+        }
+      }
+
+      executableBlocks += connectedIds.size;
+      topLevelStacks += hatRootIds.length;
+
+      for (const id of allNonShadowIds) {
+        if (!connectedIds.has(id)) {
+          orphanBlocks += 1;
+        }
+      }
+
+      for (const id of connectedIds) {
+        const block = blocksById.get(id);
+        const classification = classifyOpcode(block.opcode || "");
+
+        if (classification.isMotor) usesMotor = true;
+        if (classification.isSensor) usesSensor = true;
+        if (classification.isLoop) usesLoop = true;
+        if (classification.isCondition) usesCondition = true;
+        if (classification.isVariable) usesVariable = true;
+        if (classification.isProcedure) usesProcedure = true;
+
+        if (block.inputs && typeof block.inputs === "object") {
+          for (const inputVal of Object.values(block.inputs)) {
+            if (Array.isArray(inputVal)) {
+              for (const item of inputVal) {
+                if (Array.isArray(item) && item.length > 0) {
+                  if (item[0] === 12 || item[0] === 13) {
+                    usesVariable = true;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    } else {
+      // Mock plano legado de teste (sem next/parent/inputs e sem topLevel: true em blocos não-chapéu)
+      for (const [blockId, blockData] of validEntries) {
+        totalBlocks += 1;
+        if (blockData.shadow !== true) {
+          executableBlocks += 1;
+        }
+        if (blockData.topLevel === true) {
+          topLevelStacks += 1;
+        }
+
+        const opcode = blockData.opcode || "";
+        const classification = classifyOpcode(opcode);
+
+        if (classification.isMotor) usesMotor = true;
+        if (classification.isSensor) usesSensor = true;
+        if (classification.isLoop) usesLoop = true;
+        if (classification.isCondition) usesCondition = true;
+        if (classification.isVariable) usesVariable = true;
+        if (classification.isProcedure) usesProcedure = true;
+      }
     }
   }
 
@@ -244,6 +360,7 @@ export function parseProjectJson(projectJson, previousMetrics = null) {
     language: "word-blocks",
     total_blocks: totalBlocks,
     executable_blocks: executableBlocks,
+    orphan_blocks: orphanBlocks,
     top_level_stacks: topLevelStacks,
     uses_motor: usesMotor,
     uses_sensor: usesSensor,

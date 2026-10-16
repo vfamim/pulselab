@@ -235,6 +235,15 @@ class SpikeParserTest(unittest.TestCase):
         cls.paths["cosmetic"] = write_llsp3(cls.tmp / "cosmetic.llsp3", json.dumps(project_json(cosmetic)))
 
         cls.paths["wait_until"] = write_llsp3(cls.tmp / "wait.llsp3", json.dumps(project_json(wait_until_blocks())))
+
+        orphans = copy.deepcopy(wait_until_blocks())
+        orphans["o1"] = blk("control_forever", "o2", top=True)
+        orphans["o2"] = blk("flippersensors_isDistance", "o3", "o1", inputs={"PORT": [1, "os1"]})
+        orphans["os1"] = blk("flippersensors_custom-sensor-port-selector", None, "o2", shadow=True)
+        orphans["o3"] = blk("flippermotor_motorStartDirection", None, "o2")
+        orphans["o4"] = blk("control_if", None, parent=None, top=False)
+        cls.paths["orphans"] = write_llsp3(cls.tmp / "orphans.llsp3", json.dumps(project_json(orphans)))
+
         cls.paths["sensor_hats"] = write_llsp3(cls.tmp / "hats.llsp3", json.dumps(project_json(sensor_hat_blocks())))
         cls.paths["empty"] = write_llsp3(cls.tmp / "empty.llsp3", json.dumps(project_json({})))
 
@@ -290,6 +299,7 @@ class SpikeParserTest(unittest.TestCase):
         self.assertEqual(m["format"], "llsp3")
         self.assertEqual(m["language"], "word-blocks")
         self.assertEqual(m["executable_blocks"], 22)
+        self.assertEqual(m["orphan_blocks"], 0)
         self.assertEqual(m["total_blocks"], 29)  # 22 + 7 sombras
         self.assertEqual(m["top_level_stacks"], 4)
         for flag in ("uses_motor", "uses_sensor", "uses_loop", "uses_condition", "uses_variable", "uses_procedure"):
@@ -313,6 +323,19 @@ class SpikeParserTest(unittest.TestCase):
         self.assertEqual(ct["user_interactivity"], 2)
         self.assertEqual(ct["parallelism"], 0)
         self.assertEqual(ct["abstraction"], 0)
+
+    def test_orphan_blocks_ignored_in_executable_and_ct(self):
+        orphans = self.metrics["orphans"]
+        base = self.metrics["wait_until"]
+        self.assertEqual(orphans["spike_status"], "ok")
+        self.assertEqual(orphans["orphan_blocks"], 4)
+        self.assertEqual(orphans["executable_blocks"], base["executable_blocks"])
+        self.assertEqual(orphans["top_level_stacks"], base["top_level_stacks"])
+        self.assertEqual(orphans["uses_loop"], base["uses_loop"])
+        self.assertFalse(orphans["uses_loop"])
+        self.assertEqual(orphans["opcode_counts"], base["opcode_counts"])
+        self.assertEqual(orphans["structure_hash"], base["structure_hash"])
+        self.assertEqual(orphans["ct_score"], base["ct_score"])
 
     def test_ct_score_known_fixture(self):
         self.assertEqual(self.metrics["known"]["ct_score"], {
@@ -349,6 +372,7 @@ class SpikeParserTest(unittest.TestCase):
         m = self.metrics["empty"]
         self.assertEqual(m["spike_status"], "ok")
         self.assertEqual(m["executable_blocks"], 0)
+        self.assertEqual(m["orphan_blocks"], 0)
         self.assertIsNone(m["structure_hash"])
         self.assertEqual(m["ct_score"]["total"], 0)
         self.assertEqual(m["inferred_stage"], "empty")
