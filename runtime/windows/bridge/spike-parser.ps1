@@ -314,9 +314,9 @@ function Get-SpikeChainSignature {
     $parts = New-Object System.Collections.Generic.List[string]
     $currentId = $StartId
     while ($currentId -and $Blocks.ContainsKey($currentId) -and $Depth -lt 64) {
-        if (-not $Visited.Add($currentId)) { break }
         $block = $Blocks[$currentId]
         if (-not (Test-SpikeBlock $block) -or (Test-SpikeShadow $block)) { break }
+        if (-not $Visited.Add($currentId)) { break }
         $opcode = Get-SpikeSafeOpcode $block
         $isProc = $opcode.StartsWith("procedures_")
         $children = New-Object System.Collections.Generic.List[string]
@@ -408,6 +408,7 @@ function Measure-SpikeBlockProgram {
 
     $totalBlocks = 0
     $executableBlocks = 0
+    $orphanBlocks = 0
     $topLevelStacks = 0
     $maxChain = 0
     $flags = @{ motor = $false; sensor = $false; loop = $false; condition = $false; variable = $false; procedure = $false }
@@ -423,58 +424,34 @@ function Measure-SpikeBlockProgram {
         $blocks = New-Object 'System.Collections.Generic.Dictionary[string,object]' -ArgumentList ([StringComparer]::Ordinal)
         foreach ($prop in $blocksObj.PSObject.Properties) { $blocks[$prop.Name] = $prop.Value }
 
-        $topIds = New-Object System.Collections.Generic.List[string]
+        $targetNonShadowIds = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::Ordinal)
+        $hatTopIds = New-Object System.Collections.Generic.List[string]
+
         foreach ($id in @($blocks.Keys)) {
             $block = $blocks[$id]
             if ($block -is [System.Array]) {
-                # Primitiva solta: [12, nome, id, x, y] variável; [13, ...] lista
-                if ($block.Count -gt 0 -and $block[0] -eq 12) { $seenTraits.variable_data = $true; $flags.variable = $true }
-                if ($block.Count -gt 0 -and $block[0] -eq 13) { $seenTraits.list = $true; $flags.variable = $true }
+                # Primitiva solta no topo de target.blocks ([12, ...] variável / [13, ...] lista):
+                # Não ativa $seenTraits.variable_data, $seenTraits.list nem $flags.variable.
                 continue
             }
             if (-not (Test-SpikeBlock $block)) { continue }
             $totalBlocks++
             if (Test-SpikeShadow $block) { continue }
-            $executableBlocks++
 
-            $opcode = Get-SpikeSafeOpcode $block
-            if ($opCounts.ContainsKey($opcode)) { $opCounts[$opcode] = $opCounts[$opcode] + 1 } else { $opCounts[$opcode] = 1 }
-            $opLower = $opcode.ToLowerInvariant()
-            $traits = Get-SpikeOpcodeTraits $opLower
+            [void]$targetNonShadowIds.Add($id)
 
-            if ($traits.motor) { $flags.motor = $true }
-            if ($traits.sensor) { $flags.sensor = $true }
-            if ($traits.loop) { $flags.loop = $true }
-            if ($traits.condition) { $flags.condition = $true }
-            if ($traits.variable) { $flags.variable = $true }
-            if ($traits.procedure) { $flags.procedure = $true }
-            if ($traits.start_hat) { $seenTraits.start_hat = $true }
-            if ($traits.sensor_hat) { $seenTraits.sensor_hat = $true }
-            if ($traits.sensor_read) { $seenTraits.sensor_read = $true }
-            if ($traits.motor_param) { $seenTraits.motor_param = $true }
-            if ($opLower -match '^data_.*list') { $seenTraits.list = $true }
-            elseif ($opLower -match '^data_.*variable') { $seenTraits.variable_data = $true }
-            if ($opLower -eq "procedures_call") { $procCalls++ }
-            if ($opLower -eq "procedures_definition") { $procDefs++ }
-
-            # Variáveis e listas soltas dentro de inputs
-            $inputs = Get-SpikeProp $block "inputs"
-            foreach ($name in (Get-SpikeSortedNames $inputs)) {
-                $value = Get-SpikeProp $inputs $name
-                if ($value -isnot [System.Array]) { continue }
-                foreach ($item in $value) {
-                    if ($item -is [System.Array] -and $item.Count -gt 0) {
-                        if ($item[0] -eq 12) { $seenTraits.variable_data = $true; $flags.variable = $true }
-                        if ($item[0] -eq 13) { $seenTraits.list = $true; $flags.variable = $true }
-                    }
+            if ((Get-SpikeProp $block "topLevel") -eq $true) {
+                $opcode = Get-SpikeSafeOpcode $block
+                $opLower = $opcode.ToLowerInvariant()
+                $traits = Get-SpikeOpcodeTraits $opLower
+                if ($traits.hat -or ($opLower -eq "procedures_definition")) {
+                    $hatTopIds.Add($id)
                 }
             }
-
-            if ((Get-SpikeProp $block "topLevel") -eq $true) { $topIds.Add($id) }
         }
 
-        $visited = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::Ordinal)
-        foreach ($topId in $topIds) {
+        $connectedIds = New-Object 'System.Collections.Generic.HashSet[string]' -ArgumentList ([StringComparer]::Ordinal)
+        foreach ($topId in $hatTopIds) {
             $topLevelStacks++
             $block = $blocks[$topId]
 
@@ -498,7 +475,53 @@ function Measure-SpikeBlockProgram {
                 $hatGroupIsStart[$key] = [bool]$traits.start_hat
             }
 
-            $signatures.Add((Get-SpikeChainSignature -Blocks $blocks -StartId $topId -Visited $visited))
+            $signatures.Add((Get-SpikeChainSignature -Blocks $blocks -StartId $topId -Visited $connectedIds))
+        }
+
+        # Contabilização e cálculo de flags/traits exclusivamente sobre os blocos conectados
+        foreach ($id in $connectedIds) {
+            $block = $blocks[$id]
+            $executableBlocks++
+
+            $opcode = Get-SpikeSafeOpcode $block
+            if ($opCounts.ContainsKey($opcode)) { $opCounts[$opcode] = $opCounts[$opcode] + 1 } else { $opCounts[$opcode] = 1 }
+            $opLower = $opcode.ToLowerInvariant()
+            $traits = Get-SpikeOpcodeTraits $opLower
+
+            if ($traits.motor) { $flags.motor = $true }
+            if ($traits.sensor) { $flags.sensor = $true }
+            if ($traits.loop) { $flags.loop = $true }
+            if ($traits.condition) { $flags.condition = $true }
+            if ($traits.variable) { $flags.variable = $true }
+            if ($traits.procedure) { $flags.procedure = $true }
+            if ($traits.start_hat) { $seenTraits.start_hat = $true }
+            if ($traits.sensor_hat) { $seenTraits.sensor_hat = $true }
+            if ($traits.sensor_read) { $seenTraits.sensor_read = $true }
+            if ($traits.motor_param) { $seenTraits.motor_param = $true }
+            if ($opLower -match '^data_.*list') { $seenTraits.list = $true }
+            elseif ($opLower -match '^data_.*variable') { $seenTraits.variable_data = $true }
+            if ($opLower -eq "procedures_call") { $procCalls++ }
+            if ($opLower -eq "procedures_definition") { $procDefs++ }
+
+            # Variáveis e listas usadas dentro de inputs de blocos conectados
+            $inputs = Get-SpikeProp $block "inputs"
+            foreach ($name in (Get-SpikeSortedNames $inputs)) {
+                $value = Get-SpikeProp $inputs $name
+                if ($value -isnot [System.Array]) { continue }
+                foreach ($item in $value) {
+                    if ($item -is [System.Array] -and $item.Count -gt 0) {
+                        if ($item[0] -eq 12) { $seenTraits.variable_data = $true; $flags.variable = $true }
+                        if ($item[0] -eq 13) { $seenTraits.list = $true; $flags.variable = $true }
+                    }
+                }
+            }
+        }
+
+        # Contabilização de blocos órfãos (não-sombra que não estão em $connectedIds)
+        foreach ($id in $targetNonShadowIds) {
+            if (-not $connectedIds.Contains($id)) {
+                $orphanBlocks++
+            }
         }
     }
 
@@ -581,6 +604,7 @@ function Measure-SpikeBlockProgram {
     return @{
         total_blocks = $totalBlocks
         executable_blocks = $executableBlocks
+        orphan_blocks = $orphanBlocks
         top_level_stacks = $topLevelStacks
         uses_motor = $flags.motor
         uses_sensor = $flags.sensor
@@ -611,6 +635,7 @@ function New-SpikeMetricsResult {
         language = $Language
         total_blocks = 0
         executable_blocks = 0
+        orphan_blocks = 0
         top_level_stacks = 0
         uses_motor = $false
         uses_sensor = $false
@@ -753,7 +778,7 @@ function Get-SpikeProjectMetrics {
             -UsesCondition $analysis.uses_condition
 
         $result = New-SpikeMetricsResult -Status "ok" -Saved $true -Format $format -Language $language -ModifiedUtc $modifiedUtc
-        foreach ($key in @("total_blocks", "executable_blocks", "top_level_stacks", "uses_motor", "uses_sensor", "uses_loop", "uses_condition", "uses_variable", "uses_procedure", "opcode_counts", "structure_hash", "ct_score")) {
+        foreach ($key in @("total_blocks", "executable_blocks", "orphan_blocks", "top_level_stacks", "uses_motor", "uses_sensor", "uses_loop", "uses_condition", "uses_variable", "uses_procedure", "opcode_counts", "structure_hash", "ct_score")) {
             $result[$key] = $analysis[$key]
         }
         $result.blocks_added_since_previous = $blocksAdded

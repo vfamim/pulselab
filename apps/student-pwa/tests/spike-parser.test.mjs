@@ -122,3 +122,37 @@ test("processa alvos com elementos nulos e blocos malformados de forma fail-safe
   assert.equal(metrics.executable_blocks, 1);
   assert.equal(metrics.uses_sensor, true);
 });
+
+test("separa blocos conectados de blocos órfãos ou desconectados do grafo principal", () => {
+  const projectWithOrphans = {
+    targets: [
+      {
+        blocks: {
+          // Pilha conectada válida iniciada por chapéu
+          h1: { opcode: "event_whenflagclicked", topLevel: true, shadow: false, next: "m1" },
+          m1: { opcode: "spike_motor_run_for_degrees", topLevel: false, shadow: false, next: null },
+          // Bloco sombra ligado a m1
+          s1: { opcode: "math_number", topLevel: false, shadow: true },
+          // Bloco órfão topLevel sem chapéu (ex: loop desanexado)
+          o1: { opcode: "control_forever", topLevel: true, shadow: false, next: "o2" },
+          // Bloco em sequência no órfão (com sensor que não deve ser contabilizado)
+          o2: { opcode: "sensing_touchingobject", topLevel: false, shadow: false, next: null },
+          // Bloco solto sem topLevel e sem pai
+          o3: { opcode: "control_if", topLevel: false, shadow: false, next: null }
+        }
+      }
+    ]
+  };
+
+  const metrics = parseProjectJson(projectWithOrphans);
+  assert.equal(metrics.executable_blocks, 2); // apenas h1 e m1
+  assert.equal(metrics.orphan_blocks, 3); // o1, o2, o3
+  assert.equal(metrics.total_blocks, 6); // h1, m1, s1, o1, o2, o3
+  assert.equal(metrics.top_level_stacks, 1); // apenas h1
+  assert.equal(metrics.uses_motor, true);
+  assert.equal(metrics.uses_sensor, false); // o2 é órfão, não deve ativar sensor
+  assert.equal(metrics.uses_loop, false); // o1 é órfão, não deve ativar loop
+  assert.equal(metrics.uses_condition, false); // o3 é órfão, não deve ativar condition
+  assert.equal(metrics.inferred_stage, "basic_movement"); // não virou integrated_mission nem autonomous_loop
+});
+
