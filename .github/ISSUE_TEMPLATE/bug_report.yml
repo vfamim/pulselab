@@ -1,0 +1,51 @@
+name: 🐛 Relatar um Problema (Bug)
+description: Relate um erro ou comportamento inesperado no PulseLab (Bridge, instalador ou PWA)
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por relatar um problema! Por favor, forneça as informações abaixo para nos ajudar a reproduzir e corrigir a falha rapidamente.
+  - type: textarea
+    id: descricao
+    attributes:
+      label: Descrição do Problema
+      description: O que aconteceu e o que deveria ter acontecido?
+      placeholder: Ex: Ao clicar em 'Encerrar turma...', a notificação não apareceu na bandeja...
+    validations:
+      required: true
+  - type: input
+    id: versao
+    attributes:
+      label: Versão do PulseLab
+      description: Qual versão do PulseLab estava instalada? (veja no menu da bandeja > Ver situação ou no instalador)
+      placeholder: Ex: 3.2.1
+    validations:
+      required: true
+  - type: input
+    id: ambiente
+    attributes:
+      label: Ambiente / Sistema Operacional
+      description: Versão do Windows da máquina onde ocorreu
+      placeholder: Ex: Windows 10 Pro 22H2 / Windows 11
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para Reproduzir
+      description: Como reproduzir o erro passo a passo?
+      placeholder: |
+        1. Iniciar o PulseLab pelo atalho
+        2. Salvar um projeto no LEGO SPIKE
+        3. Clicar com o botão direito no ícone da bandeja...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs ou Mensagens de Erro
+      description: Cole aqui trechos de erro (ATENÇÃO: nunca compartilhe nomes de alunos, caminhos de pastas pessoais ou tokens).
+    validations:
+      required: false

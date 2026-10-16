@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentação e Guia de Campo
+    url: https://github.com/vfamim/pulselab/tree/main/docs
+    about: Consulte os manuais para instrutores, roteiro de assentimento verbal e notas de engenharia.
+  - name: 🌐 Portal Oficial PulseLab
+    url: https://pulselab-robotica-edu.web.app
+    about: Acesse a página do projeto, instalador para Windows e documentações públicas.

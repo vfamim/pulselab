@@ -1,0 +1,42 @@
+name: 💡 Sugestão / Caso de Uso
+description: Proponha uma nova funcionalidade, caso de uso em polo ou melhoria pedagógica
+title: "[Sugestão]: "
+labels: ["enhancement", "discussão"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Obrigado por ajudar a evoluir o PulseLab! Use este formulário para propor melhorias operacionais, ideias de dinâmicas para as oficinas de robótica ou sugestões técnicas.
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto ou Polo de Origem
+      description: Em qual escola, polo ou dinâmica de oficina essa necessidade ou ideia foi observada?
+      placeholder: Ex: No polo X, observamos que os alunos costumam alternar entre dois robôs durante a mesma oficina...
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: O que você sugere?
+      description: Descreva a funcionalidade ou alteração desejada e como ela funcionaria na prática.
+      placeholder: Ex: Adicionar uma pergunta sobre o trabalho em equipe no questionário do fim da aula...
+    validations:
+      required: true
+  - type: textarea
+    id: beneficio
+    attributes:
+      label: Benefício Esperado
+      description: Como isso ajuda as crianças, os instrutores de campo ou a equipe de pesquisa acadêmica?
+    validations:
+      required: false
+  - type: checkboxes
+    id: salvaguardas
+    attributes:
+      label: Salvaguardas Éticas e de Privacidade
+      description: Confirme que a sugestão respeita os limites da pesquisa com menores
+      options:
+        - label: A sugestão respeita a privacidade dos estudantes (sem coletar nomes, fotos, vídeos ou identificadores individuais).
+          required: true
+        - label: A unidade de observação permanece sendo a bancada coletiva ou dados agregados/anônimos.
+          required: true
