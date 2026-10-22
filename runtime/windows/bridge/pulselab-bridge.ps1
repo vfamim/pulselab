@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.3.0"
+$script:BridgeVersion = "3.3.1"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -2174,6 +2174,7 @@ function Update-BridgeSpikeTelemetry {
         saved_at = ConvertTo-BridgeIso $newest.LastWriteTimeUtc
         first_coding_detected = $first
         executable_blocks = $blocks
+        orphan_blocks = [int]$m.orphan_blocks
         top_level_stacks = [int]$m.top_level_stacks
         uses_motor = [bool]$m.uses_motor
         uses_sensor = [bool]$m.uses_sensor
@@ -2203,6 +2204,7 @@ function Update-BridgeSpikeTelemetry {
     $s.last_telemetry_file_key = $key
     $s.last_summary = [ordered]@{
         executable_blocks = $blocks
+        orphan_blocks = [int]$m.orphan_blocks
         ct_total = if ($m.ct_score) { $m.ct_score.total } else { $null }
         mission_coverage = if ($coverage) { $coverage.coverage } else { $null }
     }
