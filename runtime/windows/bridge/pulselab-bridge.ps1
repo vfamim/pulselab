@@ -884,12 +884,65 @@ function Get-BridgeRetentionDays {
     return 180
 }
 
+# Aula que ainda nao saiu do computador (nem para a nuvem nem por pendrive) fica guardada alem de
+# retention_days, ate o prazo de guarda da pesquisa (31/12/2032, o mesmo de research_archive_deadline).
+# Assim nenhum dado se perde por falta de internet ou de exportacao; o TCLE declara isso.
+$script:ArchiveDeleteAfterUtc = [DateTime]::new(2033, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+$script:PendriveExportFile = Join-Path $DataDir "ultima_exportacao_pendrive.json"
+$script:RetentionKeptSessions = 0
+
+# Aulas com algum evento em events.jsonl que ainda nao subiu (pendente ou em quarentena).
+function Get-BridgeUnsentSessionIds {
+    $unsent = [System.Collections.Generic.HashSet[string]]::new()
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (-not (Test-Path -LiteralPath $eventsFile)) { return ,$unsent }
+    try {
+        foreach ($line in [System.IO.File]::ReadAllLines($eventsFile)) {
+            if ($line -match '"event_id":"([^"]+)"' -and -not $script:SyncedEventIds.Contains($Matches[1]) -and $line -match '"session_id":"([^"]+)"') {
+                [void]$unsent.Add($Matches[1])
+            }
+        }
+    } catch {}
+    return ,$unsent
+}
+
+# Inicio da ultima exportacao para pendrive (gravado por exportar-pendrive.ps1), ou $null.
+function Get-BridgeLastPendriveExportUtc {
+    try {
+        if (Test-Path -LiteralPath $script:PendriveExportFile) {
+            $mark = Get-Content -LiteralPath $script:PendriveExportFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($mark.exported_at) {
+                return [DateTime]::Parse([string]$mark.exported_at, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            }
+        }
+    } catch {}
+    return $null
+}
+
+function Test-BridgeSessionLeftMachine {
+    param([string]$SessionId, $Unsent, $ExportedAtUtc)
+    if ($script:WithdrawnSessionIds.Contains($SessionId)) { return $true }
+    if ($script:SyncedSessionIds.Contains($SessionId) -and -not $Unsent.Contains($SessionId)) { return $true }
+    if ($ExportedAtUtc) {
+        $safeSid = ($SessionId -replace '[^a-zA-Z0-9_-]', '_')
+        $sessPath = Join-Path (Join-Path $DataDir "sessoes") "sessao_$safeSid.json"
+        if ((Test-Path -LiteralPath $sessPath) -and (Get-Item -LiteralPath $sessPath).LastWriteTimeUtc -le $ExportedAtUtc) { return $true }
+    }
+    return $false
+}
+
 function Invoke-BridgeRetentionCleanup {
     [CmdletBinding()]
     param([int]$MaxAgeDays = 180)
 
     $cutoffUtc = [DateTime]::UtcNow.AddDays(-$MaxAgeDays)
     $expiredSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+    $keptSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+    # Depois do prazo de guarda da pesquisa, tudo e apagado, inclusive o que nao saiu.
+    $deadlinePassed = [DateTime]::UtcNow -ge $script:ArchiveDeleteAfterUtc
+    if ($deadlinePassed) { $cutoffUtc = [DateTime]::UtcNow.AddMinutes(1) }
+    $unsent = Get-BridgeUnsentSessionIds
+    $exportedAtUtc = Get-BridgeLastPendriveExportUtc
 
     # 1. Identificar sessoes expiradas pelo diretorio sessoes/
     $sessoesDir = Join-Path $DataDir "sessoes"
@@ -913,10 +966,16 @@ function Invoke-BridgeRetentionCleanup {
                     $createdUtc = $sf.CreationTimeUtc
                 }
 
-                # Prazo absoluto: sete dias desde a criacao, sem extensao por retomada
+                # Prazo absoluto: retention_days desde a criacao, sem extensao por retomada; so para aula que ja saiu
                 if ($createdUtc -lt $cutoffUtc) {
                     $sid = if ($sessJson.session_id) { $sessJson.session_id } else { $sf.BaseName -replace '^sessao_', '' }
-                    if ($sid) { [void]$expiredSessionIds.Add([string]$sid) }
+                    if ($sid) {
+                        if ($deadlinePassed -or (Test-BridgeSessionLeftMachine -SessionId ([string]$sid) -Unsent $unsent -ExportedAtUtc $exportedAtUtc)) {
+                            [void]$expiredSessionIds.Add([string]$sid)
+                        } else {
+                            [void]$keptSessionIds.Add([string]$sid)
+                        }
+                    }
                 }
             } catch {}
         }
@@ -935,7 +994,11 @@ function Invoke-BridgeRetentionCleanup {
                         try {
                             $cUtc = if ($cStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$cStr).UtcDateTime } else { [DateTime]::Parse($cStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
                             if ($cUtc -lt $cutoffUtc) {
-                                [void]$expiredSessionIds.Add([string]$it.session_id)
+                                if ($deadlinePassed -or (Test-BridgeSessionLeftMachine -SessionId ([string]$it.session_id) -Unsent $unsent -ExportedAtUtc $exportedAtUtc)) {
+                                    [void]$expiredSessionIds.Add([string]$it.session_id)
+                                } else {
+                                    [void]$keptSessionIds.Add([string]$it.session_id)
+                                }
                             }
                         } catch {}
                     }
@@ -953,7 +1016,7 @@ function Invoke-BridgeRetentionCleanup {
             $activeCreatedStr = if ($activeSchedule.created_at) { $activeSchedule.created_at } elseif ($activeSchedule.started_at) { $activeSchedule.started_at } elseif ($activeSchedule.startedAt) { $activeSchedule.startedAt } else { $null }
             if ($activeSid -and $activeCreatedStr) {
                 $activeCreatedUtc = if ($activeCreatedStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$activeCreatedStr).UtcDateTime } else { [DateTime]::Parse($activeCreatedStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
-                if ($activeCreatedUtc -lt $cutoffUtc) {
+                if ($activeCreatedUtc -lt $cutoffUtc -and ($deadlinePassed -or (Test-BridgeSessionLeftMachine -SessionId $activeSid -Unsent $unsent -ExportedAtUtc $exportedAtUtc))) {
                     [void]$expiredSessionIds.Add($activeSid)
                     Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
                     if ($script:ActiveSession -and [string]$script:ActiveSession.session_id -eq $activeSid) {
@@ -966,6 +1029,12 @@ function Invoke-BridgeRetentionCleanup {
             Write-BridgeLog "Aviso ao avaliar agenda ativa na retencao: $($_.Exception.Message)" "WARN"
         }
     }
+
+    $keptSessionIds.ExceptWith($expiredSessionIds)
+    if ($keptSessionIds.Count -ne $script:RetentionKeptSessions -and $keptSessionIds.Count -gt 0) {
+        Write-BridgeLog "Retencao: $($keptSessionIds.Count) aula(s) passaram do prazo local mas ainda nao sairam do computador (nuvem ou pendrive); ficam guardadas." "WARN"
+    }
+    $script:RetentionKeptSessions = $keptSessionIds.Count
 
     if ($expiredSessionIds.Count -eq 0) {
         return
@@ -2253,6 +2322,8 @@ function Get-BridgeStatus {
         quarantined_sessions = $script:QuarantinedSessionIds.Count
         sync_paused_until = if (Test-BridgeSyncPaused) { ConvertTo-BridgeIso $script:SyncBackoffUntil } else { $null }
         last_sync_error = $script:LastSyncError
+        # Aulas alem de retention_days guardadas porque ainda nao sairam do computador.
+        retention_kept_sessions = $script:RetentionKeptSessions
     }
 }
 

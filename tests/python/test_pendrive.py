@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -312,6 +313,15 @@ class ExportadorPowerShellTest(unittest.TestCase):
         for path in folder.rglob("*"):
             if path.is_file():
                 self.assertNotIn(KEY_PET.encode("ascii"), path.read_bytes(), path.name)
+
+    def test_registra_a_exportacao_para_a_retencao(self):
+        antes = datetime.now(timezone.utc).replace(microsecond=0)
+        folder = self.export()
+        marca = json.loads((self.install / "dados_locais" / "ultima_exportacao_pendrive.json").read_text(encoding="utf-8"))
+        exportado = datetime.strptime(marca["exported_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+        self.assertGreaterEqual(exportado, antes)
+        self.assertLessEqual(exportado, datetime.now(timezone.utc))
+        self.assertNotIn("ultima_exportacao_pendrive.json", {p.name for p in folder.rglob("*")})
 
     def test_variavel_de_ambiente_tem_prioridade(self):
         folder = self.export(env_key="chave-institucional-de-teste")

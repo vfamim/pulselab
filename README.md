@@ -52,7 +52,8 @@ registrar esta turma** vale para a aula que fechou sozinha.
   respostas da mesma criança naquela rodada. Vão para a aula ativa ou, sem ela, para a última
   encerrada; em Modo Livre, com o registro pausado ou em aula não autorizada, nada é gravado.
 - **Retenção local** de `retention_days` do pacote do polo (1 a 365, padrão 180 dias), mesmo depois
-  de exportar ou enviar. O prazo precisa constar no protocolo e no TCLE.
+  de exportar ou enviar. Aula que ainda não saiu do computador (nuvem ou pendrive) fica guardada além
+  desse prazo até sair, no máximo até 31/12/2032. O prazo precisa constar no protocolo e no TCLE.
 - A máquina é identificada por um código aleatório e por um rótulo escolhido na instalação, nunca
   pelo nome do Windows ou do usuário.
 

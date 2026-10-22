@@ -37,7 +37,10 @@ a aba só agradece. Uma rodada abandonada no meio (2 minutos sem toque) é
 descartada. No relatório, as respostas aparecem somadas por polo e mês.
 
 Armazenamento e prazo: no computador, pelo `retention_days` do pacote do polo
-(padrão 180 dias, faixa de 1 a 365), mesmo depois de exportado ou enviado. Saída
+(padrão 180 dias, faixa de 1 a 365), mesmo depois de exportado ou enviado. Aula que
+passou do prazo sem ter saído do computador (nem pela nuvem nem por pendrive)
+continua guardada até sair, no máximo até 31/12/2032; depois dessa data tudo é
+apagado. Na nuvem, os dados ficam até 31/12/2032 (`research_archive_deadline`). Saída
 por pendrive (atalho "PulseLab - Exportar Dados") ou envio à nuvem do projeto
 quando a máquina está cadastrada e conectada.
 
