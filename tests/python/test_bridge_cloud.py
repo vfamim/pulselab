@@ -571,6 +571,14 @@ class BridgeQuestionarioTest(unittest.TestCase):
     def post(self, parte: str, answers: list[dict], submission_id: str | None = None):
         return self.bridge.post(f"/v1/questionario/{parte}", {"submission_id": submission_id or str(uuid.uuid4()), "answers": answers})
 
+    def assert_horario_das_criancas_e_o_inicio_da_aula(self, individuais: list[dict]):
+        # Sem o horário de cada rodada, quem estava na sala não liga a rodada a uma criança.
+        self.assertTrue(individuais)
+        self.assertEqual({e["elapsed_ms"] for e in individuais}, {0}, "respostas das crianças no início da aula")
+        self.assertEqual(len({e["occurred_at"] for e in individuais}), 1, "todas as rodadas com o mesmo horário")
+        for e in individuais:
+            self.assertNotIn("minutes_since_session_start", e["details"])
+
     def test_grava_na_sessao_ativa_e_bancada_uma_vez_por_aula(self):
         sid = self.start_and_get_session()
         estado = self.bridge.get("/v1/questionario/estado")
@@ -623,6 +631,7 @@ class BridgeQuestionarioTest(unittest.TestCase):
         for e in individuais:
             self.assertEqual((e["session_id"], e["participant_id"], e["participant_role"]), (sid, None, "individual"))
         self.assertEqual([e["details"]["item_order"] for e in individuais[:5]], [1, 2, 3, 4, 5])
+        self.assert_horario_das_criancas_e_o_inicio_da_aula(individuais)
         # A aula ativa continua aberta e o snapshot leva as respostas
         self.assertTrue(self.bridge.get("/v1/session/current")["active"])
         snap = read_json(self.bridge.data / "sessoes" / f"sessao_{sid}.json")
@@ -644,11 +653,13 @@ class BridgeQuestionarioTest(unittest.TestCase):
         for e in self.respostas("bancada_result_recorded") + self.respostas("student_feedback_recorded"):
             self.assertEqual(e["session_id"], sid)
             self.assertFalse(e["details"]["session_active"])
-            self.assertGreaterEqual(e["details"]["minutes_since_session_start"], 0)
             self.assertGreaterEqual(e["elapsed_ms"], 0)
             self.assertEqual(e["installation_id"], INSTALLATION_ID)
             self.assertEqual(e["site_id"], "PET")
             self.assertRegex(e["config_hash"], r"^[0-9a-f]{64}$")
+        for e in self.respostas("bancada_result_recorded"):
+            self.assertGreaterEqual(e["details"]["minutes_since_session_start"], 0)
+        self.assert_horario_das_criancas_e_o_inicio_da_aula(self.respostas("student_feedback_recorded"))
         snap = read_json(self.bridge.data / "sessoes" / f"sessao_{sid}.json")
         self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "instrutor"), "a aula continua encerrada")
         self.assertEqual([e["event_type"] for e in snap["timeline"]][-8:], ["bancada_result_recorded"] * 3 + ["student_feedback_recorded"] * 5)
