@@ -1,7 +1,7 @@
 {
-  "version": "3.2.1",
+  "version": "3.2.8",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.1/PulseLab-3.2.1-Windows.zip",
-  "notes": "PulseLab v3.2.1 - questionario interativo no instalador para definir polo, regional e CEP/CAAE de pesquisa."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.8/PulseLab-3.2.8-Windows.zip",
+  "notes": "PulseLab v3.2.8 - envio a nuvem nao descarta dados em silencio: erros da nuvem deixam os dados pendentes e a quarentena volta para a fila uma vez por dia."
 }
