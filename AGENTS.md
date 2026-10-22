@@ -10,8 +10,8 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
 
 1. **Incremento Obrigatório Pré-Commit**:
    - Nenhuma alteração destinada a publicação ou deploy pode ser commitada sem que a versão do projeto tenha sido formalmente incrementada.
-   - O padrão para correções de bugs, ajustes de persistência e melhorias operacionais é o incremento de **PATCH** (ex.: `2.1.0` -> `2.2.0` ou `2.2.0` -> `2.2.1`).
-   - Incrementos de **MINOR** ou **MAJOR** devem ocorrer quando houver acréscimo de novas capacidades metodológicas, alterações de quebra de compatibilidade ou quando solicitado explicitamente pelo pesquisador responsável.
+   - O padrão para correções de bugs, ajustes de persistência e melhorias operacionais é o incremento de **PATCH** (ex.: `3.3.0` -> `3.3.1`).
+   - Incrementos de **MINOR** ou **MAJOR** devem ocorrer quando houver acréscimo de novas capacidades metodológicas (ex.: `2.1.0` -> `2.2.0`), alterações de quebra de compatibilidade ou quando solicitado explicitamente pelo pesquisador responsável.
 
 2. **Sincronização Canônica Obrigatória em Todas as Superfícies**:
    A versão corrente deve estar rigorosamente idêntica em todas as superfícies operacionais do ecossistema PulseLab. `VERSION` (raiz) é a fonte única.
@@ -54,11 +54,11 @@ Toda alteração que for enviada (commit), mesclada (merge) ou implantada (deplo
 
 3. **Assentimento Verbal, Livre e Não-Punitivo** (desde a 2.4.0):
    - No início de cada aula o instrutor lê o roteiro padronizado de `docs/campo/assentimento-verbal.md`: o que é registrado, que a participação é voluntária e que qualquer pessoa pode recusar a qualquer momento, sem consequência. As famílias são informadas antes, conforme o TCLE aprovado pelo CEP.
-   - O questionário do fim da aula fica disponível numa aba do navegador (`http://127.0.0.1:43128/alunos/`, aberta pela bandeja quando a coleta está ativa): é opcional, anônimo (sem nome, idade ou texto livre, com "Não quero responder" em toda pergunta) e respondido no fim da aula, quando o instrutor avisa. Nenhuma outra tela, contador ou alerta aparece para as crianças; fora isso, o PulseLab fica só como ícone na bandeja.
+   - O questionário do fim da aula fica disponível numa aba do navegador (`http://127.0.0.1:43128/alunos/`, aberta pela bandeja quando a coleta está ativa): é opcional, sem nome, desidentificado e não anônimo; linha a linha, só o pesquisador (`service_role`) lê as respostas individuais das crianças (perguntas 4 a 8); o membro do polo vê só as da bancada (perguntas 1 a 3). Nenhuma outra tela, contador ou alerta aparece para as crianças; fora isso, o PulseLab fica só como ícone na bandeja.
    - A recusa de qualquer membro da bancada (ou da família) leva o instrutor a usar **"Não registrar esta turma"** no ícone da bandeja: a aula daquela turma é marcada imediatamente como não autorizada (dados nunca usados) e o registro pausa até a próxima aula, com acesso pedagógico integral às ferramentas de robótica. A exclusão definitiva é feita na revisão do pesquisador.
 
 4. **Retenção Local Configurável e Retirada com Revisão**:
-   - Dados locais do Bridge expiram no prazo `retention_days` do provisionamento do polo (1 a 365 dias), com padrão de 180 dias (`Invoke-BridgeRetentionCleanup`). Desde a 2.4.0 o navegador não guarda dados (o formulário final apaga o IndexedDB das versões antigas). O prazo deve constar no protocolo e no TCLE aprovados pelo CEP.
+   - Dados locais do Bridge expiram no prazo `retention_days` (1 a 365, padrão 180), exceto a aula que ainda não saiu do computador (nuvem ou pendrive), que fica guardada até sair, no máximo até 31/12/2032. Na nuvem, os dados ficam até 31/12/2032 (`research_archive_deadline`) e depois são apagados.
    - A cópia local permanece no computador durante todo o prazo, mesmo depois do envio à nuvem ou da exportação.
    - "Não registrar esta turma" executa a marcação imediata como não autorizada (dados nunca usados) e exclusão definitiva na revisão do pesquisador, com tombstone contra reenvio (na tabela `research_withdrawals`, que também barra reimportação por pendrive). Não há prazo automático para apagar: polos sem internet entregam pendrive meses depois. A marca vai junto com a sessão (`authorization_status = "nao_autorizada"`) e toda view de análise ou de qualidade filtra com `research_session_is_authorized(session_id)`.
 
