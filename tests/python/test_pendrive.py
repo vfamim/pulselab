@@ -68,7 +68,7 @@ class PoloManifestKeyTest(unittest.TestCase):
     def run_generator(self, polo_code: str) -> dict:
         builder = FakeBuilder()
         with patch.object(polo, "load_builder", return_value=builder), contextlib.redirect_stdout(io.StringIO()):
-            code = polo.main(["--polo", polo_code, "--regional", "Petrolina", "--caae", "12345678.9.0000.1234",
+            code = polo.main(["--polo", polo_code, "--regional", "Petrolina", "--caae", "87654321.0.0000.5678",
                               "--out-dir", str(self.out)])
         self.assertEqual(code, 0)
         return builder.provisionings[0]

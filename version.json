@@ -1,7 +1,7 @@
 {
-  "version": "3.2.1",
+  "version": "3.2.3",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.1/PulseLab-3.2.1-Windows.zip",
-  "notes": "PulseLab v3.2.1 - questionario interativo no instalador para definir polo, regional e CEP/CAAE de pesquisa."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.3/PulseLab-3.2.3-Windows.zip",
+  "notes": "PulseLab v3.2.3 - coleta de pesquisa desligada por padrao: o instalador nao liga mais a coleta, que so vem do pacote do polo."
 }
