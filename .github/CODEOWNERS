@@ -5,3 +5,9 @@ runtime/windows/ @vfamim
 version.json @vfamim
 config/ @vfamim
 .github/ @vfamim
+# Acesso aos dados das crianças, prazo de guarda e assinatura das releases
+supabase/ @vfamim
+tooling/release/ @vfamim
+tooling/data/ @vfamim
+tooling/polo/ @vfamim
+apps/student-pwa/ @vfamim
