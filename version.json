@@ -1,7 +1,7 @@
 {
-  "version": "3.2.1",
+  "version": "3.2.4",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.1/PulseLab-3.2.1-Windows.zip",
-  "notes": "PulseLab v3.2.1 - questionario interativo no instalador para definir polo, regional e CEP/CAAE de pesquisa."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.4/PulseLab-3.2.4-Windows.zip",
+  "notes": "PulseLab v3.2.4 - aulas marcadas como nao autorizadas deixam de ser lidas pelos membros do polo tambem nas tabelas do banco."
 }
