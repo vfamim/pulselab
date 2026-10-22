@@ -63,11 +63,13 @@ class ReleaseSigningTest(unittest.TestCase):
 
 class PoloProvisioningTest(unittest.TestCase):
     def test_caae_required_for_research(self):
-        data = polo.build_provisioning("PET", "Petrolina", "12345678.9.0000.1234", None)
+        data = polo.build_provisioning("PET", "Petrolina", "87654321.0.0000.5678", None)
         self.assertTrue(data["research_collection_enabled"])
         self.assertEqual(data["research_authorized_purposes"], ["academic_research"])
         with self.assertRaises(ValueError):
             polo.build_provisioning("PET", "Petrolina", "v2.0-piloto", None)
+        with self.assertRaises(ValueError):
+            polo.build_provisioning("PET", "Petrolina", "12345678.9.0000.1234", None)
 
     def test_without_research_keeps_collection_off(self):
         data = polo.build_provisioning("SBF", "Senhor do Bonfim", None, None)
@@ -190,6 +192,13 @@ class WindowsScriptsTest(unittest.TestCase):
         bat = (RUNTIME / "Instalar-PulseLab.bat").read_bytes().decode("utf-8")
         for marker in ("xcopy", "Initialize-PulseLabInstallation", "PulseLab - Iniciar Oficina.lnk", "Startup", "pause"):
             self.assertIn(marker, bat, f"Instalar-PulseLab.bat sem '{marker}' (arquivo truncado?)")
+
+    def test_installer_never_enables_research(self):
+        # Coleta só pelo pacote do polo: o instalador não pede CAAE nem traz um padrão.
+        bat = (RUNTIME / "Instalar-PulseLab.bat").read_text(encoding="utf-8")
+        self.assertNotIn("-Caae", bat)
+        self.assertNotIn("PL_CAAE", bat)
+        self.assertNotIn(polo.EXAMPLE_CAAE, bat)
 
     def test_shipped_scripts_use_crlf(self):
         shipped = [

@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.2.1"
+$script:BridgeVersion = "3.2.3"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1238,7 +1238,8 @@ function Get-BridgeResearchContext {
     if (-not $inst) { return $null }
     if (-not ($inst.research_collection_enabled -is [bool]) -or -not $inst.research_collection_enabled) { return $null }
     $authVersion = if ($inst.research_authorization_version) { ([string]$inst.research_authorization_version).Trim() } else { "" }
-    if (-not $authVersion) { return $null }
+    # CAAE no formato oficial e diferente do numero de exemplo da documentacao.
+    if ($authVersion -notmatch '^\d{8}\.\d\.\d{4}\.\d{4}$' -or $authVersion -eq "12345678.9.0000.1234") { return $null }
     if (@($inst.research_authorized_purposes) -notcontains "academic_research") { return $null }
 
     $cfg = Read-BridgePackageConfig

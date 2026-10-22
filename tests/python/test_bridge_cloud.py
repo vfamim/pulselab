@@ -209,7 +209,7 @@ def authorized_installation(**extra) -> dict:
         "machine_label": "PET-LAB1-PC03",
         "site_id": "PET",
         "research_collection_enabled": True,
-        "research_authorization_version": "12345678.9.0000.1234",
+        "research_authorization_version": "87654321.0.0000.5678",
         "research_authorized_purposes": ["academic_research"],
         **extra,
     }

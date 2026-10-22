@@ -15,7 +15,7 @@ pendrive. A mesma chave fica do lado do pesquisador em <out-dir>/chaves-manifest
 pacote de novo reutiliza a chave do polo. Guarde esse arquivo com o mesmo cuidado do token.
 
 Exemplo:
-  python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae 12345678.9.0000.1234
+  python3 tooling/polo/gerar-pacote-polo.py --polo PET --regional Petrolina --caae <CAAE do parecer aprovado>
   python3 tooling/polo/gerar-pacote-polo.py --polo SBF --regional "Senhor do Bonfim" --sem-pesquisa
 
 Com --calendario (CSV com as colunas data,mission_id; data no formato AAAA-MM-DD), o bridge
@@ -38,6 +38,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CAAE_PATTERN = re.compile(r"^\d{8}\.\d\.\d{4}\.\d{4}$")
+# Exemplo da documentação: casa com o formato, mas não é parecer de CEP nenhum.
+EXAMPLE_CAAE = "12345678.9.0000.1234"
 POLO_PATTERN = re.compile(r"^[A-Z0-9][A-Z0-9_-]{1,23}$")
 MANIFEST_KEYS_FILE = "chaves-manifesto.json"
 MANIFEST_KEY_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -123,6 +125,8 @@ def build_provisioning(polo: str, regional: str, caae: str | None, school: str |
     research = caae is not None
     if research and not CAAE_PATTERN.match(caae):
         raise ValueError("CAAE deve seguir o formato 12345678.9.0000.1234.")
+    if research and caae == EXAMPLE_CAAE:
+        raise ValueError("Esse é o CAAE de exemplo da documentação; use o CAAE do parecer aprovado.")
     if not 1 <= retention_days <= 365:
         raise ValueError("Retenção local deve ficar entre 1 e 365 dias.")
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
