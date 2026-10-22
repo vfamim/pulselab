@@ -4,7 +4,7 @@ import { bridgeGet, bridgePost } from "../lib/bridge-client.js";
 import Questionario from "./questionario.jsx";
 
 // Página da bancada em http://127.0.0.1:43128/alunos/.
-// Rota padrão: questionário do fim da aula (opcional e anônimo), aberto numa aba pela bandeja.
+// Rota padrão: questionário do fim da aula (opcional e sem nome), aberto numa aba pela bandeja.
 // A criança não encerra a aula por aqui: o encerramento fica no menu da bandeja e, para
 // diagnóstico, em ?encerrar=1. Encerrar a turma só fecha a sessão: o PulseLab continua ligado.
 // ?lab=1 mostra o painel de diagnóstico do laboratório.

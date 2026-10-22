@@ -128,7 +128,11 @@ art. 14). Detalhes em [assentimento verbal](../campo/assentimento-verbal.md), se
 
 Retenção local: `retention_days` do pacote do polo (padrão 180 dias, 1 a 365),
 igual no protocolo, no TCLE e no pacote. A cópia local permanece durante todo o
-prazo, mesmo depois do envio à nuvem ou da exportação.
+prazo, mesmo depois do envio à nuvem ou da exportação. Aula que passou do prazo
+sem ter saído do computador (nuvem ou pendrive) fica guardada até sair, no máximo
+até 31/12/2032, para que nenhum dado se perca em polo sem internet. Na nuvem, os
+dados ficam até 31/12/2032 (5 anos após o término previsto, em 2027) e depois são
+apagados.
 
 ## Governança a formalizar antes de coleta real
 

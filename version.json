@@ -1,7 +1,7 @@
 {
-  "version": "3.2.1",
+  "version": "3.3.0",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.1/PulseLab-3.2.1-Windows.zip",
-  "notes": "PulseLab v3.2.1 - questionario interativo no instalador para definir polo, regional e CEP/CAAE de pesquisa."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.3.0/PulseLab-3.3.0-Windows.zip",
+  "notes": "PulseLab v3.3.0 - coleta desligada por padrao, acesso restrito as respostas das criancas, prazo de guarda ate 31/12/2032, envio a nuvem sem perda silenciosa e retencao local que poupa o que nao saiu do computador."
 }

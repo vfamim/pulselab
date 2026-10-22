@@ -208,7 +208,7 @@ Esqueceu de encerrar? A turma é encerrada sozinha depois de **40 minutos sem pr
 
 # Onde ficam os dados
 
-- No próprio computador, na pasta `%LOCALAPPDATA%\PulseLab\dados_locais`, pelo prazo definido pelo polo (padrão: 180 dias). Atualizações e reinstalações não apagam essa pasta.
+- No próprio computador, na pasta `%LOCALAPPDATA%\PulseLab\dados_locais`, pelo prazo definido pelo polo (padrão: 180 dias). Aulas que ainda não foram para a nuvem nem para o pendrive ficam guardadas até saírem. Atualizações e reinstalações não apagam essa pasta.
 - Com internet e computador cadastrado, os dados vão para a nuvem sozinhos. **Ver situação** mostra `Envio para a nuvem: ativo`.
 - Sem internet (`Envio para a nuvem: não configurado (use o pendrive)`):
   1. Coloque um pendrive e abra o atalho **PulseLab - Exportar Dados**.

@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.2.1"
+$script:BridgeVersion = "3.3.0"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -445,6 +445,71 @@ function Update-BridgeDeviceToken([switch]$Force) {
     return $true
 }
 
+function Set-BridgeSyncError([int]$StatusCode, [string]$Kind) {
+    $script:LastSyncError = [ordered]@{ status_code = $StatusCode; kind = $Kind; at = ConvertTo-BridgeIso ([DateTime]::UtcNow) }
+    $script:SyncErrorThisCycle = $true
+}
+
+# 403 vem do RLS e pode valer so para aquele item (polo ou maquina diferente do cadastro, por
+# exemplo dados gravados antes do pacote do polo): o item fica pendente, a fila segue e ele so e
+# tentado de novo depois de SyncBackoffMaxSeconds. Se nada subiu no ciclo, o envio pausa.
+function Set-BridgeForbidden([string]$Id) {
+    $script:ForbiddenRetryAt[$Id] = [DateTime]::UtcNow.AddSeconds($script:SyncBackoffMaxSeconds)
+    Set-BridgeSyncError 403 "recusa_rls"
+}
+
+function Test-BridgeForbiddenWaiting([string]$Id) {
+    if (-not $script:ForbiddenRetryAt.ContainsKey($Id)) { return $false }
+    if ([DateTime]::UtcNow -lt $script:ForbiddenRetryAt[$Id]) { return $true }
+    $script:ForbiddenRetryAt.Remove($Id)
+    return $false
+}
+
+function Start-BridgeSyncBackoff([int]$StatusCode) {
+    $script:SyncBackoffSeconds = if ($script:SyncBackoffSeconds -le 0) { [Math]::Min(60, $script:SyncBackoffMaxSeconds) } else { [Math]::Min($script:SyncBackoffSeconds * 2, $script:SyncBackoffMaxSeconds) }
+    $script:SyncBackoffUntil = [DateTime]::UtcNow.AddSeconds($script:SyncBackoffSeconds)
+    Set-BridgeSyncError $StatusCode "nuvem"
+    Write-BridgeLog "Envio pausado por $($script:SyncBackoffSeconds) s: a nuvem respondeu HTTP $StatusCode. Os dados continuam pendentes." "WARN"
+}
+
+# So depois de um ciclo com envio e sem nenhum erro: zera a espera e o ultimo erro mostrado.
+function Reset-BridgeSyncBackoff {
+    $script:SyncBackoffSeconds = 0
+    $script:SyncBackoffUntil = [DateTime]::MinValue
+    $script:LastSyncError = $null
+}
+
+function Test-BridgeSyncPaused { return ([DateTime]::UtcNow -lt $script:SyncBackoffUntil) }
+
+# A quarentena nao e definitiva: uma vez por dia e a cada nova versao do bridge, eventos e sessoes
+# recusados voltam para a fila. Uma correcao na nuvem ou no bridge recupera os dados sozinha.
+function Invoke-BridgeQuarantineRetry {
+    if ($script:QuarantinedEventIds.Count -eq 0 -and $script:QuarantinedSessionIds.Count -eq 0) { return }
+    $last = $null
+    try {
+        if (Test-Path -LiteralPath $script:QuarantineRetryFile) { $last = Get-Content -LiteralPath $script:QuarantineRetryFile -Raw -Encoding UTF8 | ConvertFrom-Json }
+    } catch { $last = $null }
+    $lastAt = [DateTime]::MinValue
+    if ($last -and $last.retried_at) {
+        try { $lastAt = [DateTime]::Parse([string]$last.retried_at, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal) } catch {}
+    }
+    $versionChanged = (-not $last) -or ([string]$last.bridge_version -ne $script:BridgeVersion)
+    if (-not $versionChanged -and ([DateTime]::UtcNow - $lastAt).TotalSeconds -lt $script:QuarantineRetrySeconds) { return }
+
+    $eventCount = $script:QuarantinedEventIds.Count
+    $sessionCount = $script:QuarantinedSessionIds.Count
+    foreach ($id in $script:QuarantinedEventIds) { [void]$script:QuarantineReleasedIds.Add($id) }
+    foreach ($id in $script:QuarantinedSessionIds) { [void]$script:QuarantineReleasedIds.Add($id) }
+    $script:QuarantinedEventIds.Clear()
+    $script:QuarantinedSessionIds.Clear()
+    try {
+        Save-BridgeTextAtomic -Path $script:QuarantinedTrackerFile -Text ""
+        Save-BridgeTextAtomic -Path $script:QuarantinedSessionsTrackerFile -Text ""
+        Save-BridgeTextAtomic -Path $script:QuarantineRetryFile -Text (([ordered]@{ retried_at = ConvertTo-BridgeIso ([DateTime]::UtcNow); bridge_version = $script:BridgeVersion }) | ConvertTo-Json -Compress)
+    } catch { Write-BridgeLog "Aviso ao devolver a quarentena para a fila: $($_.Exception.Message)" "WARN" }
+    Write-BridgeLog "Quarentena devolvida para a fila: $eventCount evento(s) e $sessionCount sessao(oes)." "INFO"
+}
+
 function Sync-EventsToSupabase {
     # Falha 1: Bridge não deve sincronizar remotamente sem JWT autenticado operacional explícito.
     # Não trate anon key como autenticação suficiente (RLS revogou anon).
@@ -467,6 +532,7 @@ function Sync-EventsToSupabase {
     try {
         $lines = [System.IO.File]::ReadAllLines($eventsFile)
         $syncedCount = 0
+        $forbiddenCount = 0
         $networkAttempts = 0
         foreach ($line in $lines) {
             if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -479,7 +545,7 @@ function Sync-EventsToSupabase {
             try {
                 $eventId = [string]$ev.event_id
                 $eventSessionId = [string]$ev.session_id
-                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId) -or $script:QuarantinedEventIds.Contains($eventId) -or $script:WithdrawnSessionIds.Contains($eventSessionId)) {
+                if (-not $eventId -or $script:SyncedEventIds.Contains($eventId) -or $script:QuarantinedEventIds.Contains($eventId) -or $script:WithdrawnSessionIds.Contains($eventSessionId) -or (Test-BridgeForbiddenWaiting $eventId)) {
                     continue
                 }
 
@@ -549,22 +615,37 @@ function Sync-EventsToSupabase {
                     }
                 }
 
+                if ($statusCode -eq 403) {
+                    Set-BridgeForbidden $eventId
+                    $forbiddenCount++
+                    continue
+                }
+
+                # Problema da nuvem, nao do evento: fica pendente e o envio pausa.
+                if ($script:SyncRetryStatusCodes -contains $statusCode) {
+                    Start-BridgeSyncBackoff $statusCode
+                    break
+                }
+
                 # Falha 10: Erros 4xx não idempotentes (incluindo 409 por check constraint/FK, 400, 422, etc):
-                # Quarentena observável persistida em arquivo para não travar a fila com retentativas infinitas ao reiniciar o Bridge
+                # quarentena observável em arquivo; Invoke-BridgeQuarantineRetry devolve à fila uma vez por dia.
                 if ($statusCode -ge 400 -and $statusCode -lt 500) {
                     try {
-                        $quarantineFile = Join-Path $DataDir "events_quarantine.jsonl"
-                        $qObj = [PSCustomObject]@{
-                            event_id = $eventId
-                            status_code = $statusCode
-                            error = $errBody
-                            quarantined_at = [DateTime]::UtcNow.ToString("o")
-                            event = $ev
+                        if (-not $script:QuarantineReleasedIds.Contains($eventId)) {
+                            $quarantineFile = Join-Path $DataDir "events_quarantine.jsonl"
+                            $qObj = [PSCustomObject]@{
+                                event_id = $eventId
+                                status_code = $statusCode
+                                error = $errBody
+                                quarantined_at = [DateTime]::UtcNow.ToString("o")
+                                event = $ev
+                            }
+                            $qJson = $qObj | ConvertTo-Json -Compress -Depth 10
+                            [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
                         }
-                        $qJson = $qObj | ConvertTo-Json -Compress -Depth 10
-                        [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
                         [void]$script:QuarantinedEventIds.Add($eventId)
                         [System.IO.File]::AppendAllText($script:QuarantinedTrackerFile, "$eventId`r`n", [System.Text.Encoding]::UTF8)
+                        Set-BridgeSyncError $statusCode "evento_recusado"
                         Write-BridgeLog "[QUARENTENA] Evento $eventId rejeitado com HTTP $statusCode (salvo em events_quarantine.jsonl): $errBody" "WARN"
                     } catch {}
                     continue
@@ -574,7 +655,9 @@ function Sync-EventsToSupabase {
                 break
             }
         }
+        if ($forbiddenCount -gt 0 -and $syncedCount -eq 0 -and -not (Test-BridgeSyncPaused)) { Start-BridgeSyncBackoff 403 }
         if ($syncedCount -gt 0) {
+            if (-not $script:SyncErrorThisCycle) { Reset-BridgeSyncBackoff }
             $script:LastSyncOkAt = ConvertTo-BridgeIso ([DateTime]::UtcNow)
             Write-BridgeLog "Sincronizados $syncedCount evento(s) da oficina com o Supabase com sucesso." "INFO"
         }
@@ -622,6 +705,7 @@ function Sync-SessionSnapshotsToSupabase {
 
     $nowIso = [DateTime]::UtcNow.ToString("o")
     $syncedSessCount = 0
+    $forbiddenSessCount = 0
 
     foreach ($sfile in $sessionFiles) {
         try {
@@ -631,7 +715,7 @@ function Sync-SessionSnapshotsToSupabase {
             if (-not $sdata -or -not $sdata.session_id) { continue }
 
             $sid = [string]$sdata.session_id
-            if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid) -or $script:WithdrawnSessionIds.Contains($sid)) {
+            if ($script:SyncedSessionIds.Contains($sid) -or $script:QuarantinedSessionIds.Contains($sid) -or $script:WithdrawnSessionIds.Contains($sid) -or (Test-BridgeForbiddenWaiting $sid)) {
                 continue
             }
             # A marca do registro local vale mesmo se o snapshot nao chegou a ser regravado com ela.
@@ -714,19 +798,33 @@ function Sync-SessionSnapshotsToSupabase {
                 }
             }
 
+            if ($statusCode -eq 403) {
+                Set-BridgeForbidden $sid
+                $forbiddenSessCount++
+                continue
+            }
+
+            if ($script:SyncRetryStatusCodes -contains $statusCode) {
+                Start-BridgeSyncBackoff $statusCode
+                break
+            }
+
             if ($statusCode -ge 400 -and $statusCode -lt 500) {
                 try {
-                    $quarantineFile = Join-Path $DataDir "sessions_quarantine.jsonl"
-                    $qObj = [PSCustomObject]@{
-                        session_id = $sid
-                        status_code = $statusCode
-                        error = $errBody
-                        quarantined_at = [DateTime]::UtcNow.ToString("o")
+                    if (-not $script:QuarantineReleasedIds.Contains($sid)) {
+                        $quarantineFile = Join-Path $DataDir "sessions_quarantine.jsonl"
+                        $qObj = [PSCustomObject]@{
+                            session_id = $sid
+                            status_code = $statusCode
+                            error = $errBody
+                            quarantined_at = [DateTime]::UtcNow.ToString("o")
+                        }
+                        $qJson = $qObj | ConvertTo-Json -Compress -Depth 5
+                        [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
                     }
-                    $qJson = $qObj | ConvertTo-Json -Compress -Depth 5
-                    [System.IO.File]::AppendAllText($quarantineFile, "$qJson`r`n", [System.Text.Encoding]::UTF8)
                     [void]$script:QuarantinedSessionIds.Add($sid)
                     [System.IO.File]::AppendAllText($script:QuarantinedSessionsTrackerFile, "$sid`r`n", [System.Text.Encoding]::UTF8)
+                    Set-BridgeSyncError $statusCode "sessao_recusada"
                     Write-BridgeLog "[QUARENTENA] Sessao $sid rejeitada com HTTP ${statusCode}: $errBody" "WARN"
                 } catch {}
                 continue
@@ -736,7 +834,9 @@ function Sync-SessionSnapshotsToSupabase {
         }
     }
 
+    if ($forbiddenSessCount -gt 0 -and $syncedSessCount -eq 0 -and -not (Test-BridgeSyncPaused)) { Start-BridgeSyncBackoff 403 }
     if ($syncedSessCount -gt 0) {
+        if (-not $script:SyncErrorThisCycle) { Reset-BridgeSyncBackoff }
         Write-BridgeLog "Sincronizados $syncedSessCount snapshot(s) de sessao de bancada com o Supabase com sucesso." "INFO"
     }
 }
@@ -818,12 +918,70 @@ function Get-BridgeRetentionDays {
     return 180
 }
 
+# Aula que ainda nao saiu do computador (nem para a nuvem nem por pendrive) fica guardada alem de
+# retention_days, ate o prazo de guarda da pesquisa (31/12/2032, o mesmo de research_archive_deadline).
+# Assim nenhum dado se perde por falta de internet ou de exportacao; o TCLE declara isso.
+$script:ArchiveDeleteAfterUtc = [DateTime]::new(2033, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+$script:PendriveExportFile = Join-Path $DataDir "ultima_exportacao_pendrive.json"
+$script:RetentionKeptSessions = 0
+$script:RetentionUnsent = $null
+
+# Aulas com algum evento em events.jsonl que ainda nao subiu (pendente ou em quarentena).
+function Get-BridgeUnsentSessionIds {
+    $unsent = [System.Collections.Generic.HashSet[string]]::new()
+    $eventsFile = Join-Path $DataDir "events.jsonl"
+    if (-not (Test-Path -LiteralPath $eventsFile)) { return ,$unsent }
+    try {
+        foreach ($line in [System.IO.File]::ReadAllLines($eventsFile)) {
+            if ($line -match '"event_id":"([^"]+)"' -and -not $script:SyncedEventIds.Contains($Matches[1]) -and $line -match '"session_id":"([^"]+)"') {
+                [void]$unsent.Add($Matches[1])
+            }
+        }
+    } catch {}
+    return ,$unsent
+}
+
+# Inicio da ultima exportacao para pendrive (gravado por exportar-pendrive.ps1), ou $null.
+function Get-BridgeLastPendriveExportUtc {
+    try {
+        if (Test-Path -LiteralPath $script:PendriveExportFile) {
+            $mark = Get-Content -LiteralPath $script:PendriveExportFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($mark.exported_at) {
+                return [DateTime]::Parse([string]$mark.exported_at, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::AdjustToUniversal)
+            }
+        }
+    } catch {}
+    return $null
+}
+
+function Test-BridgeSessionLeftMachine {
+    param([string]$SessionId, $ExportedAtUtc)
+    if ($script:WithdrawnSessionIds.Contains($SessionId)) { return $true }
+    if ($script:SyncedSessionIds.Contains($SessionId)) {
+        # events.jsonl so e varrido quando precisa, uma vez por limpeza (RetentionUnsent zera no inicio).
+        if ($null -eq $script:RetentionUnsent) { $script:RetentionUnsent = Get-BridgeUnsentSessionIds }
+        if (-not $script:RetentionUnsent.Contains($SessionId)) { return $true }
+    }
+    if ($ExportedAtUtc) {
+        $safeSid = ($SessionId -replace '[^a-zA-Z0-9_-]', '_')
+        $sessPath = Join-Path (Join-Path $DataDir "sessoes") "sessao_$safeSid.json"
+        if ((Test-Path -LiteralPath $sessPath) -and (Get-Item -LiteralPath $sessPath).LastWriteTimeUtc -le $ExportedAtUtc) { return $true }
+    }
+    return $false
+}
+
 function Invoke-BridgeRetentionCleanup {
     [CmdletBinding()]
     param([int]$MaxAgeDays = 180)
 
     $cutoffUtc = [DateTime]::UtcNow.AddDays(-$MaxAgeDays)
     $expiredSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+    $keptSessionIds = [System.Collections.Generic.HashSet[string]]::new()
+    # Depois do prazo de guarda da pesquisa, tudo e apagado, inclusive o que nao saiu.
+    $deadlinePassed = [DateTime]::UtcNow -ge $script:ArchiveDeleteAfterUtc
+    if ($deadlinePassed) { $cutoffUtc = [DateTime]::UtcNow.AddMinutes(1) }
+    $script:RetentionUnsent = $null
+    $exportedAtUtc = Get-BridgeLastPendriveExportUtc
 
     # 1. Identificar sessoes expiradas pelo diretorio sessoes/
     $sessoesDir = Join-Path $DataDir "sessoes"
@@ -847,10 +1005,16 @@ function Invoke-BridgeRetentionCleanup {
                     $createdUtc = $sf.CreationTimeUtc
                 }
 
-                # Prazo absoluto: sete dias desde a criacao, sem extensao por retomada
+                # Prazo absoluto: retention_days desde a criacao, sem extensao por retomada; so para aula que ja saiu
                 if ($createdUtc -lt $cutoffUtc) {
                     $sid = if ($sessJson.session_id) { $sessJson.session_id } else { $sf.BaseName -replace '^sessao_', '' }
-                    if ($sid) { [void]$expiredSessionIds.Add([string]$sid) }
+                    if ($sid) {
+                        if ($deadlinePassed -or (Test-BridgeSessionLeftMachine -SessionId ([string]$sid) -ExportedAtUtc $exportedAtUtc)) {
+                            [void]$expiredSessionIds.Add([string]$sid)
+                        } else {
+                            [void]$keptSessionIds.Add([string]$sid)
+                        }
+                    }
                 }
             } catch {}
         }
@@ -869,7 +1033,11 @@ function Invoke-BridgeRetentionCleanup {
                         try {
                             $cUtc = if ($cStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$cStr).UtcDateTime } else { [DateTime]::Parse($cStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
                             if ($cUtc -lt $cutoffUtc) {
-                                [void]$expiredSessionIds.Add([string]$it.session_id)
+                                if ($deadlinePassed -or (Test-BridgeSessionLeftMachine -SessionId ([string]$it.session_id) -ExportedAtUtc $exportedAtUtc)) {
+                                    [void]$expiredSessionIds.Add([string]$it.session_id)
+                                } else {
+                                    [void]$keptSessionIds.Add([string]$it.session_id)
+                                }
                             }
                         } catch {}
                     }
@@ -887,7 +1055,7 @@ function Invoke-BridgeRetentionCleanup {
             $activeCreatedStr = if ($activeSchedule.created_at) { $activeSchedule.created_at } elseif ($activeSchedule.started_at) { $activeSchedule.started_at } elseif ($activeSchedule.startedAt) { $activeSchedule.startedAt } else { $null }
             if ($activeSid -and $activeCreatedStr) {
                 $activeCreatedUtc = if ($activeCreatedStr -match '^\d+$') { [DateTimeOffset]::FromUnixTimeMilliseconds([int64]$activeCreatedStr).UtcDateTime } else { [DateTime]::Parse($activeCreatedStr, $null, [System.Globalization.DateTimeStyles]::AdjustToUniversal) }
-                if ($activeCreatedUtc -lt $cutoffUtc) {
+                if ($activeCreatedUtc -lt $cutoffUtc -and ($deadlinePassed -or (Test-BridgeSessionLeftMachine -SessionId $activeSid -ExportedAtUtc $exportedAtUtc))) {
                     [void]$expiredSessionIds.Add($activeSid)
                     Remove-Item -LiteralPath $script:SessionStateFile -Force -ErrorAction SilentlyContinue
                     if ($script:ActiveSession -and [string]$script:ActiveSession.session_id -eq $activeSid) {
@@ -900,6 +1068,12 @@ function Invoke-BridgeRetentionCleanup {
             Write-BridgeLog "Aviso ao avaliar agenda ativa na retencao: $($_.Exception.Message)" "WARN"
         }
     }
+
+    $keptSessionIds.ExceptWith($expiredSessionIds)
+    if ($keptSessionIds.Count -ne $script:RetentionKeptSessions -and $keptSessionIds.Count -gt 0) {
+        Write-BridgeLog "Retencao: $($keptSessionIds.Count) aula(s) passaram do prazo local mas ainda nao sairam do computador (nuvem ou pendrive); ficam guardadas." "WARN"
+    }
+    $script:RetentionKeptSessions = $keptSessionIds.Count
 
     if ($expiredSessionIds.Count -eq 0) {
         return
@@ -1102,6 +1276,23 @@ $script:SessionIdleMinutes = Get-BridgeIntSetting "PULSELAB_SESSION_IDLE_MINUTES
 $script:ResumeGapMinutes = Get-BridgeIntSetting "PULSELAB_RESUME_GAP_MINUTES" 20 1 240
 $script:HeartbeatSeconds = Get-BridgeIntSetting "PULSELAB_HEARTBEAT_SECONDS" 300 1 3600
 $script:SpikePollSeconds = Get-BridgeIntSetting "PULSELAB_SPIKE_POLL_SECONDS" 15 1 600
+$script:SyncBackoffMaxSeconds = Get-BridgeIntSetting "PULSELAB_SYNC_BACKOFF_MAX_SECONDS" 3600 1 86400
+$script:QuarantineRetrySeconds = Get-BridgeIntSetting "PULSELAB_QUARANTINE_RETRY_SECONDS" 86400 1 2592000
+
+# Respostas da nuvem que dependem dela, nao do item (rota ausente, tempo esgotado, limite de
+# requisicoes): os dados ficam pendentes e o envio pausa com espera crescente ate
+# SyncBackoffMaxSeconds. Nunca vao para a quarentena. O 403 (RLS) e tratado item a item:
+# Set-BridgeForbidden.
+$script:SyncRetryStatusCodes = @(404, 408, 429)
+$script:SyncBackoffSeconds = 0
+$script:SyncBackoffUntil = [DateTime]::MinValue
+$script:LastSyncError = $null
+$script:SyncErrorThisCycle = $false
+# Itens recusados com 403 e quando podem ser tentados de novo (id -> UTC).
+$script:ForbiddenRetryAt = @{}
+$script:QuarantineRetryFile = Join-Path $DataDir "quarantine_retry.json"
+# Ids devolvidos a fila por Invoke-BridgeQuarantineRetry: se voltarem a ser recusados, nao se repetem no log.
+$script:QuarantineReleasedIds = [System.Collections.Generic.HashSet[string]]::new()
 
 $script:SessionStateFile = Join-Path $DataDir "active_session.json"
 # Ultima turma encerrada; apagado quando outra turma comeca (alvo de "Nao registrar esta turma").
@@ -1238,7 +1429,8 @@ function Get-BridgeResearchContext {
     if (-not $inst) { return $null }
     if (-not ($inst.research_collection_enabled -is [bool]) -or -not $inst.research_collection_enabled) { return $null }
     $authVersion = if ($inst.research_authorization_version) { ([string]$inst.research_authorization_version).Trim() } else { "" }
-    if (-not $authVersion) { return $null }
+    # CAAE no formato oficial e diferente do numero de exemplo da documentacao.
+    if ($authVersion -notmatch '^\d{8}\.\d\.\d{4}\.\d{4}$' -or $authVersion -eq "12345678.9.0000.1234") { return $null }
     if (@($inst.research_authorized_purposes) -notcontains "academic_research") { return $null }
 
     $cfg = Read-BridgePackageConfig
@@ -1863,6 +2055,9 @@ function Save-BridgeQuestionario {
     $isBancada = $EventType -eq "bancada_result_recorded"
     $nowMs = Get-BridgeNowMs
     $minutesSinceStart = [Math]::Round([Math]::Max(0, $nowMs - [int64]$Target.session.started_at_ms) / 60000.0, 1)
+    # Respostas das criancas levam o horario do inicio da aula e nao levam minutos desde o inicio:
+    # com o horario de cada rodada, quem estava na sala ligaria a rodada a uma crianca.
+    $occurredAtMs = if ($isBancada) { [int64]0 } else { [int64]$Target.session.started_at_ms }
     $snap = $Target.snapshot
     # Atribuicao direta: uma lista vazia devolvida por "if" seria desenrolada e viraria $null.
     $timeline = [System.Collections.Generic.List[object]]::new()
@@ -1885,15 +2080,15 @@ function Save-BridgeQuestionario {
             submission_id = $Parsed.submission_id
             item_order = $order
             session_active = [bool]$Target.active
-            minutes_since_session_start = $minutesSinceStart
         }
+        if ($isBancada) { $details["minutes_since_session_start"] = $minutesSinceStart }
         $participantId = if ($isBancada) { "BANCADA" } else { $null }
         $participantRole = if ($isBancada) { "group" } else { "individual" }
         if ($Target.active) {
-            [void](Add-BridgeSessionEvent -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details)
+            [void](Add-BridgeSessionEvent -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details -OccurredAtMs $occurredAtMs)
         } else {
             $sequence++
-            $event = New-BridgeEventRecord -Session $Target.session -Sequence $sequence -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details
+            $event = New-BridgeEventRecord -Session $Target.session -Sequence $sequence -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details -OccurredAtMs $occurredAtMs
             Add-BridgeEventLine -Json ($event | ConvertTo-Json -Depth 10 -Compress)
             $timeline.Add([pscustomobject]$event)
         }
@@ -1912,6 +2107,10 @@ function Add-BridgeHeartbeat {
         spike_status = [string]$s.spike_status
         uptime_min = [Math]::Round(([DateTime]::UtcNow - $script:StartTime).TotalMinutes, 1)
         pending_sync = Get-BridgePendingSyncCount
+        # O pesquisador ve na nuvem (research_installation_last_seen) qual maquina tem envio recusado.
+        quarantined_events = $script:QuarantinedEventIds.Count
+        quarantined_sessions = $script:QuarantinedSessionIds.Count
+        last_sync_error_status = if ($script:LastSyncError) { [int]$script:LastSyncError.status_code } else { $null }
     }))
 }
 
@@ -2162,6 +2361,12 @@ function Get-BridgeStatus {
         cloud_enabled = [bool]$script:SupabaseOperationalJwt
         pending_sync = Get-BridgePendingSyncCount
         last_sync_ok_at = $script:LastSyncOkAt
+        quarantined_events = $script:QuarantinedEventIds.Count
+        quarantined_sessions = $script:QuarantinedSessionIds.Count
+        sync_paused_until = if (Test-BridgeSyncPaused) { ConvertTo-BridgeIso $script:SyncBackoffUntil } else { $null }
+        last_sync_error = $script:LastSyncError
+        # Aulas alem de retention_days guardadas porque ainda nao sairam do computador.
+        retention_kept_sessions = $script:RetentionKeptSessions
     }
 }
 
@@ -2406,8 +2611,13 @@ function Invoke-BridgePeriodicTasks {
     if (([DateTime]::UtcNow - $script:LastSyncAttempt).TotalSeconds -ge $script:SyncIntervalSeconds) {
         $script:LastSyncAttempt = [DateTime]::UtcNow
         Invoke-BridgeDeviceEnrollment
-        Sync-EventsToSupabase
-        Sync-SessionSnapshotsToSupabase
+        try { Invoke-BridgeQuarantineRetry } catch {}
+        if (-not (Test-BridgeSyncPaused)) {
+            # Um erro em eventos ou em sessoes no mesmo ciclo impede que um envio bem-sucedido zere a espera.
+            $script:SyncErrorThisCycle = $false
+            Sync-EventsToSupabase
+            if (-not (Test-BridgeSyncPaused)) { Sync-SessionSnapshotsToSupabase }
+        }
         Sync-PendingWithdrawals
     }
 }

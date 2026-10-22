@@ -1,0 +1,77 @@
+name: Publicar release
+
+# Publica a release assinada que as máquinas dos polos baixam. Só roda por disparo manual, a partir
+# da main, depois do CI verde e da aprovação no ambiente "release", que guarda a chave privada no
+# secret PULSELAB_RELEASE_KEY. A chave nunca fica em computador nenhum. Passo a passo em
+# docs/engenharia/release.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      notes:
+        description: "Notas da release (ex.: PulseLab X.Y.Z - o que mudou)"
+        required: false
+        default: ""
+      pre:
+        description: "Pré-release (não chega às máquinas até ser promovida)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publicar-release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    if: github.ref == 'refs/heads/main'
+    uses: ./.github/workflows/ci.yml
+
+  publicar:
+    needs: ci
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: apps/student-pwa/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build PWA and Windows package
+        run: |
+          cd apps/student-pwa
+          npm ci
+          cd ../..
+          ./tooling/release/build-offline-package.sh
+
+      - name: Version consistency (with the package)
+        run: python3 tooling/release/check-version-consistency.py
+
+      # Entradas e secret só por variável de ambiente: nada do formulário vira código no shell.
+      - name: Sign and publish
+        env:
+          PULSELAB_RELEASE_KEY: ${{ secrets.PULSELAB_RELEASE_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.notes }}
+          RELEASE_PRE: ${{ inputs.pre }}
+        run: |
+          args=(publicar --private-env PULSELAB_RELEASE_KEY --target "$GITHUB_SHA" --notes "$RELEASE_NOTES")
+          if [ "$RELEASE_PRE" = "true" ]; then args+=(--pre); fi
+          python3 tooling/release/publicar-release.py "${args[@]}"

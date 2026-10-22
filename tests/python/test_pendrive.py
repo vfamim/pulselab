@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -68,7 +69,7 @@ class PoloManifestKeyTest(unittest.TestCase):
     def run_generator(self, polo_code: str) -> dict:
         builder = FakeBuilder()
         with patch.object(polo, "load_builder", return_value=builder), contextlib.redirect_stdout(io.StringIO()):
-            code = polo.main(["--polo", polo_code, "--regional", "Petrolina", "--caae", "12345678.9.0000.1234",
+            code = polo.main(["--polo", polo_code, "--regional", "Petrolina", "--caae", "87654321.0.0000.5678",
                               "--out-dir", str(self.out)])
         self.assertEqual(code, 0)
         return builder.provisionings[0]
@@ -312,6 +313,33 @@ class ExportadorPowerShellTest(unittest.TestCase):
         for path in folder.rglob("*"):
             if path.is_file():
                 self.assertNotIn(KEY_PET.encode("ascii"), path.read_bytes(), path.name)
+
+    def test_registra_a_exportacao_para_a_retencao(self):
+        antes = datetime.now(timezone.utc).replace(microsecond=0)
+        folder = self.export()
+        marca = json.loads((self.install / "dados_locais" / "ultima_exportacao_pendrive.json").read_text(encoding="utf-8"))
+        exportado = datetime.strptime(marca["exported_at"], "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
+        self.assertGreaterEqual(exportado, antes)
+        self.assertLessEqual(exportado, datetime.now(timezone.utc))
+        self.assertNotIn("ultima_exportacao_pendrive.json", {p.name for p in folder.rglob("*")})
+
+    def test_exportacao_com_falha_nao_marca_como_exportada(self):
+        sessao = self.install / "dados_locais" / "sessoes" / f"sessao_{KEPT}.json"
+        sessao.chmod(0)
+        try:
+            env = {k: v for k, v in os.environ.items() if k != "PULSELAB_MANIFEST_HMAC_KEY"}
+            env["LOCALAPPDATA"] = str(self.localappdata)
+            result = subprocess.run(
+                ["pwsh", "-NoProfile", "-NonInteractive", "-File", str(self.install / "scripts" / "exportar-pendrive.ps1"),
+                 "-TargetDrive", str(self.usb)],
+                env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=120,
+            )
+        finally:
+            sessao.chmod(0o600)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("incompleta", result.stdout)
+        self.assertFalse((self.install / "dados_locais" / "ultima_exportacao_pendrive.json").exists(),
+                         "exportação incompleta não pode liberar a retenção")
 
     def test_variavel_de_ambiente_tem_prioridade(self):
         folder = self.export(env_key="chave-institucional-de-teste")

@@ -54,12 +54,30 @@ SELECT is((SELECT concat_ws('|',polo,recusou,coalesce(minutos_desde_inicio::text
           'unexpected types become NULL or fall back without error');
 RESET ROLE;
 
+-- Respostas das crianças: linha a linha, só service_role; o membro vê só as da bancada
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
-SELECT is((SELECT array_agg(DISTINCT polo) FROM public.research_questionario_respostas),ARRAY['SITE_A'],'researcher sees only assigned site answers');
+SELECT is((SELECT array_agg(DISTINCT parte) FROM public.research_questionario_respostas),ARRAY['bancada'],'site member sees only collective bancada answers in the view');
+SELECT is((SELECT count(*) FROM public.research_questionario_respostas),1::bigint,'site member sees the authorized bancada answer');
+SELECT is((SELECT count(*) FROM public.research_session_events WHERE event_type = 'student_feedback_recorded'),0::bigint,'site member cannot read child answers in base table');
+SELECT is((SELECT count(*) FROM public.research_session_events WHERE event_type = 'bancada_result_recorded'),1::bigint,'site member still reads collective bancada answers');
+SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+SELECT is((SELECT count(*) FROM public.research_session_events WHERE event_type = 'student_feedback_recorded'),3::bigint,'owning machine still reads its own events');
 SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000099","role":"authenticated"}',true);
-SELECT is((SELECT count(*) FROM public.research_questionario_respostas),0::bigint,'unaffiliated user sees no answers');
+SELECT is((SELECT count(*) FROM public.research_session_events),0::bigint,'unaffiliated user sees no events');
 RESET ROLE;
+
+-- Snapshot: respostas das crianças nunca ficam na timeline (inserção e atualização)
+INSERT INTO public.research_bancada_sessions(session_id,site_id,installation_id,phase,session_payload,created_at,updated_at) VALUES
+('c4000000-0000-4000-8000-000000000004','SITE_A','10000000-0000-4000-8000-000000000001','in_progress',
+ '{"timeline":[{"event_type":"session_started"},{"event_type":"student_feedback_recorded","details":{"value":"nao"}},{"event_type":"bancada_result_recorded"}]}'::jsonb,now(),now());
+SELECT is((SELECT jsonb_path_query_array(session_payload,'$.timeline[*].event_type') FROM public.research_bancada_sessions WHERE session_id='c4000000-0000-4000-8000-000000000004'),
+          '["session_started","bancada_result_recorded"]'::jsonb,'child answers stripped from snapshot on insert, order kept');
+UPDATE public.research_bancada_sessions SET phase='completed',
+       session_payload='{"timeline":[{"event_type":"student_feedback_recorded"}],"data_quality":{}}'::jsonb
+ WHERE session_id='c4000000-0000-4000-8000-000000000004';
+SELECT is((SELECT session_payload FROM public.research_bancada_sessions WHERE session_id='c4000000-0000-4000-8000-000000000004'),
+          '{"timeline":[],"data_quality":{}}'::jsonb,'child answers stripped from snapshot on update');
 SET LOCAL ROLE anon;
 SELECT throws_ok($q$SELECT count(*) FROM public.research_questionario_respostas$q$,'42501',NULL,'anon query is denied');
 RESET ROLE;
