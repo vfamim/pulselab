@@ -166,7 +166,7 @@ if (-not $script:SupabaseOperationalJwt) {
     }
 }
 
-$script:BridgeVersion = "3.2.1"
+$script:BridgeVersion = "3.2.7"
 $verCandidate = Join-Path $PSScriptRoot "..\VERSION"
 if (Test-Path $verCandidate) {
     try { $script:BridgeVersion = (Get-Content $verCandidate -Raw).Trim() } catch {}
@@ -1863,6 +1863,9 @@ function Save-BridgeQuestionario {
     $isBancada = $EventType -eq "bancada_result_recorded"
     $nowMs = Get-BridgeNowMs
     $minutesSinceStart = [Math]::Round([Math]::Max(0, $nowMs - [int64]$Target.session.started_at_ms) / 60000.0, 1)
+    # Respostas das criancas levam o horario do inicio da aula e nao levam minutos desde o inicio:
+    # com o horario de cada rodada, quem estava na sala ligaria a rodada a uma crianca.
+    $occurredAtMs = if ($isBancada) { [int64]0 } else { [int64]$Target.session.started_at_ms }
     $snap = $Target.snapshot
     # Atribuicao direta: uma lista vazia devolvida por "if" seria desenrolada e viraria $null.
     $timeline = [System.Collections.Generic.List[object]]::new()
@@ -1885,15 +1888,15 @@ function Save-BridgeQuestionario {
             submission_id = $Parsed.submission_id
             item_order = $order
             session_active = [bool]$Target.active
-            minutes_since_session_start = $minutesSinceStart
         }
+        if ($isBancada) { $details["minutes_since_session_start"] = $minutesSinceStart }
         $participantId = if ($isBancada) { "BANCADA" } else { $null }
         $participantRole = if ($isBancada) { "group" } else { "individual" }
         if ($Target.active) {
-            [void](Add-BridgeSessionEvent -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details)
+            [void](Add-BridgeSessionEvent -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details -OccurredAtMs $occurredAtMs)
         } else {
             $sequence++
-            $event = New-BridgeEventRecord -Session $Target.session -Sequence $sequence -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details
+            $event = New-BridgeEventRecord -Session $Target.session -Sequence $sequence -EventType $EventType -Stage "questionario_fim_aula" -ParticipantId $participantId -ParticipantRole $participantRole -Details $details -OccurredAtMs $occurredAtMs
             Add-BridgeEventLine -Json ($event | ConvertTo-Json -Depth 10 -Compress)
             $timeline.Add([pscustomobject]$event)
         }
