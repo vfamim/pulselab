@@ -169,8 +169,19 @@ CEP se esse registro é suficiente.
   art. 11, desde que prevaleça o melhor interesse. Confirmar o enquadramento
   com o encarregado de dados (DPO) da instituição.
 - **Retenção.** Os dados ficam no computador pelo prazo `retention_days` do
-  pacote do polo (padrão 180 dias, faixa de 1 a 365). O prazo precisa ser o
-  mesmo no protocolo, no TCLE/aviso e no pacote.
+  pacote do polo (padrão 180 dias, faixa de 1 a 365). Aula que passou do prazo
+  sem ter saído do computador (nuvem ou pendrive) fica guardada até sair, no
+  máximo até 31/12/2032. Na nuvem, os dados ficam até 31/12/2032. Os prazos
+  precisam ser os mesmos no protocolo, no TCLE/aviso e no pacote. Cláusula
+  sugerida para o TCLE:
+
+  > Os registros da oficina ficam guardados no computador do laboratório por
+  > até 180 dias. Se nesse prazo ainda não tiverem sido enviados ao banco de
+  > dados da pesquisa (pela internet ou por pendrive), continuam guardados no
+  > computador até serem enviados, no máximo até 31 de dezembro de 2032. No
+  > banco de dados da pesquisa, os registros ficam guardados até 31 de dezembro
+  > de 2032, cinco anos depois do fim previsto da pesquisa, e então são
+  > apagados.
 
 ## 5. Checklist de consistência: protocolo, TCLE e software
 

@@ -166,6 +166,8 @@ if (Test-Path -LiteralPath $installationFile) {
     } catch {}
 }
 $timeTag = Get-Date -Format "yyyyMMdd_HHmmss"
+# Inicio da copia: o que foi gravado ate aqui vai para o pendrive (marca gravada no fim, em dados_locais).
+$exportStartedUtc = [DateTime]::UtcNow
 $exportFolderName = "Coleta_${machineName}_${timeTag}"
 
 $targetExportDir = $null
@@ -301,6 +303,17 @@ if (-not [string]::IsNullOrWhiteSpace($manifestHmacKey)) {
 } else {
     Write-Host "      [AVISO] Manifesto sem assinatura: este computador nao tem a chave do polo." -ForegroundColor Yellow
     Write-Host "              Reinstale com o pacote do polo para que a coleta possa ir para a nuvem." -ForegroundColor Yellow
+}
+
+# A retencao do bridge so apaga, depois de retention_days, aulas que ja sairam do computador (nuvem ou
+# pendrive). A copia na Area de Trabalho nao conta: os dados continuam so neste computador.
+if (-not $SaveToDesktop -and $destDrive) {
+    try {
+        $exportMark = '{"exported_at":"' + $exportStartedUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") + '"}'
+        [System.IO.File]::WriteAllText((Join-Path $dataDir "ultima_exportacao_pendrive.json"), $exportMark, (New-Object System.Text.UTF8Encoding($false)))
+    } catch {
+        Write-Host "      [AVISO] Nao foi possivel registrar a exportacao: $($_.Exception.Message)" -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""

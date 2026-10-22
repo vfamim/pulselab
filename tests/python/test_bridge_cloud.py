@@ -23,7 +23,7 @@ import unittest
 import uuid
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -820,6 +820,53 @@ class BridgeQuarantineTest(unittest.TestCase):
         self.bridge.start()
         self.assertTrue(wait_for(lambda: event_id in self.synced_ids()), "evento da quarentena antiga não voltou para a fila")
         self.assertNotEqual(read_json(self.bridge.data / "quarantine_retry.json")["bridge_version"], "0.0.1")
+
+
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeRetentionTest(unittest.TestCase):
+    """Depois de retention_days, só sai do computador a aula que já foi para a nuvem ou para o pendrive."""
+
+    NAO_SAIU = "a0000000-0000-4000-8000-00000000000a"
+    NA_NUVEM = "b0000000-0000-4000-8000-00000000000b"
+    NO_PENDRIVE = "c0000000-0000-4000-8000-00000000000c"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-retention-"))
+        self.bridge = BridgeProcess(self.tmp, "http://127.0.0.1:9")
+        data = self.bridge.data
+        write_json(data / "installation.json", authorized_installation(retention_days=1))
+        antiga = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        (data / "sessoes").mkdir()
+        linhas = []
+        for sid in (self.NAO_SAIU, self.NA_NUVEM, self.NO_PENDRIVE):
+            write_json(data / "sessoes" / f"sessao_{sid}.json", {"session_id": sid, "created_at": antiga, "status": "completed"})
+            linhas.append(json.dumps({"event_id": "e" + sid[1:], "session_id": sid, "event_type": "session_started"}))
+        (data / "events.jsonl").write_text("\r\n".join(linhas) + "\r\n", encoding="utf-8")
+        (data / "sessions_synced.txt").write_text(self.NA_NUVEM + "\r\n", encoding="utf-8")
+        (data / "events_synced.txt").write_text("e" + self.NA_NUVEM[1:] + "\r\n", encoding="utf-8")
+        exportado = (datetime.now(timezone.utc) + timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        write_json(data / "ultima_exportacao_pendrive.json", {"exported_at": exportado})
+        # Regravadas depois da exportação (questionário respondido mais tarde, por exemplo): o pendrive não as leva.
+        future = time.time() + 60
+        for sid in (self.NAO_SAIU, self.NA_NUVEM):
+            os.utime(data / "sessoes" / f"sessao_{sid}.json", (future, future))
+
+    def tearDown(self):
+        self.bridge.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_poupa_o_que_nao_saiu_do_computador(self):
+        self.bridge.start()
+        sessoes = self.bridge.data / "sessoes"
+        self.assertTrue(wait_for(lambda: not (sessoes / f"sessao_{self.NA_NUVEM}.json").exists()), "aula enviada à nuvem deveria sair")
+        self.assertTrue(wait_for(lambda: not (sessoes / f"sessao_{self.NO_PENDRIVE}.json").exists()), "aula exportada deveria sair")
+        self.assertTrue((sessoes / f"sessao_{self.NAO_SAIU}.json").exists(), "aula que não saiu do computador não pode ser apagada")
+        restantes = {e["session_id"] for e in read_events(self.bridge.data)}
+        self.assertIn(self.NAO_SAIU, restantes)
+        self.assertNotIn(self.NA_NUVEM, restantes)
+        self.assertNotIn(self.NO_PENDRIVE, restantes)
+        self.assertEqual(self.bridge.get("/v1/status")["retention_kept_sessions"], 1)
 
 
 if __name__ == "__main__":
