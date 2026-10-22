@@ -4,7 +4,7 @@ import { bridgeGet, bridgePost } from "../lib/bridge-client.js";
 import { PARTES, RECUSA, RECUSA_ROTULO, iniciarRodada, perguntaAtual, primeiraParte, responder } from "../lib/questionario.js";
 
 // Questionário do fim da aula, aberto numa aba pela bandeja quando o PulseLab inicia.
-// Opcional e anônimo: sem nome, idade ou texto livre. Uma pergunta por tela; ao tocar numa
+// Opcional e sem nome: sem nome, idade ou texto livre. Uma pergunta por tela; ao tocar numa
 // resposta a tela avança e a escolha não aparece de novo (sem "voltar" e sem resumo).
 
 const ROBO = "/alunos/robot.png";
