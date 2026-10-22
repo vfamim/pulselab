@@ -32,8 +32,9 @@ registrar esta turma** vale para a aula que fechou sozinha.
 - **Coleta desligada por padrão.** O pacote genérico não registra dados de pesquisa. A coleta só
   liga com o pacote do polo, que traz o CAAE do parecer ético em `provisionamento.json`.
 - **A unidade de análise é a bancada**, nunca uma criança identificada. Sem nomes, fotos, câmera,
-  áudio, captura de tela ou teclado. As respostas individuais do questionário do fim da aula são
-  anônimas e só aparecem somadas por polo e mês.
+  áudio, captura de tela ou teclado. As respostas individuais do questionário do fim da aula não têm
+  nome, mas são desidentificadas, não anônimas: linha a linha só o pesquisador (`service_role`) as
+  lê; no relatório aparecem somadas por polo e mês.
 - **Assentimento verbal.** No início da aula o instrutor lê o
   [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
   turma**: a aula é marcada como não autorizada e nunca entra em análise. A exclusão definitiva é

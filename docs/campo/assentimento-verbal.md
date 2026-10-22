@@ -22,7 +22,9 @@ apareçam.
 > Pessoal, antes de começar, uma coisa importante. A universidade está
 > estudando como são as oficinas de robótica. Por isso, o computador de cada
 > bancada guarda como o programa do robô vai mudando durante a aula. No final,
-> vou fazer uma pergunta para a bancada: como foi a aula para vocês.
+> vou fazer uma pergunta para a bancada: como foi a aula para vocês. Depois,
+> quem quiser responde umas perguntas no computador, sem nome. As respostas vão
+> só para o pesquisador da universidade.
 >
 > O computador não guarda o nome de ninguém. Não tira foto, não filma, não
 > grava a voz e não registra o que vocês digitam ou clicam.
@@ -32,7 +34,7 @@ apareçam.
 > e ninguém sai da atividade: a bancada continua montando e programando
 > normalmente. Alguém tem alguma dúvida?
 
-(Cerca de 120 palavras.)
+(Cerca de 140 palavras.)
 
 ## 2. Procedimento do instrutor
 

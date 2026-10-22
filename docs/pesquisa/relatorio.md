@@ -5,7 +5,7 @@ importador) numa tabela com **uma linha por aula de bancada**, isto é, o que um
 registrou durante uma turma. A mesma aula nunca aparece duas vezes, mesmo que tenha chegado pelos
 dois caminhos. Aulas que a turma pediu para não registrar ficam de fora.
 
-Não há nomes, fotos nem texto livre: só os campos descritos abaixo e as respostas anônimas do
+Não há nomes, fotos nem texto livre: só os campos descritos abaixo e as respostas sem nome do
 questionário do fim da aula, somadas por polo e mês.
 
 ## Como gerar
@@ -29,7 +29,8 @@ python3 tooling/data/relatorio-pulselab.py --de 2026-10-01 --ate 2026-10-31 --po
 
 A nuvem usa a mesma credencial do importador (`PULSELAB_SERVICE_ROLE_KEY` ou
 `PULSELAB_OPERATIONAL_JWT`). Sem credencial, o relatório usa só o pendrive. Com o JWT de
-pesquisador, aparecem só os polos aos quais a conta está vinculada.
+pesquisador, aparecem só os polos aos quais a conta está vinculada, e sem as respostas das
+crianças: elas são desidentificadas, não anônimas, e só a chave `service_role` as lê.
 
 Os CSV abrem direto no Excel em português: separador `;`, vírgula decimal, `sim`/`não`. No R ou no
 pandas, use `sep=';'` e `decimal=','`.
@@ -171,6 +172,6 @@ As respostas sinalizadas continuam nas contagens; decida com o polo se ficam.
 
 Na nuvem, o relatório lê a view `research_aula_bancada`, que achata o resumo da sessão enviado pelo
 bridge, a view `research_installation_last_seen` e a view `research_questionario_respostas` (uma
-linha por resposta do questionário, sem aulas não autorizadas). As três respeitam o acesso das
+linha por resposta do questionário, sem aulas não autorizadas, lida só com `service_role`). As três respeitam o acesso das
 tabelas (`security_invoker`). No pendrive, lê as tabelas `sessions` e `session_events` do SQLite do
 importador.

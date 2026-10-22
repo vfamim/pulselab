@@ -1,7 +1,7 @@
 {
-  "version": "3.2.4",
+  "version": "3.2.6",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.4/PulseLab-3.2.4-Windows.zip",
-  "notes": "PulseLab v3.2.4 - aulas marcadas como nao autorizadas deixam de ser lidas pelos membros do polo tambem nas tabelas do banco."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.6/PulseLab-3.2.6-Windows.zip",
+  "notes": "PulseLab v3.2.6 - respostas individuais das criancas no questionario: linha a linha so o pesquisador le."
 }
