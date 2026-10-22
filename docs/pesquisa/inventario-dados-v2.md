@@ -20,8 +20,8 @@ Fonte dos itens de encerramento: `apps/student-pwa/lib/contracts.js`
 | Pergunta da bancada (legado) | 4 carinhas ou "Preferimos não responder" | Experiência coletiva da aula | Aceita pela rota de encerramento, sem tela desde a 2.4.0 |
 | Itens do instrutor (legado) | resultado 0–3; apoio nenhum/algum/muito; ou pulado | Resultado prático e mediação | Aceitos pela rota de encerramento, sem tela desde a 2.4.0 |
 | Questionário do fim da aula: bancada | evento `bancada_result_recorded`, um por pergunta (1 a 3): linha preta até o fim (`sim`, `em_parte`, `nao`), corrida (`ganhamos`, `terminamos_sem_ganhar`, `nao_terminamos`, `nao_participamos`), jogo de perguntas (`quase_todas`, `metade`, `poucas`, `sem_quiz`) ou `recusou` | Resultado prático dos testes com os carrinhos | Respondido pela bancada junto, uma vez por aula (o bridge recusa o segundo envio) |
-| Questionário do fim da aula: crianças | evento `student_feedback_recorded`, um por pergunta (4 a 8): gostou da aula, quer outra aula, autoconfiança antes e agora, ajudou na bancada; `sim`, `mais_ou_menos`, `nao` ou `recusou` | Percepção das crianças e mudança de autoconfiança (6 contra 7) | Anônimo e opcional: sem nome, idade, texto livre ou ordem de quem respondeu; "Não quero responder" em toda pergunta; a escolha não fica na tela |
-| Metadados das respostas | `item_id`, `value`, `refused`, `instrument_version` (`bancada-3.2.0`), `submission_id` (código aleatório gerado na aba a cada rodada), `item_order`, `session_active`, `minutes_since_session_start` | Parear as respostas da mesma rodada (6 e 7), separar aula em andamento de aula encerrada e sinalizar respostas tardias | `submission_id` não se repete entre rodadas nem entre aulas: não acompanha a criança; nada fica guardado no navegador |
+| Questionário do fim da aula: crianças | evento `student_feedback_recorded`, um por pergunta (4 a 8): gostou da aula, quer outra aula, autoconfiança antes e agora, ajudou na bancada; `sim`, `mais_ou_menos`, `nao` ou `recusou` | Percepção das crianças e mudança de autoconfiança (6 contra 7) | Sem nome e opcional (desidentificado, não anônimo; linha a linha só o pesquisador lê): sem nome, idade, texto livre ou ordem de quem respondeu; "Não quero responder" em toda pergunta; a escolha não fica na tela |
+| Metadados das respostas | `item_id`, `value`, `refused`, `instrument_version` (`bancada-3.2.0`), `submission_id` (código aleatório gerado na aba a cada rodada), `item_order`, `session_active`, `minutes_since_session_start` | Parear as respostas da mesma rodada (6 e 7), separar aula em andamento de aula encerrada e sinalizar respostas tardias | `submission_id` não se repete entre rodadas nem entre aulas: não acompanha a criança; nada fica guardado no navegador. Nas respostas das crianças o horário gravado é o do início da aula, sem `minutes_since_session_start`, para que o horário não ligue a rodada a uma criança |
 | Aula não autorizada | `authorization_status = "nao_autorizada"` e `marked_at` no snapshot da sessão; `sessions_unauthorized.txt` no computador (`session_id` e data da marcação); `research_unauthorized_sessions` na nuvem | Garantir que a aula recusada nunca entre em relatório ou análise até a revisão do pesquisador | Não guarda motivo nem quem recusou; restauração exige motivo registrado pelo pesquisador |
 | Aula apagada na revisão | marca de exclusão (`research_withdrawals` na nuvem, `withdrawn_sessions` no SQLite): só o identificador da sessão apagada | Impedir que dados apagados voltem por pendrive ou reenvio | Não guarda motivo nem quem recusou |
 
@@ -37,7 +37,10 @@ a aba só agradece. Uma rodada abandonada no meio (2 minutos sem toque) é
 descartada. No relatório, as respostas aparecem somadas por polo e mês.
 
 Armazenamento e prazo: no computador, pelo `retention_days` do pacote do polo
-(padrão 180 dias, faixa de 1 a 365), mesmo depois de exportado ou enviado. Saída
+(padrão 180 dias, faixa de 1 a 365), mesmo depois de exportado ou enviado. Aula que
+passou do prazo sem ter saído do computador (nem pela nuvem nem por pendrive)
+continua guardada até sair, no máximo até 31/12/2032; depois dessa data tudo é
+apagado. Na nuvem, os dados ficam até 31/12/2032 (`research_archive_deadline`). Saída
 por pendrive (atalho "PulseLab - Exportar Dados") ou envio à nuvem do projeto
 quando a máquina está cadastrada e conectada.
 

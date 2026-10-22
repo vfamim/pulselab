@@ -1,7 +1,7 @@
 {
-  "version": "3.2.2",
+  "version": "3.3.1",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.2/PulseLab-3.2.2-Windows.zip",
-  "notes": "PulseLab v3.2.2 - separacao entre blocos conectados (executable_blocks) e blocos soltos/orfaos (orphan_blocks) no parser SPIKE."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.3.1/PulseLab-3.3.1-Windows.zip",
+  "notes": "PulseLab v3.3.1 - parser do SPIKE separa blocos conectados de blocos soltos (orphan_blocks)."
 }

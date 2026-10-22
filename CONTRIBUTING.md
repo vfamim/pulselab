@@ -12,7 +12,7 @@ O **PulseLab** é a camada de observação científica das oficinas do projeto d
 
 ## 2. 🛡️ Salvaguardas Éticas Invioláveis (LGPD Art. 14 / CEP)
 
-Todo código ou funcionalidade proposta deve cumprir rigorosamente o protocolo aprovado pelo Comitê de Ética em Pesquisa (CEP) e o Artigo 14 da Lei Geral de Proteção de Dados (LGPD):
+Todo código ou funcionalidade proposta deve cumprir o protocolo submetido ao Comitê de Ética em Pesquisa (CEP), o parecer vigente depois de aprovado, e o Artigo 14 da Lei Geral de Proteção de Dados (LGPD). Enquanto não houver parecer aprovado, nenhuma coleta de pesquisa é ativada: ela só liga pelo pacote do polo com o CAAE do parecer.
 
 1. **Proteção a Menores**:
    - É terminantemente proibido capturar, processar ou armazenar nomes, fotos, vídeos, áudios, endereços IP externos ou quaisquer identificadores nominais diretos de crianças e adolescentes.
@@ -21,7 +21,8 @@ Todo código ou funcionalidade proposta deve cumprir rigorosamente o protocolo a
    - Capturas de tela (screenshots) e monitoramento global de teclas digitadas (`GetAsyncKeyState`, keyloggers) são proibidos no ecossistema do PulseLab.
 3. **Assentimento Verbal e Não-Punitivo**:
    - A participação de estudantes nas pesquisas é estritamente voluntária. O questionário de encerramento (`/alunos/`) é opcional e todas as perguntas contam com a opção "Não quero responder".
-   - A recusa de qualquer membro da bancada aciona o mecanismo "Não registrar esta turma" pelo instrutor, descartando os dados daquela oficina sem qualquer prejuízo pedagógico.
+   - A recusa de qualquer membro da bancada leva o instrutor a usar "Não registrar esta turma": a aula é marcada como não autorizada, nunca entra em análise e é apagada na revisão do pesquisador, sem qualquer prejuízo pedagógico.
+   - As respostas individuais do questionário não têm nome, mas são desidentificadas, não anônimas: linha a linha só o pesquisador as lê. Não as descreva como anônimas.
 4. **Preservação de Segredos e Isolamento de Dados**:
    - Nunca comite arquivos `.env`, chaves privadas, service role keys do Supabase ou arquivos reais de telemetria coletados em escolas (`dados_locais/`, dumps SQLite).
 
@@ -35,14 +36,17 @@ O repositório adota governança estrita para proteger a estabilidade dos softwa
    - Nenhum desenvolvedor pode fazer push direto para a branch `main`.
    - Todas as modificações entram exclusivamente via **Pull Request (PR)**.
 2. **Aprovações Obrigatórias**:
-   - Todo PR requer no mínimo **1 aprovação** de um revisor do projeto.
-   - Arquivos do núcleo de execução nas escolas (`runtime/windows/`, `config/`, chaves criptográficas e regras operacionais) estão sob a governança de [CODEOWNERS](.github/CODEOWNERS) e exigem aprovação mandatória do pesquisador responsável (`@vfamim`).
+   - Todo PR requer no mínimo **1 aprovação** de um revisor do projeto, e o GitHub não aceita a aprovação do próprio autor.
+   - Arquivos do núcleo de execução nas escolas (`runtime/windows/`, `config/`, chaves criptográficas e regras operacionais), o banco (`supabase/`), as ferramentas de release, importação e pacote do polo (`tooling/`) e o questionário das crianças (`apps/student-pwa/`) estão sob a governança de [CODEOWNERS](.github/CODEOWNERS) e exigem aprovação de um code owner.
+   - Enquanto o projeto tiver um único code owner, que também é o autor dos PRs, o merge exige `--admin`. Nesse caso, o autor revisa o diff com o roteiro da descrição do PR antes do merge. A saída definitiva é um segundo revisor no CODEOWNERS.
 3. **Nomenclatura de Branches**:
    Crie branches temáticas a partir da `main` atualizada:
    - `feat/nome-da-funcionalidade` para novos recursos;
    - `fix/descricao-da-correcao` para correções de bugs;
    - `docs/melhoria-na-documentacao` para manuais e documentações;
-   - `test/novos-testes` para suítes de validação.
+   - `test/novos-testes` para suítes de validação;
+   - `refactor/descricao`, `chore/descricao` e `ci/descricao` para reorganização, manutenção e CI;
+   - `release/X.Y.Z` para PRs que integram várias mudanças numa versão.
 
 ---
 
@@ -80,9 +84,20 @@ python3 -m unittest discover -s tests/python -p 'test_*.py'
 # 3. Verificação de consistência de versão
 python3 tooling/release/check-version-consistency.py
 
-# 4. Sintaxe dos scripts PowerShell
-pwsh -Command 'Get-ChildItem -Recurse -Include *.ps1 | ForEach-Object { [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors); if ($errors) { Write-Error "$($_.FullName): $($errors[0].Message)" } }'
+# 4. Sintaxe dos scripts PowerShell (sai com erro se algum script não compilar)
+pwsh -NoProfile -Command '$failed = $false; Get-ChildItem -Recurse -Include *.ps1 -File | Where-Object { $_.FullName -notmatch "node_modules|[\\/]\.claude[\\/]" } | ForEach-Object { $errors = $null; [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$null, [ref]$errors); if ($errors) { Write-Host "$($_.FullName): $($errors[0].Message)"; $failed = $true } }; if ($failed) { exit 1 }'
+
+# 5. Atualizador e identidade da máquina (pwsh)
+pwsh ./tests/powershell/test-launcher-update.ps1
+
+# 6. Migrações e RLS num Postgres descartável (precisa de Docker)
+python3 tests/check-database.py
+
+# 7. Testes de ponta a ponta da PWA (Playwright)
+cd apps/student-pwa && npm run test:e2e && cd ../..
 ```
+
+O CI (`.github/workflows/ci.yml`) roda todos eles; `tests`, `e2e` e `database` são checks obrigatórios para o merge na `main`.
 
 ---
 

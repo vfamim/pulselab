@@ -159,11 +159,31 @@ try {
     $badAuth = Initialize-PulseLabInstallation -InstallRoot $idRoot
     Assert-True ($badAuth.research_collection_enabled -eq $false) "autorizacao sem CAAE nao liga a coleta"
     Assert-True ($badAuth.site_id -eq "PET") "sede aplicada pelo provisionamento"
-    New-TextFile $prov '{"provisioning_id":"PET-2","site_id":"PET","research_collection_enabled":true,"research_authorization_version":"12345678.9.0000.1234","research_authorized_purposes":["academic_research"],"manifest_hmac_key":"chave-sintetica-do-polo"}'
+    New-TextFile $prov '{"provisioning_id":"PET-2","site_id":"PET","research_collection_enabled":true,"research_authorization_version":"12345678.9.0000.1234","research_authorized_purposes":["academic_research"]}'
+    $exampleAuth = Initialize-PulseLabInstallation -InstallRoot $idRoot
+    Assert-True ($exampleAuth.research_collection_enabled -eq $false) "CAAE de exemplo da documentacao nao liga a coleta"
+    New-TextFile $prov '{"provisioning_id":"PET-3","site_id":"PET","research_collection_enabled":true,"research_authorization_version":"87654321.0.0000.5678","research_authorized_purposes":["academic_research"],"manifest_hmac_key":"chave-sintetica-do-polo"}'
     $goodAuth = Initialize-PulseLabInstallation -InstallRoot $idRoot
     Assert-True ($goodAuth.research_collection_enabled -eq $true) "CAAE valido liga a coleta"
     Assert-True ($goodAuth.installation_id -eq $first.installation_id -and $goodAuth.machine_label -eq "PET-LAB1-PC-03") "provisionamento preserva id e rotulo"
     Assert-True ($goodAuth.manifest_hmac_key -eq "chave-sintetica-do-polo") "chave do pendrive copiada do provisionamento"
+    $typed = Initialize-PulseLabInstallation -InstallRoot $idRoot -Polo "jua" -Regional "Juazeiro"
+    Assert-True ($typed.site_id -eq "PET" -and $typed.research_collection_enabled -eq $true) "polo digitado nao sobrescreve o pacote do polo"
+
+    Write-Host "Instalador sem pacote do polo nunca liga a coleta"
+    $instRoot = Join-Path $work "installer-only"
+    New-Item -ItemType Directory -Path $instRoot | Out-Null
+    $plain = Initialize-PulseLabInstallation -InstallRoot $instRoot -MachineLabel "PC-01" -Polo "jua" -Regional "Juazeiro"
+    Assert-True ($plain.research_collection_enabled -ne $true) "coleta desligada com polo digitado e sem pacote"
+    Assert-True ($plain.site_id -eq "JUA" -and $plain.regional_hub -eq "Juazeiro") "polo e regional digitados identificam a maquina"
+    $legacyRoot = Join-Path $work "installer-321"
+    New-TextFile (Join-Path $legacyRoot "dados_locais\installation.json") '{"installation_id":"0f0e0d0c-0b0a-4908-8706-050403020100","machine_label":"PC-01","site_id":"POLO-PADRAO","regional_hub":"Regional","research_collection_enabled":true,"research_authorization_version":"12345678.9.0000.1234","research_authorized_purposes":["academic_research"],"retention_days":180,"provisioning_id":"POLO-PADRAO-installer-20261016-090000"}'
+    $legacy = Initialize-PulseLabInstallation -InstallRoot $legacyRoot
+    Assert-True ($legacy.research_collection_enabled -eq $false) "coleta ligada pelo instalador da 3.2.1 e desligada"
+    Assert-True (-not $legacy.provisioning_id) "provisionamento falso do instalador removido"
+    Assert-True ($legacy.installation_id -eq "0f0e0d0c-0b0a-4908-8706-050403020100") "migracao preserva o id da maquina"
+    $legacyTyped = Initialize-PulseLabInstallation -InstallRoot $legacyRoot -Polo "jua"
+    Assert-True ($legacyTyped.site_id -eq "JUA" -and $legacyTyped.research_collection_enabled -eq $false) "maquina migrada aceita polo digitado sem religar a coleta"
     $raw = Get-Content (Join-Path $idRoot "dados_locais\installation.json") -Raw
     Assert-True (-not ($raw -match [Regex]::Escape([Environment]::MachineName)) -and -not ($raw -match [Regex]::Escape([Environment]::UserName))) "sem nome do computador ou do usuario"
 } finally {

@@ -11,6 +11,8 @@
 # Nenhum nome de computador, usuario do Windows ou caminho pessoal e gravado.
 
 $script:PulseLabCaaePattern = '^\d{8}\.\d\.\d{4}\.\d{4}$'
+# Numero de exemplo da documentacao: casa com o formato, mas nao e parecer de CEP nenhum.
+$script:PulseLabExampleCaae = "12345678.9.0000.1234"
 $script:PulseLabProvisioningFields = @(
     "provisioning_id",
     "site_id",
@@ -52,7 +54,8 @@ function Save-PulseLabInstallation {
 function Test-PulseLabResearchAuthorization {
     param($Data)
     if ($Data.research_collection_enabled -ne $true) { return $false }
-    if ([string]$Data.research_authorization_version -notmatch $script:PulseLabCaaePattern) { return $false }
+    $caae = [string]$Data.research_authorization_version
+    if ($caae -notmatch $script:PulseLabCaaePattern -or $caae -eq $script:PulseLabExampleCaae) { return $false }
     return (@($Data.research_authorized_purposes) -contains "academic_research")
 }
 
@@ -62,7 +65,6 @@ function Initialize-PulseLabInstallation {
         [string]$MachineLabel = "",
         [string]$ProvisioningFile = "",
         [string]$Polo = "",
-        [string]$Caae = "",
         [string]$Regional = ""
     )
     $dataDir = Join-Path $InstallRoot "dados_locais"
@@ -103,27 +105,23 @@ function Initialize-PulseLabInstallation {
         $changed = $true
     }
 
-    $cleanPolo = if ($Polo) { ([string]$Polo).Trim().ToUpperInvariant() } else { "" }
-    $cleanCaae = if ($Caae) { ([string]$Caae).Trim() } else { "" }
-    $cleanRegional = if ($Regional) { ([string]$Regional).Trim() } else { "" }
+    # A 3.2.1 ligava a coleta pelo CAAE digitado no instalador (provisioning_id "<polo>-installer-<data>").
+    # Coleta so vem do pacote do polo: essas maquinas voltam a ficar sem coleta ate receber o pacote.
+    if ([string]$data["provisioning_id"] -match '-installer-') {
+        $data.Remove("provisioning_id")
+        if ($data["research_collection_enabled"] -eq $true) {
+            $data["research_collection_enabled"] = $false
+            $data["research_blocked_reason"] = "coleta ligada pelo instalador sem pacote do polo"
+        }
+        $changed = $true
+    }
 
-    if ($cleanPolo) {
-        $data["site_id"] = $cleanPolo
-        $changed = $true
-    }
-    if ($cleanRegional) {
-        $data["regional_hub"] = $cleanRegional
-        $changed = $true
-    }
-    if ($cleanCaae) {
-        $data["research_authorization_version"] = $cleanCaae
-        $data["research_collection_enabled"] = $true
-        $data["research_authorized_purposes"] = @("academic_research")
-        if (-not $data["site_id"]) { $data["site_id"] = "POLO-PADRAO" }
-        if (-not $data["regional_hub"]) { $data["regional_hub"] = "Regional" }
-        if (-not $data["retention_days"]) { $data["retention_days"] = 180 }
-        $data["provisioning_id"] = "$($data['site_id'])-installer-" + (Get-Date -Format "yyyyMMdd-HHmmss")
-        $changed = $true
+    # Polo e regional digitados so identificam maquinas sem pacote do polo; nunca ligam a coleta.
+    if (-not $data["provisioning_id"]) {
+        $cleanPolo = if ($Polo) { ([string]$Polo).Trim().ToUpperInvariant() } else { "" }
+        $cleanRegional = if ($Regional) { ([string]$Regional).Trim() } else { "" }
+        if ($cleanPolo -and $data["site_id"] -ne $cleanPolo) { $data["site_id"] = $cleanPolo; $changed = $true }
+        if ($cleanRegional -and $data["regional_hub"] -ne $cleanRegional) { $data["regional_hub"] = $cleanRegional; $changed = $true }
     }
 
     # Coleta so fica ligada com CAAE no formato oficial e finalidade academica declarada.

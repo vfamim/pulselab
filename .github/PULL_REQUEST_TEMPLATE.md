@@ -26,6 +26,9 @@ Marque todas as caixas para confirmar que as diretrizes éticas foram respeitada
 - [ ] **Testes Locais Aprovados**:
   - [ ] `cd apps/student-pwa && npm run test:unit`
   - [ ] `python3 -m unittest discover -s tests/python -p 'test_*.py'`
+  - [ ] `pwsh ./tests/powershell/test-launcher-update.ps1`
+  - [ ] `python3 tests/check-database.py` (se mudou `supabase/`)
+  - [ ] `cd apps/student-pwa && npm run test:e2e` (se mudou a PWA)
 - [ ] **Consistência de Versão**:
   - Se esta alteração altera superfícies de produção, a versão foi incrementada via `python3 tooling/release/bump-version.py` e verificada com `python3 tooling/release/check-version-consistency.py`.
 - [ ] **Compatibilidade Windows**:

@@ -23,7 +23,7 @@ import unittest
 import uuid
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -209,7 +209,7 @@ def authorized_installation(**extra) -> dict:
         "machine_label": "PET-LAB1-PC03",
         "site_id": "PET",
         "research_collection_enabled": True,
-        "research_authorization_version": "12345678.9.0000.1234",
+        "research_authorization_version": "87654321.0.0000.5678",
         "research_authorized_purposes": ["academic_research"],
         **extra,
     }
@@ -571,6 +571,14 @@ class BridgeQuestionarioTest(unittest.TestCase):
     def post(self, parte: str, answers: list[dict], submission_id: str | None = None):
         return self.bridge.post(f"/v1/questionario/{parte}", {"submission_id": submission_id or str(uuid.uuid4()), "answers": answers})
 
+    def assert_horario_das_criancas_e_o_inicio_da_aula(self, individuais: list[dict]):
+        # Sem o horário de cada rodada, quem estava na sala não liga a rodada a uma criança.
+        self.assertTrue(individuais)
+        self.assertEqual({e["elapsed_ms"] for e in individuais}, {0}, "respostas das crianças no início da aula")
+        self.assertEqual(len({e["occurred_at"] for e in individuais}), 1, "todas as rodadas com o mesmo horário")
+        for e in individuais:
+            self.assertNotIn("minutes_since_session_start", e["details"])
+
     def test_grava_na_sessao_ativa_e_bancada_uma_vez_por_aula(self):
         sid = self.start_and_get_session()
         estado = self.bridge.get("/v1/questionario/estado")
@@ -623,6 +631,7 @@ class BridgeQuestionarioTest(unittest.TestCase):
         for e in individuais:
             self.assertEqual((e["session_id"], e["participant_id"], e["participant_role"]), (sid, None, "individual"))
         self.assertEqual([e["details"]["item_order"] for e in individuais[:5]], [1, 2, 3, 4, 5])
+        self.assert_horario_das_criancas_e_o_inicio_da_aula(individuais)
         # A aula ativa continua aberta e o snapshot leva as respostas
         self.assertTrue(self.bridge.get("/v1/session/current")["active"])
         snap = read_json(self.bridge.data / "sessoes" / f"sessao_{sid}.json")
@@ -644,11 +653,13 @@ class BridgeQuestionarioTest(unittest.TestCase):
         for e in self.respostas("bancada_result_recorded") + self.respostas("student_feedback_recorded"):
             self.assertEqual(e["session_id"], sid)
             self.assertFalse(e["details"]["session_active"])
-            self.assertGreaterEqual(e["details"]["minutes_since_session_start"], 0)
             self.assertGreaterEqual(e["elapsed_ms"], 0)
             self.assertEqual(e["installation_id"], INSTALLATION_ID)
             self.assertEqual(e["site_id"], "PET")
             self.assertRegex(e["config_hash"], r"^[0-9a-f]{64}$")
+        for e in self.respostas("bancada_result_recorded"):
+            self.assertGreaterEqual(e["details"]["minutes_since_session_start"], 0)
+        self.assert_horario_das_criancas_e_o_inicio_da_aula(self.respostas("student_feedback_recorded"))
         snap = read_json(self.bridge.data / "sessoes" / f"sessao_{sid}.json")
         self.assertEqual((snap["status"], snap["ended_by"]), ("completed", "instrutor"), "a aula continua encerrada")
         self.assertEqual([e["event_type"] for e in snap["timeline"]][-8:], ["bancada_result_recorded"] * 3 + ["student_feedback_recorded"] * 5)
@@ -711,6 +722,181 @@ class BridgeQuestionarioTest(unittest.TestCase):
             urllib.request.urlopen(f"{self.bridge.base}/v1/questionario/crianca", timeout=10)
         self.assertEqual(ctx.exception.code, 405)
         self.assertEqual(self.respostas("student_feedback_recorded"), [])
+
+
+
+class ConfigurableSupabase(BaseHTTPRequestHandler):
+    """Supabase falso cuja resposta ao envio de eventos muda durante o teste (mode)."""
+
+    mode = "ok"
+    forbidden_ids: set[str] = set()
+    event_statuses: list[int] = []
+    lock = threading.Lock()
+
+    def log_message(self, *args):
+        pass
+
+    def reply(self, status: int, body: dict | None = None):
+        payload = json.dumps(body or {}).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+        if self.path.startswith("/functions/v1/enroll-device"):
+            return self.reply(200, {"access_token": "tok-1", "refresh_token": "ref-1", "expires_at": int(time.time()) + 3600,
+                                    "user_id": "device-user", "installation_id": body.get("installation_id"), "site_id": "PET"})
+        if self.path.startswith("/rest/v1/research_session_events"):
+            status = {"ok": 201, "forbidden": 403, "bad": 400}[ConfigurableSupabase.mode]
+            if body.get("event_id") in ConfigurableSupabase.forbidden_ids:
+                status = 403
+            with ConfigurableSupabase.lock:
+                ConfigurableSupabase.event_statuses.append(status)
+            return self.reply(status, {} if status < 400 else {"message": "rejected"})
+        if self.path.startswith("/rest/v1/research_bancada_sessions"):
+            return self.reply(201)
+        return self.reply(404)
+
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeQuarantineTest(unittest.TestCase):
+    """Erro da nuvem deixa o evento pendente; quarentena é visível e volta para a fila."""
+
+    def setUp(self):
+        ConfigurableSupabase.mode = "ok"
+        ConfigurableSupabase.forbidden_ids = set()
+        ConfigurableSupabase.event_statuses = []
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), ConfigurableSupabase)
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+        self.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-quarantine-"))
+        self.bridge = BridgeProcess(self.tmp, f"http://127.0.0.1:{self.server.server_port}", {
+            "PULSELAB_SYNC_BACKOFF_MAX_SECONDS": "1",
+            "PULSELAB_QUARANTINE_RETRY_SECONDS": "3",
+        })
+        write_json(self.bridge.data / "installation.json", authorized_installation(enrollment_token=SITE_TOKEN))
+
+    def tearDown(self):
+        self.bridge.stop()
+        self.server.shutdown()
+        self.server.server_close()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def statuses(self) -> list[int]:
+        with ConfigurableSupabase.lock:
+            return list(ConfigurableSupabase.event_statuses)
+
+    def synced_ids(self) -> set[str]:
+        tracker = self.bridge.data / "events_synced.txt"
+        if not tracker.exists():
+            return set()
+        return {line.strip() for line in tracker.read_text(encoding="utf-8-sig").splitlines() if line.strip()}
+
+    def test_403_deixa_pendente_e_recupera(self):
+        ConfigurableSupabase.mode = "forbidden"
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: self.statuses().count(403) >= 2), "bridge não tentou de novo depois do 403")
+        status = self.bridge.get("/v1/status")
+        self.assertFalse((self.bridge.data / "events_quarantine.jsonl").exists(), "403 não pode mandar evento para quarentena")
+        self.assertEqual(status["quarantined_events"], 0)
+        self.assertEqual(status["last_sync_error"]["status_code"], 403)
+        self.assertGreater(status["pending_sync"], 0)
+
+        ConfigurableSupabase.mode = "ok"
+        started = [e["event_id"] for e in read_events(self.bridge.data) if e["event_type"] == "session_started"]
+        self.assertTrue(wait_for(lambda: set(started) <= self.synced_ids()), "evento não subiu depois que a nuvem voltou")
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/status")["last_sync_error"] is None),
+                        "o erro antigo não pode continuar aparecendo depois que o envio voltou")
+
+    def test_403_de_um_item_nao_trava_a_fila(self):
+        # Evento gravado antes do pacote do polo: o RLS recusa só ele (403), o resto sobe.
+        bad = "66666666-6666-4666-8666-666666666666"
+        ConfigurableSupabase.forbidden_ids = {bad}
+        line = json.dumps({"event_id": bad, "session_id": "55555555-5555-4555-8555-555555555555", "event_type": "heartbeat"})
+        (self.bridge.data / "events.jsonl").write_text(line + "\r\n", encoding="utf-8")
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: any(e["event_type"] == "session_started" and e["event_id"] in self.synced_ids()
+                                             for e in read_events(self.bridge.data))), "a fila travou no evento recusado")
+        self.assertNotIn(bad, self.synced_ids())
+        self.assertFalse((self.bridge.data / "events_quarantine.jsonl").exists(), "403 não manda para a quarentena")
+        self.assertIn(bad, {e["event_id"] for e in read_events(self.bridge.data)}, "o evento recusado continua pendente")
+
+    def test_400_vai_para_quarentena_visivel_e_volta_para_a_fila(self):
+        ConfigurableSupabase.mode = "bad"
+        self.bridge.start()
+        quarantine = self.bridge.data / "events_quarantine.jsonl"
+        self.assertTrue(wait_for(quarantine.exists), "evento recusado com 400 deveria ir para a quarentena")
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/status")["quarantined_events"] > 0))
+        self.assertEqual(self.bridge.get("/v1/status")["last_sync_error"]["status_code"], 400)
+        self.assertTrue(wait_for(lambda: any(
+            e["event_type"] == "heartbeat" and e["details"].get("quarantined_events", 0) > 0 for e in read_events(self.bridge.data))),
+            "o sinal de vida deveria levar a contagem da quarentena para a nuvem")
+
+        ConfigurableSupabase.mode = "ok"
+        started = [e["event_id"] for e in read_events(self.bridge.data) if e["event_type"] == "session_started"]
+        self.assertTrue(wait_for(lambda: set(started) <= self.synced_ids()), "quarentena não voltou para a fila")
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/status")["quarantined_events"] == 0))
+
+    def test_nova_versao_devolve_quarentena_antiga(self):
+        event_id = "99999999-9999-4999-8999-999999999999"
+        line = json.dumps({"event_id": event_id, "session_id": "88888888-8888-4888-8888-888888888888", "event_type": "heartbeat"})
+        (self.bridge.data / "events.jsonl").write_text(line + "\r\n", encoding="utf-8")
+        (self.bridge.data / "events_quarantine.txt").write_text(event_id + "\r\n", encoding="utf-8")
+        write_json(self.bridge.data / "quarantine_retry.json", {"retried_at": "2099-01-01T00:00:00.000Z", "bridge_version": "0.0.1"})
+        self.bridge.env["PULSELAB_QUARANTINE_RETRY_SECONDS"] = "2592000"
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: event_id in self.synced_ids()), "evento da quarentena antiga não voltou para a fila")
+        self.assertNotEqual(read_json(self.bridge.data / "quarantine_retry.json")["bridge_version"], "0.0.1")
+
+
+
+@unittest.skipUnless(PWSH, "pwsh não encontrado")
+class BridgeRetentionTest(unittest.TestCase):
+    """Depois de retention_days, só sai do computador a aula que já foi para a nuvem ou para o pendrive."""
+
+    NAO_SAIU = "a0000000-0000-4000-8000-00000000000a"
+    NA_NUVEM = "b0000000-0000-4000-8000-00000000000b"
+    NO_PENDRIVE = "c0000000-0000-4000-8000-00000000000c"
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="pulselab-bridge-retention-"))
+        self.bridge = BridgeProcess(self.tmp, "http://127.0.0.1:9")
+        data = self.bridge.data
+        write_json(data / "installation.json", authorized_installation(retention_days=1))
+        antiga = (datetime.now(timezone.utc) - timedelta(days=400)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        (data / "sessoes").mkdir()
+        linhas = []
+        for sid in (self.NAO_SAIU, self.NA_NUVEM, self.NO_PENDRIVE):
+            write_json(data / "sessoes" / f"sessao_{sid}.json", {"session_id": sid, "created_at": antiga, "status": "completed"})
+            linhas.append(json.dumps({"event_id": "e" + sid[1:], "session_id": sid, "event_type": "session_started"}))
+        (data / "events.jsonl").write_text("\r\n".join(linhas) + "\r\n", encoding="utf-8")
+        (data / "sessions_synced.txt").write_text(self.NA_NUVEM + "\r\n", encoding="utf-8")
+        (data / "events_synced.txt").write_text("e" + self.NA_NUVEM[1:] + "\r\n", encoding="utf-8")
+        exportado = (datetime.now(timezone.utc) + timedelta(seconds=5)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        write_json(data / "ultima_exportacao_pendrive.json", {"exported_at": exportado})
+        # Regravadas depois da exportação (questionário respondido mais tarde, por exemplo): o pendrive não as leva.
+        future = time.time() + 60
+        for sid in (self.NAO_SAIU, self.NA_NUVEM):
+            os.utime(data / "sessoes" / f"sessao_{sid}.json", (future, future))
+
+    def tearDown(self):
+        self.bridge.stop()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_poupa_o_que_nao_saiu_do_computador(self):
+        self.bridge.start()
+        sessoes = self.bridge.data / "sessoes"
+        self.assertTrue(wait_for(lambda: not (sessoes / f"sessao_{self.NA_NUVEM}.json").exists()), "aula enviada à nuvem deveria sair")
+        self.assertTrue(wait_for(lambda: not (sessoes / f"sessao_{self.NO_PENDRIVE}.json").exists()), "aula exportada deveria sair")
+        self.assertTrue((sessoes / f"sessao_{self.NAO_SAIU}.json").exists(), "aula que não saiu do computador não pode ser apagada")
+        restantes = {e["session_id"] for e in read_events(self.bridge.data)}
+        self.assertIn(self.NAO_SAIU, restantes)
+        self.assertNotIn(self.NA_NUVEM, restantes)
+        self.assertNotIn(self.NO_PENDRIVE, restantes)
+        self.assertEqual(self.bridge.get("/v1/status")["retention_kept_sessions"], 1)
 
 
 if __name__ == "__main__":

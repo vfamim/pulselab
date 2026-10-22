@@ -22,7 +22,9 @@ apareçam.
 > Pessoal, antes de começar, uma coisa importante. A universidade está
 > estudando como são as oficinas de robótica. Por isso, o computador de cada
 > bancada guarda como o programa do robô vai mudando durante a aula. No final,
-> vou fazer uma pergunta para a bancada: como foi a aula para vocês.
+> vou fazer uma pergunta para a bancada: como foi a aula para vocês. Depois,
+> quem quiser responde umas perguntas no computador, sem nome. As respostas vão
+> só para o pesquisador da universidade.
 >
 > O computador não guarda o nome de ninguém. Não tira foto, não filma, não
 > grava a voz e não registra o que vocês digitam ou clicam.
@@ -32,7 +34,7 @@ apareçam.
 > e ninguém sai da atividade: a bancada continua montando e programando
 > normalmente. Alguém tem alguma dúvida?
 
-(Cerca de 120 palavras.)
+(Cerca de 140 palavras.)
 
 ## 2. Procedimento do instrutor
 
@@ -169,8 +171,19 @@ CEP se esse registro é suficiente.
   art. 11, desde que prevaleça o melhor interesse. Confirmar o enquadramento
   com o encarregado de dados (DPO) da instituição.
 - **Retenção.** Os dados ficam no computador pelo prazo `retention_days` do
-  pacote do polo (padrão 180 dias, faixa de 1 a 365). O prazo precisa ser o
-  mesmo no protocolo, no TCLE/aviso e no pacote.
+  pacote do polo (padrão 180 dias, faixa de 1 a 365). Aula que passou do prazo
+  sem ter saído do computador (nuvem ou pendrive) fica guardada até sair, no
+  máximo até 31/12/2032. Na nuvem, os dados ficam até 31/12/2032. Os prazos
+  precisam ser os mesmos no protocolo, no TCLE/aviso e no pacote. Cláusula
+  sugerida para o TCLE:
+
+  > Os registros da oficina ficam guardados no computador do laboratório por
+  > até 180 dias. Se nesse prazo ainda não tiverem sido enviados ao banco de
+  > dados da pesquisa (pela internet ou por pendrive), continuam guardados no
+  > computador até serem enviados, no máximo até 31 de dezembro de 2032. No
+  > banco de dados da pesquisa, os registros ficam guardados até 31 de dezembro
+  > de 2032, cinco anos depois do fim previsto da pesquisa, e então são
+  > apagados.
 
 ## 5. Checklist de consistência: protocolo, TCLE e software
 

@@ -32,8 +32,9 @@ registrar esta turma** vale para a aula que fechou sozinha.
 - **Coleta desligada por padrão.** O pacote genérico não registra dados de pesquisa. A coleta só
   liga com o pacote do polo, que traz o CAAE do parecer ético em `provisionamento.json`.
 - **A unidade de análise é a bancada**, nunca uma criança identificada. Sem nomes, fotos, câmera,
-  áudio, captura de tela ou teclado. As respostas individuais do questionário do fim da aula são
-  anônimas e só aparecem somadas por polo e mês.
+  áudio, captura de tela ou teclado. As respostas individuais do questionário do fim da aula não têm
+  nome, mas são desidentificadas, não anônimas: linha a linha só o pesquisador (`service_role`) as
+  lê (membros do polo veem só as respostas da bancada); no relatório aparecem somadas por polo e mês.
 - **Assentimento verbal.** No início da aula o instrutor lê o
   [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
   turma**: a aula é marcada como não autorizada e nunca entra em análise. A exclusão definitiva é
@@ -51,7 +52,8 @@ registrar esta turma** vale para a aula que fechou sozinha.
   respostas da mesma criança naquela rodada. Vão para a aula ativa ou, sem ela, para a última
   encerrada; em Modo Livre, com o registro pausado ou em aula não autorizada, nada é gravado.
 - **Retenção local** de `retention_days` do pacote do polo (1 a 365, padrão 180 dias), mesmo depois
-  de exportar ou enviar. O prazo precisa constar no protocolo e no TCLE.
+  de exportar ou enviar. Aula que ainda não saiu do computador (nuvem ou pendrive) fica guardada além
+  desse prazo até sair, no máximo até 31/12/2032. O prazo precisa constar no protocolo e no TCLE.
 - A máquina é identificada por um código aleatório e por um rótulo escolhido na instalação, nunca
   pelo nome do Windows ou do usuário.
 
@@ -170,9 +172,9 @@ Toda mudança entra na `main` por PR com o CI verde. Regras para agentes de IA e
 
 ```sh
 python3 tooling/release/bump-version.py <atual> <nova>   # no PR
-./tooling/release/build-offline-package.sh               # depois do merge: dist/PulseLab-<versão>-Windows.zip
-python3 tooling/release/publicar-release.py publicar --notes "PulseLab <versão> - ..."
 ```
 
-O merge na `main` publica o site; publique a release logo em seguida, porque o link de download
-aponta para ela. Passo a passo em [docs/engenharia/release.md](docs/engenharia/release.md).
+Depois do merge: **Actions → Publicar release → Run workflow** e aprovar no ambiente `release`. O
+workflow gera o pacote, assina com a chave guardada no secret do GitHub (ela não fica em computador
+nenhum) e cria a release. O merge na `main` publica o site; publique a release logo em seguida,
+porque o link de download aponta para ela. Passo a passo em [docs/engenharia/release.md](docs/engenharia/release.md).
