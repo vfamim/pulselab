@@ -22,6 +22,9 @@ INSERT INTO public.research_session_events(event_id,session_id,installation_id,s
 (gen_random_uuid(),'a1000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','SITE_A','E','O','T','ACT','3.0.9','session_completed',now()),
 (gen_random_uuid(),'a2000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000001','SITE_A','E','O','T','ACT','3.0.9','session_started',now()),
 (gen_random_uuid(),'a3000000-0000-4000-8000-000000000003','10000000-0000-4000-8000-000000000001','SITE_A','E','O','T','ACT','3.0.9','session_started',now());
+INSERT INTO public.research_events(event_id,session_id,dyad_id,installation_id,site_id,participant_id,participant_role,event_type,regional_hub,school_code,workshop_code,class_code,activity_id,computer_id,config_version,client_version,occurred_at) VALUES
+(gen_random_uuid(),'a1000000-0000-4000-8000-000000000001',gen_random_uuid(),'10000000-0000-4000-8000-000000000001','SITE_A','A','computer','pre','R','E','O','T','ACT','PC','legacy','legacy',now()),
+(gen_random_uuid(),'a2000000-0000-4000-8000-000000000002',gen_random_uuid(),'10000000-0000-4000-8000-000000000001','SITE_A','A','computer','pre','R','E','O','T','ACT','PC','legacy','legacy',now());
 INSERT INTO public.research_bancada_sessions(session_id,site_id,installation_id,phase,interrupted,session_payload,created_at,updated_at) VALUES
 ('a1000000-0000-4000-8000-000000000001','SITE_A','10000000-0000-4000-8000-000000000001','completed',true,'{"authorization_status":"nao_autorizada","marked_at":"2026-10-15T14:00:00Z"}'::jsonb,now(),now()),
 ('a2000000-0000-4000-8000-000000000002','SITE_A','10000000-0000-4000-8000-000000000001','completed',true,'{}'::jsonb,now(),now()),
@@ -63,6 +66,17 @@ RESET ROLE;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
 SELECT is((SELECT count(*) FROM public.research_session_quality),1::bigint,'researcher view hides marked sessions');
+-- Tabelas base: o membro do polo também não lê aula marcada fora das views
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_id IN ('a1000000-0000-4000-8000-000000000001','a3000000-0000-4000-8000-000000000003')),0::bigint,'researcher cannot read marked sessions in base snapshot table');
+SELECT is((SELECT count(*) FROM public.research_session_events WHERE session_id IN ('a1000000-0000-4000-8000-000000000001','a3000000-0000-4000-8000-000000000003')),0::bigint,'researcher cannot read marked session events in base table');
+SELECT is((SELECT count(*) FROM public.research_events WHERE session_id = 'a1000000-0000-4000-8000-000000000001'),0::bigint,'researcher cannot read marked legacy events in base table');
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_id = 'a2000000-0000-4000-8000-000000000002'),1::bigint,'researcher still reads authorized session in base table');
+SELECT is((SELECT count(*) FROM public.research_events WHERE session_id = 'a2000000-0000-4000-8000-000000000002'),1::bigint,'researcher still reads authorized legacy events');
+RESET ROLE;
+-- A máquina dona continua lendo a própria aula marcada (reenvio com ON CONFLICT)
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
+SELECT is((SELECT count(*) FROM public.research_bancada_sessions WHERE session_id = 'a1000000-0000-4000-8000-000000000001'),1::bigint,'owning machine still reads its marked session');
 RESET ROLE;
 
 -- Restauração exige motivo e devolve a aula às views
