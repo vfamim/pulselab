@@ -171,7 +171,9 @@ As respostas sinalizadas continuam nas contagens; decida com o polo se ficam.
 ## Origem dos dados
 
 Na nuvem, o relatório lê a view `research_aula_bancada`, que achata o resumo da sessão enviado pelo
-bridge, a view `research_installation_last_seen` e a view `research_questionario_respostas` (uma
-linha por resposta do questionário, sem aulas não autorizadas, lida só com `service_role`). As três respeitam o acesso das
+bridge, a view `research_installation_last_seen` (que também mostra, pelo último sinal de vida de cada
+máquina, eventos pendentes, eventos e sessões em quarentena e o último erro de envio) e a view
+`research_questionario_respostas` (uma linha por resposta do questionário, sem aulas não autorizadas,
+lida só com `service_role`). As três respeitam o acesso das
 tabelas (`security_invoker`). No pendrive, lê as tabelas `sessions` e `session_events` do SQLite do
 importador.
