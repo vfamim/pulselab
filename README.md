@@ -172,9 +172,9 @@ Toda mudança entra na `main` por PR com o CI verde. Regras para agentes de IA e
 
 ```sh
 python3 tooling/release/bump-version.py <atual> <nova>   # no PR
-./tooling/release/build-offline-package.sh               # depois do merge: dist/PulseLab-<versão>-Windows.zip
-python3 tooling/release/publicar-release.py publicar --notes "PulseLab <versão> - ..."
 ```
 
-O merge na `main` publica o site; publique a release logo em seguida, porque o link de download
-aponta para ela. Passo a passo em [docs/engenharia/release.md](docs/engenharia/release.md).
+Depois do merge: **Actions → Publicar release → Run workflow** e aprovar no ambiente `release`. O
+workflow gera o pacote, assina com a chave guardada no secret do GitHub (ela não fica em computador
+nenhum) e cria a release. O merge na `main` publica o site; publique a release logo em seguida,
+porque o link de download aponta para ela. Passo a passo em [docs/engenharia/release.md](docs/engenharia/release.md).

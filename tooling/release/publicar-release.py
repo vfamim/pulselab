@@ -7,7 +7,8 @@ Subcomandos:
   assinar      Gera pulselab-update.json para um ZIP e assina com a chave privada.
   publicar     Assina e cria a release no GitHub (gh release create), com o ZIP, o
                .sha256 (exigido pelo canal legado), o manifesto e a assinatura. Use --pre para publicar como pré-release
-               (não é entregue às máquinas até ser promovida a release normal).
+               (não é entregue às máquinas até ser promovida a release normal). No GitHub Actions
+               (.github/workflows/publicar-release.yml) a chave vem do secret por --private-env.
 
 O launcher (pulselab-update.ps1) só aceita manifestos assinados por esta chave.
 """
@@ -16,11 +17,15 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
 import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -102,6 +107,30 @@ def write_signed_manifest(zip_path: Path, version: str, private_key: Path, out_d
     return manifest_path, sig_path
 
 
+@contextlib.contextmanager
+def private_key_path(private: str, private_env: str | None) -> Iterator[Path]:
+    """Caminho da chave privada: o arquivo de --private ou, com --private-env, o PEM guardado nessa
+    variável de ambiente (secret do GitHub Actions), gravado num arquivo temporário 0600 apagado no fim."""
+    if not private_env:
+        yield Path(private).expanduser()
+        return
+    pem = os.environ.get(private_env, "")
+    if "PRIVATE KEY-----" not in pem:
+        raise ValueError(f"A variável {private_env} está vazia ou não tem uma chave privada PEM.")
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "release-key.pem"
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="ascii") as handle:
+            handle.write(pem if pem.endswith("\n") else pem + "\n")
+        yield path
+
+
+def key_matches_public(private_key: Path, public_file: Path) -> bool:
+    """A chave privada é a par de release-public-key.json? Senão as máquinas recusariam a release."""
+    committed = json.loads(public_file.read_text(encoding="utf-8"))
+    return committed.get("n") == public_key_jwk(private_key)["n"]
+
+
 def release_url(version: str, zip_name: str) -> str:
     return f"https://github.com/{REPO}/releases/download/v{version}/{zip_name}"
 
@@ -136,14 +165,20 @@ def cmd_publish(args: argparse.Namespace) -> int:
         print("release-public-key.json ausente: gere a chave com 'gerar-chave' e commite a pública.", file=sys.stderr)
         return 1
     out_dir = ROOT / "dist-release" / version
-    manifest, sig = write_signed_manifest(
-        zip_path, version, Path(args.private).expanduser(), out_dir, release_url(version, zip_path.name), args.notes
-    )
+    with private_key_path(args.private, args.private_env) as private_key:
+        if not key_matches_public(private_key, PUBLIC_KEY_FILE):
+            print("A chave privada não é a par de release-public-key.json: as máquinas recusariam a release.", file=sys.stderr)
+            return 1
+        manifest, sig = write_signed_manifest(
+            zip_path, version, private_key, out_dir, release_url(version, zip_path.name), args.notes
+        )
     cmd = [
         "gh", "release", "create", f"v{version}",
         str(zip_path), str(zip_path) + ".sha256", str(manifest), str(sig),
         "--repo", REPO, "--title", f"PulseLab {version}", "--notes", args.notes or f"PulseLab {version}",
     ]
+    if args.target:
+        cmd += ["--target", args.target]
     if args.pre:
         cmd.append("--prerelease")
     print("Executando:", " ".join(cmd))
@@ -172,6 +207,9 @@ def main(argv: list[str] | None = None) -> int:
 
     pub = sub.add_parser("publicar")
     pub.add_argument("--private", default=str(DEFAULT_PRIVATE_KEY))
+    pub.add_argument("--private-env", default=None,
+                     help="Variável de ambiente com o PEM da chave privada (GitHub Actions); tem prioridade sobre --private")
+    pub.add_argument("--target", default=None, help="Commit da tag da release (o workflow passa o commit que gerou o pacote)")
     pub.add_argument("--notes", default="")
     pub.add_argument("--pre", action="store_true", help="Publicar como pré-release (não chega às máquinas)")
     pub.set_defaults(func=cmd_publish)
