@@ -668,6 +668,22 @@ UNAUTHORIZED_SESSIONS_FILE = "sessions_unauthorized.txt"
 UNAUTHORIZED_STATUS = "nao_autorizada"
 ALLOWED_ENDED_BY = {"instrutor", "tempo", "sem_encerramento", "inatividade"}
 
+# Prazo de guarda da pesquisa: o mesmo de public.research_archive_deadline (migração
+# 20261022130000) e do TCLE. Depois dele a cópia SQLite consolidada é apagada e nada é importado.
+ARCHIVE_DELETE_AFTER = datetime.date(2032, 12, 31)
+
+
+def purge_expired_archive(sqlite_file: Path, today: datetime.date | None = None) -> list[Path]:
+    """Depois do prazo de guarda, apaga a cópia SQLite (com -wal e -shm). Devolve o que foi apagado."""
+    if (today or datetime.date.today()) <= ARCHIVE_DELETE_AFTER:
+        return []
+    removed = []
+    for path in (sqlite_file, Path(f"{sqlite_file}-wal"), Path(f"{sqlite_file}-shm")):
+        if path.exists():
+            path.unlink()
+            removed.append(path)
+    return removed
+
 
 def session_key(val) -> str | None:
     """Forma canônica do session_id (a mesma enviada à nuvem por ensure_uuid)."""
@@ -1253,6 +1269,11 @@ def main() -> int:
         if args.sqlite_path
         else (repo_root / "dados_locais" / "pulselab_consolidado.sqlite")
     )
+    if datetime.date.today() > ARCHIVE_DELETE_AFTER:
+        for path in purge_expired_archive(sqlite_file):
+            print(f"[OK] Prazo de guarda vencido: apagado {path}")
+        print(f"[ERRO] O prazo de guarda da pesquisa terminou em {ARCHIVE_DELETE_AFTER:%d/%m/%Y}; nada é importado.")
+        return 1
     conn = init_sqlite_database(sqlite_file)
     print(f"[OK] Banco SQLite consolidado pronto em:\n     {sqlite_file}\n")
 
