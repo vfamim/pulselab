@@ -2,7 +2,7 @@
 -- Description:
 --   research_installation_last_seen ganha a saúde do envio de cada máquina, lida do último sinal de
 --   vida (heartbeat) que chegou: eventos pendentes, eventos e sessões em quarentena e o último erro
---   HTTP. Desde a 3.2.8 o bridge não descarta mais em silêncio: erros que dependem da nuvem
+--   HTTP. Desde a 3.3.0 o bridge não descarta mais em silêncio: erros que dependem da nuvem
 --   (403, 404, 408, 429) deixam os dados pendentes, e a quarentena volta para a fila uma vez por dia.
 --   Esta view é onde o pesquisador vê, de longe, qual máquina tem envio recusado.
 --   As colunas antigas ficam iguais e na mesma ordem; as novas entram no fim.

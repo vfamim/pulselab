@@ -1,7 +1,7 @@
 {
-  "version": "3.2.3",
+  "version": "3.3.0",
   "environment": "production",
   "auto_update_enabled": true,
-  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.2.3/PulseLab-3.2.3-Windows.zip",
-  "notes": "PulseLab v3.2.3 - coleta de pesquisa desligada por padrao: o instalador nao liga mais a coleta, que so vem do pacote do polo."
+  "package_url": "https://github.com/vfamim/pulselab/releases/download/v3.3.0/PulseLab-3.3.0-Windows.zip",
+  "notes": "PulseLab v3.3.0 - coleta desligada por padrao, acesso restrito as respostas das criancas, prazo de guarda ate 31/12/2032, envio a nuvem sem perda silenciosa e retencao local que poupa o que nao saiu do computador."
 }
