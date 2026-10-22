@@ -1,9 +1,11 @@
 import importlib.util
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 RUNTIME = ROOT / "runtime" / "windows"
@@ -58,6 +60,51 @@ class ReleaseSigningTest(unittest.TestCase):
 
     def test_private_key_never_inside_repository(self):
         self.assertFalse(release.DEFAULT_PRIVATE_KEY.resolve().is_relative_to(ROOT))
+
+
+class ReleaseWorkflowTest(unittest.TestCase):
+    """Publicação pelo GitHub Actions: chave só no secret, só da main, com aprovação."""
+
+    def test_key_from_secret_goes_to_private_temp_file_removed_at_end(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key = Path(tmp) / "key.pem"
+            release.generate_key(key, Path(tmp) / "pub.json")
+            pem = key.read_text(encoding="ascii")
+            with patch.dict(os.environ, {"TEST_RELEASE_KEY": pem.rstrip("\n")}):
+                with release.private_key_path("ignorado", "TEST_RELEASE_KEY") as path:
+                    self.assertEqual(path.read_text(encoding="ascii"), pem)
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+                    self.assertFalse(path.resolve().is_relative_to(ROOT))
+            self.assertFalse(path.exists(), "a chave temporária deve ser apagada")
+
+    def test_empty_secret_is_refused(self):
+        with patch.dict(os.environ, {"TEST_RELEASE_KEY": ""}):
+            with self.assertRaises(ValueError):
+                with release.private_key_path("ignorado", "TEST_RELEASE_KEY"):
+                    pass
+
+    def test_key_must_match_committed_public_key(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            release.generate_key(tmp_path / "a.pem", tmp_path / "a.json")
+            release.generate_key(tmp_path / "b.pem", tmp_path / "b.json")
+            self.assertTrue(release.key_matches_public(tmp_path / "a.pem", tmp_path / "a.json"))
+            self.assertFalse(release.key_matches_public(tmp_path / "b.pem", tmp_path / "a.json"))
+
+    def test_workflow_is_manual_from_main_with_protected_environment(self):
+        text = (ROOT / ".github" / "workflows" / "publicar-release.yml").read_text(encoding="utf-8")
+        on_block = text.split("\non:\n", 1)[1].split("\npermissions:", 1)[0]
+        self.assertIn("workflow_dispatch:", on_block)
+        for trigger in ("push:", "pull_request", "pull_request_target", "schedule:", "workflow_run"):
+            self.assertNotIn(trigger, on_block)
+        self.assertIn("environment: release", text)
+        self.assertEqual(text.count("if: github.ref == 'refs/heads/main'"), 2)
+        self.assertIn("persist-credentials: false", text)
+        self.assertIn("--private-env PULSELAB_RELEASE_KEY", text)
+        # Secret e entradas do formulário só entram como variável de ambiente, nunca no texto do shell.
+        for line in text.splitlines():
+            if "${{" in line:
+                self.assertRegex(line, r"^\s+[A-Z_]+: \$\{\{ [^}]+ \}\}$", line)
         self.assertEqual(list(ROOT.glob("*.pem")), [])
 
 
