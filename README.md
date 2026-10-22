@@ -34,7 +34,7 @@ registrar esta turma** vale para a aula que fechou sozinha.
 - **A unidade de análise é a bancada**, nunca uma criança identificada. Sem nomes, fotos, câmera,
   áudio, captura de tela ou teclado. As respostas individuais do questionário do fim da aula não têm
   nome, mas são desidentificadas, não anônimas: linha a linha só o pesquisador (`service_role`) as
-  lê; no relatório aparecem somadas por polo e mês.
+  lê (membros do polo veem só as respostas da bancada); no relatório aparecem somadas por polo e mês.
 - **Assentimento verbal.** No início da aula o instrutor lê o
   [roteiro padronizado](docs/campo/assentimento-verbal.md). Uma recusa leva a **Não registrar esta
   turma**: a aula é marcada como não autorizada e nunca entra em análise. A exclusão definitiva é

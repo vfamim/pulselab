@@ -19,6 +19,7 @@ import hmac
 import io
 import json
 import os
+import re
 from pathlib import Path
 import sqlite3
 import sys
@@ -954,6 +955,13 @@ class TestPrazoDeGuarda(unittest.TestCase):
         removed = imp.purge_expired_archive(self.db, day_after)
         self.assertEqual(len(removed), 3)
         self.assertFalse(any(p.exists() for p in removed))
+
+    def test_prazo_igual_ao_do_bridge(self):
+        bridge = (Path(__file__).resolve().parents[2] / "runtime" / "windows" / "bridge" / "pulselab-bridge.ps1").read_text(encoding="utf-8-sig")
+        m = re.search(r"\$script:ArchiveDeleteAfterUtc = \[DateTime\]::new\((\d+), (\d+), (\d+),", bridge)
+        self.assertIsNotNone(m)
+        apaga_em = imp.datetime.date(*map(int, m.groups()))
+        self.assertEqual(apaga_em - imp.datetime.timedelta(days=1), imp.ARCHIVE_DELETE_AFTER)
 
     def test_prazo_igual_ao_do_banco(self):
         migration = (Path(__file__).resolve().parents[2] / "supabase" / "migrations"

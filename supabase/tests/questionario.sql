@@ -54,11 +54,11 @@ SELECT is((SELECT concat_ws('|',polo,recusou,coalesce(minutos_desde_inicio::text
           'unexpected types become NULL or fall back without error');
 RESET ROLE;
 
--- Respostas individuais: linha a linha, só service_role
-SELECT ok(NOT has_table_privilege('authenticated','public.research_questionario_respostas','SELECT'),'authenticated cannot read questionnaire view');
+-- Respostas das crianças: linha a linha, só service_role; o membro vê só as da bancada
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000003","role":"authenticated"}',true);
-SELECT throws_ok($q$SELECT count(*) FROM public.research_questionario_respostas$q$,'42501',NULL,'site member query on answers view is denied');
+SELECT is((SELECT array_agg(DISTINCT parte) FROM public.research_questionario_respostas),ARRAY['bancada'],'site member sees only collective bancada answers in the view');
+SELECT is((SELECT count(*) FROM public.research_questionario_respostas),1::bigint,'site member sees the authorized bancada answer');
 SELECT is((SELECT count(*) FROM public.research_session_events WHERE event_type = 'student_feedback_recorded'),0::bigint,'site member cannot read child answers in base table');
 SELECT is((SELECT count(*) FROM public.research_session_events WHERE event_type = 'bancada_result_recorded'),1::bigint,'site member still reads collective bancada answers');
 SELECT set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);

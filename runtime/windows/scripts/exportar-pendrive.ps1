@@ -11,6 +11,20 @@ param(
 
 $ErrorActionPreference = "Continue"
 
+# Uma copia que falha (pendrive cheio ou removido) nao para o script, mas marca a exportacao como
+# incompleta: sem a marca, a retencao do bridge nao apaga nada achando que ja saiu do computador.
+$script:ExportFailed = $false
+function Copy-ExportFile([string]$Source, [string]$Destination) {
+    try {
+        Copy-Item -LiteralPath $Source -Destination $Destination -Force -ErrorAction Stop
+        return $true
+    } catch {
+        $script:ExportFailed = $true
+        Write-Host "      [ERRO] Nao foi possivel copiar $(Split-Path -Leaf $Source): $($_.Exception.Message)" -ForegroundColor Red
+        return $false
+    }
+}
+
 try {
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 } catch {}
@@ -51,6 +65,9 @@ if (-not $dataDir -or -not (Test-Path -LiteralPath $dataDir)) {
 Write-Host "[1/4] Base local localizada em: $dataDir" -ForegroundColor Green
 
 # 2. Contabilizar sessoes e eventos
+# Inicio da exportacao, antes de listar os arquivos: sessao criada ou regravada depois disso nao conta
+# como exportada (a marca e gravada no fim, em dados_locais).
+$exportStartedUtc = [DateTime]::UtcNow
 $sessoesDir = Join-Path $dataDir "sessoes"
 $sessaoFiles = @()
 if (Test-Path -LiteralPath $sessoesDir) {
@@ -166,8 +183,6 @@ if (Test-Path -LiteralPath $installationFile) {
     } catch {}
 }
 $timeTag = Get-Date -Format "yyyyMMdd_HHmmss"
-# Inicio da copia: o que foi gravado ate aqui vai para o pendrive (marca gravada no fim, em dados_locais).
-$exportStartedUtc = [DateTime]::UtcNow
 $exportFolderName = "Coleta_${machineName}_${timeTag}"
 
 $targetExportDir = $null
@@ -194,16 +209,14 @@ $copiedFiles = [System.Collections.Generic.List[string]]::new()
 $catSource = Join-Path $dataDir "catalogo_sessoes.json"
 if (Test-Path -LiteralPath $catSource) {
     $catDest = Join-Path $targetExportDir "catalogo_sessoes.json"
-    Copy-Item -LiteralPath $catSource -Destination $catDest -Force
-    $copiedFiles.Add($catDest)
+    if (Copy-ExportFile $catSource $catDest) { $copiedFiles.Add($catDest) }
     Write-Host "      [OK] catalogo_sessoes.json" -ForegroundColor Green
 }
 
 # Eventos
 if (Test-Path -LiteralPath $eventsFile) {
     $eventsDest = Join-Path $targetExportDir "events.jsonl"
-    Copy-Item -LiteralPath $eventsFile -Destination $eventsDest -Force
-    $copiedFiles.Add($eventsDest)
+    if (Copy-ExportFile $eventsFile $eventsDest) { $copiedFiles.Add($eventsDest) }
     Write-Host "      [OK] events.jsonl ($totalEvents registros)" -ForegroundColor Green
 }
 
@@ -211,24 +224,21 @@ if (Test-Path -LiteralPath $eventsFile) {
 $archiveFile = Join-Path $dataDir "events_archive.jsonl"
 if (Test-Path -LiteralPath $archiveFile) {
     $archiveDest = Join-Path $targetExportDir "events_archive.jsonl"
-    Copy-Item -LiteralPath $archiveFile -Destination $archiveDest -Force
-    $copiedFiles.Add($archiveDest)
+    if (Copy-ExportFile $archiveFile $archiveDest) { $copiedFiles.Add($archiveDest) }
     Write-Host "      [OK] events_archive.jsonl" -ForegroundColor Green
 }
 
 # Sessoes retiradas (somente session_id)
 if (Test-Path -LiteralPath $withdrawnFile) {
     $withdrawnDest = Join-Path $targetExportDir "sessions_withdrawn.txt"
-    Copy-Item -LiteralPath $withdrawnFile -Destination $withdrawnDest -Force
-    $copiedFiles.Add($withdrawnDest)
+    if (Copy-ExportFile $withdrawnFile $withdrawnDest) { $copiedFiles.Add($withdrawnDest) }
     Write-Host "      [OK] sessions_withdrawn.txt ($totalWithdrawn sessoes retiradas)" -ForegroundColor Green
 }
 
 # Aulas nao autorizadas (somente session_id e data da marcacao)
 if (Test-Path -LiteralPath $unauthorizedFile) {
     $unauthorizedDest = Join-Path $targetExportDir "sessions_unauthorized.txt"
-    Copy-Item -LiteralPath $unauthorizedFile -Destination $unauthorizedDest -Force
-    $copiedFiles.Add($unauthorizedDest)
+    if (Copy-ExportFile $unauthorizedFile $unauthorizedDest) { $copiedFiles.Add($unauthorizedDest) }
     Write-Host "      [OK] sessions_unauthorized.txt ($totalUnauthorized aulas nao autorizadas)" -ForegroundColor Green
 }
 
@@ -236,8 +246,7 @@ if (Test-Path -LiteralPath $unauthorizedFile) {
 $sessCount = 0
 foreach ($sFile in $sessaoFiles) {
     $sDest = Join-Path $targetSessoesDir $sFile.Name
-    Copy-Item -LiteralPath $sFile.FullName -Destination $sDest -Force
-    $copiedFiles.Add($sDest)
+    if (Copy-ExportFile $sFile.FullName $sDest) { $copiedFiles.Add($sDest) }
     $sessCount++
 }
 Write-Host "      [OK] $sessCount arquivo(s) de sessao em sessoes/" -ForegroundColor Green
@@ -307,6 +316,16 @@ if (-not [string]::IsNullOrWhiteSpace($manifestHmacKey)) {
 
 # A retencao do bridge so apaga, depois de retention_days, aulas que ja sairam do computador (nuvem ou
 # pendrive). A copia na Area de Trabalho nao conta: os dados continuam so neste computador.
+if ($script:ExportFailed) {
+    Write-Host ""
+    Write-Host "[ERRO] Exportacao incompleta: confira o espaco do pendrive e exporte de novo." -ForegroundColor Red
+    Write-Host "       Os dados continuam guardados neste computador." -ForegroundColor Yellow
+    if (-not $SaveToDesktop) {
+        Write-Host "Pressione Enter para sair..."
+        [void][Console]::ReadLine()
+    }
+    exit 1
+}
 if (-not $SaveToDesktop -and $destDrive) {
     try {
         $exportMark = '{"exported_at":"' + $exportStartedUtc.ToString("yyyy-MM-ddTHH:mm:ss.fffZ") + '"}'

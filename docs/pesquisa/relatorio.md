@@ -30,7 +30,7 @@ python3 tooling/data/relatorio-pulselab.py --de 2026-10-01 --ate 2026-10-31 --po
 A nuvem usa a mesma credencial do importador (`PULSELAB_SERVICE_ROLE_KEY` ou
 `PULSELAB_OPERATIONAL_JWT`). Sem credencial, o relatório usa só o pendrive. Com o JWT de
 pesquisador, aparecem só os polos aos quais a conta está vinculada, e sem as respostas das
-crianças: elas são desidentificadas, não anônimas, e só a chave `service_role` as lê.
+crianças (só as da bancada): elas são desidentificadas, não anônimas, e só a chave `service_role` as lê.
 
 Os CSV abrem direto no Excel em português: separador `;`, vírgula decimal, `sim`/`não`. No R ou no
 pandas, use `sep=';'` e `decimal=','`.
@@ -174,6 +174,6 @@ Na nuvem, o relatório lê a view `research_aula_bancada`, que achata o resumo d
 bridge, a view `research_installation_last_seen` (que também mostra, pelo último sinal de vida de cada
 máquina, eventos pendentes, eventos e sessões em quarentena e o último erro de envio) e a view
 `research_questionario_respostas` (uma linha por resposta do questionário, sem aulas não autorizadas,
-lida só com `service_role`). As três respeitam o acesso das
+as das crianças só com `service_role`). As três respeitam o acesso das
 tabelas (`security_invoker`). No pendrive, lê as tabelas `sessions` e `session_events` do SQLite do
 importador.

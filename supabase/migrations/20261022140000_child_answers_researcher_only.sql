@@ -4,19 +4,18 @@
 --   desidentificadas, não anônimas: com máquina, data e ordem das rodadas, quem estava na sala
 --   consegue ligar uma rodada a uma criança. Linha a linha, só o pesquisador (service_role) as lê.
 --
---   1. research_questionario_respostas deixa de ser lida por authenticated (membros do polo).
---   2. Política de SELECT de research_session_events: o ramo do membro não vê
+--   1. Política de SELECT de research_session_events: o ramo do membro não vê
 --      student_feedback_recorded (mantém o filtro de aula autorizada da migração 20261022120000).
---      A máquina dona continua lendo os próprios eventos.
---   3. O snapshot (research_bancada_sessions.session_payload) não guarda essas respostas na
+--      A máquina dona continua lendo os próprios eventos. Como research_questionario_respostas é
+--      security_invoker, o membro passa a ver nela só as respostas da bancada; o service_role vê todas.
+--   2. O snapshot (research_bancada_sessions.session_payload) não guarda essas respostas na
 --      timeline: elas já chegam uma a uma em research_session_events, e o snapshot é lido pelos
 --      membros na view research_aula_bancada. Um trigger as retira em toda gravação, e as linhas
 --      já guardadas são limpas aqui.
 --   As respostas da bancada (perguntas 1 a 3, coletivas) continuam visíveis aos membros.
 
-REVOKE SELECT ON public.research_questionario_respostas FROM authenticated;
 COMMENT ON VIEW public.research_questionario_respostas IS
-    'Questionário do fim da aula: uma linha por resposta (bancada ou criança). Desidentificado, não anônimo: só service_role lê. Aulas não autorizadas ficam fora. Horários em America/Recife.';
+    'Questionário do fim da aula: uma linha por resposta (bancada ou criança). Respostas das crianças são desidentificadas, não anônimas: só service_role as lê; o membro do polo vê só as da bancada (RLS de research_session_events). Aulas não autorizadas ficam fora. Horários em America/Recife.';
 
 DROP POLICY IF EXISTS authenticated_select_research_session_events ON public.research_session_events;
 CREATE POLICY authenticated_select_research_session_events ON public.research_session_events FOR SELECT TO authenticated

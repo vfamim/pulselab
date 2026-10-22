@@ -729,6 +729,7 @@ class ConfigurableSupabase(BaseHTTPRequestHandler):
     """Supabase falso cuja resposta ao envio de eventos muda durante o teste (mode)."""
 
     mode = "ok"
+    forbidden_ids: set[str] = set()
     event_statuses: list[int] = []
     lock = threading.Lock()
 
@@ -751,6 +752,8 @@ class ConfigurableSupabase(BaseHTTPRequestHandler):
                                     "user_id": "device-user", "installation_id": body.get("installation_id"), "site_id": "PET"})
         if self.path.startswith("/rest/v1/research_session_events"):
             status = {"ok": 201, "forbidden": 403, "bad": 400}[ConfigurableSupabase.mode]
+            if body.get("event_id") in ConfigurableSupabase.forbidden_ids:
+                status = 403
             with ConfigurableSupabase.lock:
                 ConfigurableSupabase.event_statuses.append(status)
             return self.reply(status, {} if status < 400 else {"message": "rejected"})
@@ -765,6 +768,7 @@ class BridgeQuarantineTest(unittest.TestCase):
 
     def setUp(self):
         ConfigurableSupabase.mode = "ok"
+        ConfigurableSupabase.forbidden_ids = set()
         ConfigurableSupabase.event_statuses = []
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), ConfigurableSupabase)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -804,6 +808,21 @@ class BridgeQuarantineTest(unittest.TestCase):
         ConfigurableSupabase.mode = "ok"
         started = [e["event_id"] for e in read_events(self.bridge.data) if e["event_type"] == "session_started"]
         self.assertTrue(wait_for(lambda: set(started) <= self.synced_ids()), "evento não subiu depois que a nuvem voltou")
+        self.assertTrue(wait_for(lambda: self.bridge.get("/v1/status")["last_sync_error"] is None),
+                        "o erro antigo não pode continuar aparecendo depois que o envio voltou")
+
+    def test_403_de_um_item_nao_trava_a_fila(self):
+        # Evento gravado antes do pacote do polo: o RLS recusa só ele (403), o resto sobe.
+        bad = "66666666-6666-4666-8666-666666666666"
+        ConfigurableSupabase.forbidden_ids = {bad}
+        line = json.dumps({"event_id": bad, "session_id": "55555555-5555-4555-8555-555555555555", "event_type": "heartbeat"})
+        (self.bridge.data / "events.jsonl").write_text(line + "\r\n", encoding="utf-8")
+        self.bridge.start()
+        self.assertTrue(wait_for(lambda: any(e["event_type"] == "session_started" and e["event_id"] in self.synced_ids()
+                                             for e in read_events(self.bridge.data))), "a fila travou no evento recusado")
+        self.assertNotIn(bad, self.synced_ids())
+        self.assertFalse((self.bridge.data / "events_quarantine.jsonl").exists(), "403 não manda para a quarentena")
+        self.assertIn(bad, {e["event_id"] for e in read_events(self.bridge.data)}, "o evento recusado continua pendente")
 
     def test_400_vai_para_quarentena_visivel_e_volta_para_a_fila(self):
         ConfigurableSupabase.mode = "bad"
