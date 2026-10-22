@@ -247,25 +247,16 @@ class WindowsScriptsTest(unittest.TestCase):
         self.assertNotIn("PL_CAAE", bat)
         self.assertNotIn(polo.EXAMPLE_CAAE, bat)
 
-    def test_shipped_scripts_use_crlf(self):
-        shipped = [
-            "runtime/windows/Instalar-PulseLab.bat",
-            "tooling/site/Atualizar-Site-Firebase.bat",
-            "runtime/windows/Iniciar-PulseLab.bat",
-            "runtime/windows/pulselab.ps1",
-            "runtime/windows/pulselab-update.ps1",
-            "runtime/windows/pulselab-installation.ps1",
-            "runtime/windows/bridge/pulselab-bridge.ps1",
-            "runtime/windows/bridge/pulselab-tray.ps1",
-            "runtime/windows/bridge/spike-parser.ps1",
-        ]
-        for rel in shipped:
+    def test_windows_scripts_use_crlf(self):
+        # Todo script de Windows versionado, não só os do pacote: o cmd.exe e o PowerShell 5.1 se
+        # confundem com quebra de linha só com LF (CONTRIBUTING.md §5.1).
+        tracked = subprocess.run(
+            ["git", "ls-files", "*.ps1", "*.bat", "*.cmd", "*.vbs"], cwd=ROOT, capture_output=True, text=True, check=True
+        ).stdout.split()
+        self.assertIn("runtime/windows/Exportar-Dados-Pendrive.bat", tracked)
+        for rel in tracked:
             data = (ROOT / rel).read_bytes()
             self.assertEqual(data.count(b"\n"), data.count(b"\r\n"), f"{rel} tem quebra de linha só com LF")
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PoloEnrollmentTokenTest(unittest.TestCase):
@@ -287,3 +278,7 @@ class PoloEnrollmentTokenTest(unittest.TestCase):
             machine = self.write_bundle(Path(tmp), site_id="PET", installation_id="11111111-2222-4333-8444-555555555555", enrollment_token="x" * 43)
             with self.assertRaises(ValueError):
                 polo.read_enrollment_token(machine, "PET")
+
+
+if __name__ == "__main__":
+    unittest.main()
